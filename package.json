@@ -1,0 +1,35 @@
+{
+  "name": "signalk-wiring",
+  "version": "0.1.0",
+  "description": "SignalK plugin for documenting a boat's physical electrical wiring: circuits, wire runs, and devices.",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "src",
+    "public"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-webapp",
+    "signalk-category-utility"
+  ],
+  "author": "Tobias Rosenstock",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/humppafreak/signalk-wiring.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {},
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
+  }
+}
