@@ -8,14 +8,25 @@ to someone else doesn't depend on the current owner being present.
 ## Features
 
 - **Circuit → wire run → device** data model: a circuit has a source
-  (breaker/fuse) and one or more wire runs; a wire run connects two
-  endpoints (a device, a source, or a splice); a device can be fed by
-  more than one circuit.
+  (breaker/fuse label, plus optional numeric breaker rating and system
+  voltage) and one or more wire runs; a wire run connects two endpoints
+  (a device, a source, or a splice) and can carry a physical cable
+  label and switch reference distinct from the circuit's fuse; a device
+  can be fed by more than one circuit, and can record its rated power
+  draw and a SignalK path (e.g. `electrical.switches.anchorLight`) it
+  corresponds to.
 - Free-text **zones** (e.g. "engine room") on wire runs and devices, and
-  wire gauge recorded with an explicit unit (AWG or mm²) — boats often
-  mix US and EU-sourced equipment.
+  wire gauge/length recorded with explicit units (AWG or mm²; meters or
+  feet) — boats often mix US and EU-sourced equipment.
 - Full CRUD via the admin webapp: inline create/edit forms, no page
   reloads.
+- **CSV import**: upload a spreadsheet, map its columns to wiring
+  fields (or skip them), preview the result, then import — generic
+  column mapping rather than a fixed layout, so it isn't tied to one
+  particular spreadsheet's shape.
+- **Panel load summary**: per active circuit, total connected devices'
+  rated wattage converted to amps via the circuit's voltage and checked
+  against its breaker rating, flagging circuits over their rating.
 - **Nothing is ever hard-deleted.** "Removing" a record marks it
   `removed` rather than dropping it, so the wiring's history stays
   intact — a refit doesn't erase what used to be there.

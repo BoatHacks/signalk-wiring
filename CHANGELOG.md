@@ -3,6 +3,31 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] - 2026-09-23
+
+### Added
+
+- Circuit `voltage` and `breakerRating` (numeric, splits out of the old
+  free-text `source`), wire run `cableLabel`/`switchRef`/`lengthUnit`,
+  and device `ratedPowerW`/`signalkPath` fields.
+- CSV import: upload a spreadsheet, map its columns to wiring fields (or
+  skip them), preview the resulting circuits/wire runs/devices, then
+  import — generic column mapping, not tied to one spreadsheet's layout.
+- Panel load summary: per active circuit, total connected devices' rated
+  wattage converted to amps via the circuit's voltage and checked
+  against its breaker rating, flagging circuits over their rating.
+
+### Changed
+
+- `circuit.source` renamed to `sourceLabel`. Existing installations
+  migrate automatically on first start after upgrading — no manual
+  action needed.
+
+### Fixed
+
+- Numeric form fields (gauge, length, etc.) silently rejected decimal
+  values (e.g. `3.5`) due to a missing `step` attribute on the input.
+
 ## [0.1.0] - 2026-09-23
 
 Initial release — the full MVP scope from SPEC.md §10.1.

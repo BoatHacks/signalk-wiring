@@ -1,6 +1,6 @@
 {
   "name": "signalk-wiring",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SignalK plugin for documenting a boat's physical electrical wiring: circuits, wire runs, and devices.",
   "main": "index.js",
   "files": [
