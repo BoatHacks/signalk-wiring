@@ -1,5 +1,6 @@
 import { html, render, useState, useEffect } from './vendor/preact-standalone.module.js'
 import dagre from './vendor/dagre.esm.js'
+import { CsvImport } from './import.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -360,6 +361,7 @@ const WIRE_RUN_FIELDS = [
 function CircuitsList ({ onSelect }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const { loading, error, items } = useResourceList('wiringCircuits', reloadKey)
 
   const createCircuit = async (payload) => {
@@ -368,10 +370,20 @@ function CircuitsList ({ onSelect }) {
     setReloadKey((k) => k + 1)
   }
 
+  if (showImport) {
+    return html`
+      <${CsvImport}
+        onDone=${() => { setShowImport(false); setReloadKey((k) => k + 1) }}
+        onCancel=${() => setShowImport(false)}
+      />
+    `
+  }
+
   return html`
     <div>
       <div class="list-header">
         <button onClick=${() => setShowForm((v) => !v)}>${showForm ? 'Cancel' : '+ New circuit'}</button>
+        <button onClick=${() => setShowImport(true)}>Import CSV</button>
       </div>
       ${showForm && html`
         <${Form}

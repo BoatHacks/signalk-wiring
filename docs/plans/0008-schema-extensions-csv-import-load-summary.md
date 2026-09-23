@@ -260,14 +260,41 @@ sent), including the `device.signalkPath` field this addition was
 specifically about — `electrical.switches.navLights.state` round-tripped
 and displays on `DeviceDetail` as designed.
 
-### B
-- [ ] `public/import.js` (new) — CSV parser, column-mapping UI, preview,
+### B — done
+
+- [x] `public/import.js` (new) — CSV parser, column-mapping UI, preview,
       import execution
-- [ ] Entry point on `CircuitsList`
-- [ ] `test/` — parser/extractor unit tests (need a test runner setup
-      that can load browser-side JS; likely `node:test` directly against
-      `public/import.js`'s pure functions, same as any other module)
-- [ ] Manual verification: import the actual source CSV end to end
+- [x] Entry point on `CircuitsList`
+- [x] `test/import.test.mjs` (new) — turned out `node --test` discovers
+      `.mjs` files natively (verified empirically before committing to
+      this approach), so the pure functions (`parseCsv`,
+      `parseGermanNumber`, `parseCombinedGauge`, `groupImportRows`) are
+      tested directly via ES module `import`, no extra tooling needed.
+      13 tests, including a full real-world fixture test against
+      `test/fixtures/tinarasia-electrical.csv` — the actual source file,
+      committed as a regression fixture rather than only tested by hand
+- [x] Manual verification: imported the actual source CSV end to end
+      through the real UI (not just the pure functions) in a real
+      browser
+
+## Manual Verification Results (Part B)
+
+Full flow through the actual webapp, logged in: Import CSV → uploaded
+the real `tinarasia-electrical.csv` → mapping step correctly showed
+`Sicherung` and the uniquified `Sicherung (2)` as distinct columns (the
+duplicate-header handling from `parseCsv`, visible in the real UI, not
+just asserted in a unit test) → mapped 6 columns → preview showed
+**12 circuits, 27 devices, 27 wire runs** exactly matching the
+hand-derived expectation from Part A's design discussion → import
+completed, all 66 records actually written (confirmed via the resulting
+circuits list, not just a "success" toast) → opened "Circuit 2" and
+confirmed the diagram and wire-run table matched the source spreadsheet
+precisely: 3 devices (Ankerlaterne, Decklampe, Toplicht (Motor)), gauge
+2.5mm² on all three (from the combined "2,5 mm²" cell), lengths 10/10/15
+(from `Kabellänge`), breaker rating 25A (from `LS-Größe` on the group's
+first row), and `fromEndpoint` correctly falling back to the literal
+`"Source"` label since neither an explicit From column nor a circuit
+source-label column was mapped for this run.
 
 ### C
 - [ ] `public/app.js` — `LoadSummary` component + nav tab
