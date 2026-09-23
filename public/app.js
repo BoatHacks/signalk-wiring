@@ -1,6 +1,7 @@
 import { html, render, useState, useEffect } from './vendor/preact-standalone.module.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
+import { LoadSummary } from './loadSummary.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -782,6 +783,7 @@ function App () {
       <nav class="tabs">
         <button class=${tab === 'circuits' ? 'active' : ''} onClick=${() => switchTab('circuits')}>Circuits</button>
         <button class=${tab === 'devices' ? 'active' : ''} onClick=${() => switchTab('devices')}>Devices</button>
+        <button class=${tab === 'load' ? 'active' : ''} onClick=${() => switchTab('load')}>Load Summary</button>
       </nav>
       ${tab === 'circuits' && !selectedCircuitId && html`<${CircuitsList} onSelect=${setSelectedCircuitId} />`}
       ${tab === 'circuits' && selectedCircuitId && html`
@@ -791,6 +793,7 @@ function App () {
       ${tab === 'devices' && selectedDeviceId && html`
         <${DeviceDetail} deviceId=${selectedDeviceId} onBack=${() => setSelectedDeviceId(null)} />
       `}
+      ${tab === 'load' && html`<${LoadSummary} />`}
     </div>
   `
 }

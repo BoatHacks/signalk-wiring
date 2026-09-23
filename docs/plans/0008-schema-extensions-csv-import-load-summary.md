@@ -296,13 +296,37 @@ first row), and `fromEndpoint` correctly falling back to the literal
 `"Source"` label since neither an explicit From column nor a circuit
 source-label column was mapped for this run.
 
-### C
-- [ ] `public/app.js` — `LoadSummary` component + nav tab
-- [ ] Manual verification against the live server
+### C — done
+
+- [x] `public/loadSummary.js` (new, not `app.js` directly — same
+      self-contained-module reasoning as `import.js`, so the pure
+      `calculateCircuitLoad` function stays independently testable
+      without `app.js`'s top-level `render()`/`document` call getting
+      pulled into a Node test environment) — `LoadSummary` component +
+      nav tab
+- [x] `test/loadSummary.test.mjs` (new) — 8 tests covering the dedup,
+      removed-wire-run/removed-device exclusion, null-propagation
+      (missing voltage/rating are distinct from a false "ok"), and the
+      over/under-rating boundary
+- [x] Manual verification against the live server
+
+## Manual Verification Results (Part C)
+
+Seeded four circuits specifically to hit all three status states plus
+the removed-circuit exclusion in one pass: an over-rating circuit
+(2 devices, 160W/12V = 13.33A against a 10A breaker), a comfortably-
+under circuit (24W/12V = 2A against 20A), a circuit with no voltage set
+(to check "incomplete" renders instead of a wrong number), and a
+`removed` circuit that must not appear in the table at all. All four
+came out exactly right in a real browser, read anonymously (no login,
+matching the diagram's precedent) — including the removed circuit
+correctly being absent rather than just unverified.
 
 ## Files to Create/Modify
 
 - `src/schema.sql`, `src/store.js`, `index.js` (Part A)
-- `public/app.js`, `public/import.js` (new, Part B), `public/style.css`
-- `test/store.test.js` additions, new parser tests
+- `public/app.js`, `public/import.js`, `public/loadSummary.js` (new),
+  `public/style.css`
+- `test/store.test.js` additions, `test/import.test.mjs`,
+  `test/loadSummary.test.mjs`, `test/fixtures/tinarasia-electrical.csv`
 - `SPEC.md`, `ARCHITECTURE.md`

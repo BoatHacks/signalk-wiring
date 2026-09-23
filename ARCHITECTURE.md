@@ -117,10 +117,21 @@ Talks only to the two API surfaces in §2.1/§2.2 over `fetch`. Owns all UI
 described in SPEC.md §7, including the diagram rendering (client-side,
 via `dagre` for layout + hand-rolled SVG, per §4).
 
+**`public/import.js` and `public/loadSummary.js`** (plan 0008) are
+separate modules from `app.js` rather than more code inside it, each
+self-contained (their own tiny `fetch`/resource-list helpers rather than
+importing `app.js`'s, to avoid a circular ES module dependency and keep
+each independently loadable by `node:test` — `app.js` itself can't be,
+since its top-level code calls `render()` against `document`, which
+doesn't exist outside a browser). `import.js`'s CSV parsing and
+column-mapping logic, and `loadSummary.js`'s per-circuit load
+calculation, are both plain exported functions ahead of their Preact
+component, tested directly.
+
 ## 3. Data Models
 
 Mirrors SPEC.md §4 as SQLite tables. Changed by a real migration as of
-plan 0008 (§8 below) — `circuits.source` renamed to `source_label`, the
+plan 0008 (§3.1 below) — `circuits.source` renamed to `source_label`, the
 rest of the fields marked `-- 0008` are additions:
 
 ```sql
@@ -267,12 +278,17 @@ signalk-wiring/
   public/                   # name required by the signalk-webapp keyword (§2.4)
     index.html
     app.js                   # UI: browse/search, forms, diagram, changelog view
+    import.js                 # CSV import: parsing, column mapping, UI
+    loadSummary.js             # panel load summary: calculation, UI
     style.css
     vendor/                  # preact-standalone.module.js, dagre — vendored, no CDN (§2.4)
   test/
     store.test.js
     resources.test.js
     routes.test.js
+    import.test.mjs
+    loadSummary.test.mjs
+    fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md
   LICENSE

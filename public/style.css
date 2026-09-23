@@ -94,6 +94,18 @@ nav.tabs button.active {
   border: 1px solid var(--border);
 }
 
+.badge.over-rating {
+  background: #fde8e8;
+  border-color: #f5b5b5;
+  color: #9b1c1c;
+}
+
+.badge.ok {
+  background: #e8f7ec;
+  border-color: #b7e4c2;
+  color: #1c6b34;
+}
+
 .back-link {
   display: inline-block;
   margin-bottom: 12px;

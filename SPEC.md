@@ -158,6 +158,15 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - A settings panel for the installation's convention
   (ABYC E-11 / DIN EN ISO 13297 / freestyle), used only to drive UI
   labeling hints (e.g. suggested wire colors), never enforced.
+- CSV import: upload a spreadsheet, map its columns to wiring fields (or
+  skip them), preview the resulting circuits/wire runs/devices, then
+  import. Column mapping rather than a fixed layout, since a real-world
+  export's columns won't match another boat's.
+- A panel load summary: per active circuit, total connected devices'
+  rated wattage converted to amps via the circuit's voltage, checked
+  against its breaker rating. States its own known limitation in the UI
+  (a device fed by more than one circuit counts its full wattage on
+  each) rather than presenting a number without that caveat.
 
 No mobile-specific design constraints beyond the SignalK admin UI's own
 responsive behavior.
@@ -192,12 +201,11 @@ configuration.
 - Change log (append-only) on edits.
 - Auto-generated per-circuit diagram view.
 - Convention setting (drives labeling hints only).
+- CSV import with column mapping (moved out of deferred — see below).
+- Panel load summary.
 
 ### 10.2 Post-MVP / Deferred
 
-- Spreadsheet/CSV import — useful, but manual entry is enough to validate
-  the data model first; import format needs real usage data to design
-  against.
 - Structured (picklist) zones — starting free-text avoids blocking data
   entry on defining a zone list up front; can be layered on once real
   zone names are in use.
@@ -262,3 +270,16 @@ configuration.
   importantly the wiring record should be documentable standalone — a
   device's physical wiring is worth recording before, or even if, its
   SignalK path exists on this particular server.
+- **CSV import un-deferred once a real spreadsheet existed to design
+  against.** §10.2 originally deferred this specifically for lack of
+  real usage data; a real electrical worksheet (German column headers,
+  duplicate header names, comma-decimal numbers, a combined gauge+unit
+  cell) surfaced concrete requirements a hypothetical design would have
+  guessed at, so the deferral's own condition was met. Built as generic
+  column-mapping rather than a fixed importer for that one file's shape,
+  since the next real CSV won't look like it either.
+- **Panel load summary attributes a device's full wattage to every
+  circuit it's wired into**, not split proportionally. Correct handling
+  needs per-wire-run power data, which isn't collected — the summary's
+  own UI states this rather than presenting a precise-looking number
+  that isn't.
