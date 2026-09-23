@@ -20,7 +20,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/humppafreak/signalk-wiring.git"
+    "url": "git+https://github.com/BoatHacks/signalk-wiring.git"
   },
   "engines": {
     "node": ">=22"
