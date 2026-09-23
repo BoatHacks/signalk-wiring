@@ -119,13 +119,17 @@ via `dagre` for layout + hand-rolled SVG, per §4).
 
 ## 3. Data Models
 
-Mirrors SPEC.md §4 as SQLite tables:
+Mirrors SPEC.md §4 as SQLite tables. Changed by a real migration as of
+plan 0008 (§8 below) — `circuits.source` renamed to `source_label`, the
+rest of the fields marked `-- 0008` are additions:
 
 ```sql
 CREATE TABLE circuits (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  source TEXT,            -- breaker/fuse label + rating, free text
+  source_label TEXT,      -- breaker/fuse label, free text (was `source`)
+  breaker_rating REAL,    -- numeric amps, optional -- 0008
+  voltage REAL,           -- optional, per-circuit not installation-wide -- 0008
   panel_ref TEXT,
   convention TEXT,         -- override; NULL = use installation default
   status TEXT NOT NULL,    -- 'active' | 'removed'
@@ -141,7 +145,10 @@ CREATE TABLE wire_runs (
   gauge_unit TEXT,          -- 'AWG' | 'mm2'
   color TEXT,
   length REAL,
+  length_unit TEXT,        -- 'm' | 'ft' -- 0008
   zone TEXT,
+  cable_label TEXT,        -- physical tag/number on the wire -- 0008
+  switch_ref TEXT,         -- panel switch position, distinct from the fuse -- 0008
   status TEXT NOT NULL,
   notes TEXT
 );
@@ -151,6 +158,8 @@ CREATE TABLE devices (
   name TEXT NOT NULL,
   type TEXT,
   zone TEXT,
+  rated_power_w REAL,     -- nameplate/rated draw, optional -- 0008
+  signalk_path TEXT,      -- e.g. electrical.switches.anchorLight -- 0008
   status TEXT NOT NULL,
   notes TEXT
 );
@@ -173,6 +182,21 @@ CREATE TABLE change_log (
   diff_json TEXT
 );
 ```
+
+### 3.1 Schema Migrations
+
+`schema.sql` (`CREATE TABLE IF NOT EXISTS`) only gets an existing
+installation as far as whatever shape it already had — it can't rename
+or add columns on a database that already exists. `store.js` tracks the
+schema version in SQLite's own `PRAGMA user_version` and runs an
+ordered list of migrations (`{version, apply(db)}`) past whatever
+version the database is currently at, each step guarding itself with a
+`PRAGMA table_info()` check rather than assuming it's needed — safe to
+run against a fresh install (schema.sql already has the new shape, so
+every guard is a no-op) or an existing one, and safe to run again on
+every subsequent restart. There's exactly one migration today (plan
+0008's field additions/rename); this stays a plain ordered list, not a
+general framework, until there's a second one to generalize from.
 
 ## 4. Technology Stack
 

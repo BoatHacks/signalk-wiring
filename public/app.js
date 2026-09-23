@@ -130,6 +130,8 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
               type=${f.type}
               value=${values[f.key]}
               required=${!!f.required}
+              placeholder=${f.placeholder || ''}
+              step=${f.type === 'number' ? 'any' : undefined}
               onInput=${(e) => setField(f.key, e.target.value)}
             />
           `}
@@ -320,7 +322,9 @@ function ChangeLog ({ kind, id }) {
 
 const CIRCUIT_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true },
-  { key: 'source', label: 'Source (breaker/fuse, rating)', type: 'text' },
+  { key: 'sourceLabel', label: 'Source (breaker/fuse)', type: 'text' },
+  { key: 'breakerRating', label: 'Breaker rating (A)', type: 'number' },
+  { key: 'voltage', label: 'Voltage', type: 'number' },
   { key: 'panelRef', label: 'Panel reference', type: 'text' },
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
@@ -329,6 +333,13 @@ const DEVICE_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true },
   { key: 'type', label: 'Type', type: 'text' },
   { key: 'zone', label: 'Zone', type: 'text' },
+  { key: 'ratedPowerW', label: 'Rated power (W)', type: 'number' },
+  {
+    key: 'signalkPath',
+    label: 'SignalK path',
+    type: 'text',
+    placeholder: 'e.g. electrical.switches.anchorLight'
+  },
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
 
@@ -339,7 +350,10 @@ const WIRE_RUN_FIELDS = [
   { key: 'gaugeUnit', label: 'Gauge unit', type: 'select', options: ['AWG', 'mm2'] },
   { key: 'color', label: 'Color', type: 'text' },
   { key: 'length', label: 'Length', type: 'number' },
+  { key: 'lengthUnit', label: 'Length unit', type: 'select', options: ['m', 'ft'] },
   { key: 'zone', label: 'Zone', type: 'text' },
+  { key: 'cableLabel', label: 'Cable label', type: 'text' },
+  { key: 'switchRef', label: 'Switch reference', type: 'text' },
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
 
@@ -380,7 +394,7 @@ function CircuitsList ({ onSelect }) {
         >
           <div>
             <div>${circuit.name}</div>
-            <div class="meta">${circuit.source || 'no source recorded'}</div>
+            <div class="meta">${circuit.sourceLabel || 'no source recorded'}</div>
           </div>
           <${StatusBadge} status=${circuit.status} />
         </div>
@@ -515,7 +529,11 @@ function CircuitDetail ({ circuitId, onBack }) {
       ${circuit && !editingCircuit && html`
         <div class="card">
           <h2>${circuit.name} <${StatusBadge} status=${circuit.status} /></h2>
-          <div class="meta">Source: ${circuit.source || 'not recorded'}</div>
+          <div class="meta">
+            Source: ${circuit.sourceLabel || 'not recorded'}
+            ${circuit.breakerRating ? ` — ${circuit.breakerRating}A breaker` : ''}
+            ${circuit.voltage ? ` — ${circuit.voltage}V` : ''}
+          </div>
           ${circuit.notes && html`<p>${circuit.notes}</p>`}
           <div class="row-actions">
             <button onClick=${() => setEditingCircuit(true)}>Edit</button>
@@ -552,7 +570,8 @@ function CircuitDetail ({ circuitId, onBack }) {
         <table>
           <thead>
             <tr>
-              <th>From</th><th>To</th><th>Gauge</th><th>Color</th><th>Zone</th><th>Status</th><th></th>
+              <th>From</th><th>To</th><th>Cable</th><th>Gauge</th><th>Length</th>
+              <th>Color</th><th>Zone</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -561,7 +580,9 @@ function CircuitDetail ({ circuitId, onBack }) {
                 <tr key=${wr.id}>
                   <td>${endpointLabel(wr.fromEndpoint)}</td>
                   <td>${endpointLabel(wr.toEndpoint)}</td>
+                  <td>${wr.cableLabel || '—'}</td>
                   <td>${wr.gauge ? `${wr.gauge} ${wr.gaugeUnit || ''}` : '—'}</td>
+                  <td>${wr.length ? `${wr.length} ${wr.lengthUnit || ''}` : '—'}</td>
                   <td>${wr.color || '—'}</td>
                   <td>${wr.zone || '—'}</td>
                   <td><${StatusBadge} status=${wr.status} /></td>
@@ -582,7 +603,7 @@ function CircuitDetail ({ circuitId, onBack }) {
               if (attachmentsWireRunId === wr.id) {
                 rows.push(html`
                   <tr key="${wr.id}-attachments">
-                    <td colspan="7">
+                    <td colspan="9">
                       <${AttachmentList} ownerType="wireRun" ownerId=${wr.id} />
                     </td>
                   </tr>
@@ -591,7 +612,7 @@ function CircuitDetail ({ circuitId, onBack }) {
               if (historyWireRunId === wr.id) {
                 rows.push(html`
                   <tr key="${wr.id}-history">
-                    <td colspan="7">
+                    <td colspan="9">
                       <${ChangeLog} kind="wireRun" id=${wr.id} />
                     </td>
                   </tr>
@@ -700,6 +721,10 @@ function DeviceDetail ({ deviceId, onBack }) {
         <div class="card">
           <h2>${device.name} <${StatusBadge} status=${device.status} /></h2>
           <div class="meta">${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}</div>
+          ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
+          ${device.signalkPath && html`
+            <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>
+          `}
           ${device.notes && html`<p>${device.notes}</p>`}
           <div class="row-actions">
             <button onClick=${() => setEditing(true)}>Edit</button>

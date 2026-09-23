@@ -86,17 +86,33 @@ A wire run or device is either:
 ## 4. Data Model
 
 - **Circuit**
-  - `id`, `name`, `source` (breaker/fuse label, rating, panel reference),
-    `convention` override (optional, defaults to installation setting),
-    `status` (active/removed), `notes`.
+  - `id`, `name`, `sourceLabel` (breaker/fuse label, free text),
+    `breakerRating` (numeric amps, optional), `voltage` (numeric,
+    optional — a boat can have more than one voltage domain, e.g. a 12V
+    DC panel and a 230V AC panel, so this is per-circuit rather than a
+    single installation-wide value), `panelRef`, `convention` override
+    (optional, defaults to installation setting), `status`
+    (active/removed), `notes`.
 - **WireRun**
   - `id`, `circuitId`, `fromEndpoint`, `toEndpoint` (each a device id,
     source, or splice reference), `gauge` + `gaugeUnit` (AWG | mm²),
-    `color`, `length`, `zone` (free text, optional), `status`,
+    `color`, `length` + `lengthUnit` (m | ft), `zone` (free text,
+    optional), `cableLabel` (the physical tag/number on the cable
+    itself, optional — often a more reliable way to trace a wire in
+    person than color, especially once colors fade or several runs
+    share one), `switchRef` (a panel switch position, optional and
+    distinct from the circuit's breaker/fuse — a device can be on a
+    shared fuse but its own individually-switched position), `status`,
     `attachments` (photo/file ids), `notes`.
 - **Device**
   - `id`, `name`, `type` (free text, e.g. "bilge pump"), `zone` (optional),
-    `status`, `notes`.
+    `ratedPowerW` (nameplate/rated power draw, optional), `signalkPath`
+    (optional — a SignalK path this device corresponds to, e.g.
+    `electrical.switches.anchorLight` or a battery's voltage/current
+    sensor path; free text, not validated against the live data tree,
+    so a device can be documented before its SignalK path exists or on
+    a server that doesn't currently have a source for it), `status`,
+    `notes`.
 - **Attachment**
   - `id`, `filename`, `mimeType`, owning record type + id, uploaded date.
 - **ChangeLogEntry**
@@ -158,9 +174,13 @@ Storage mechanism is detailed in ARCHITECTURE.md.
   freestyle).
 - **Default gauge unit**: AWG | mm² — pre-selected on new wire run forms,
   overridable per record (default: AWG).
+- **Default length unit**: m | ft — pre-selected on new wire run forms,
+  overridable per record (default: m). Same reasoning as the gauge unit
+  above: a preference to reduce re-entry, not something enforced.
 
-Everything else (zones, circuit/device names) is free-form user data, not
-plugin configuration.
+Everything else (zones, circuit/device names, voltage, breaker rating,
+rated power, SignalK path) is free-form user data, not plugin
+configuration.
 
 ## 10. MVP Scope
 
@@ -223,3 +243,22 @@ plugin configuration.
   instance beyond their own network already control this globally via
   `allow_readonly`; the README calls this out explicitly so it's an
   informed choice, not a surprise.
+- **`circuit.source` split into `sourceLabel` + `breakerRating`.**
+  Originally one free-text field (e.g. `"Breaker 4, 15A"`). Splitting
+  out a numeric rating enables checking a circuit's actual load against
+  it (a real feature, not hypothetical — see the panel load summary),
+  which a free-text field can't support. Existing free-text values
+  migrated into `sourceLabel` as-is; `breakerRating` starts empty rather
+  than attempting to regex-extract a number out of old text — a
+  wrong auto-extracted rating silently feeding a load check is worse
+  than an honestly-empty field.
+- **`voltage` is per-circuit, not an installation-wide setting.** A boat
+  commonly has more than one voltage domain (a 12V DC panel and a 230V
+  AC panel are both normal) — a single global value wouldn't describe
+  that.
+- **`device.signalkPath` is free text, not validated against the live
+  SignalK data tree.** SignalK paths are heterogeneous (vendor/custom
+  segments, no fixed enumerable set to check against), and more
+  importantly the wiring record should be documentable standalone — a
+  device's physical wiring is worth recording before, or even if, its
+  SignalK path exists on this particular server.

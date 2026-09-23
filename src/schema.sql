@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS circuits (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  source TEXT,
+  source_label TEXT,
+  breaker_rating REAL,
+  voltage REAL,
   panel_ref TEXT,
   convention TEXT,
   status TEXT NOT NULL DEFAULT 'active',
@@ -17,7 +19,10 @@ CREATE TABLE IF NOT EXISTS wire_runs (
   gauge_unit TEXT,
   color TEXT,
   length REAL,
+  length_unit TEXT,
   zone TEXT,
+  cable_label TEXT,
+  switch_ref TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );
@@ -29,6 +34,8 @@ CREATE TABLE IF NOT EXISTS devices (
   name TEXT NOT NULL,
   type TEXT,
   zone TEXT,
+  rated_power_w REAL,
+  signalk_path TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );

@@ -31,6 +31,14 @@ module.exports = function (app) {
         enum: ['AWG', 'mm2'],
         enumNames: ['AWG', 'mm²'],
         default: 'AWG'
+      },
+      defaultLengthUnit: {
+        type: 'string',
+        title: 'Default length unit',
+        description: 'Pre-selected on new wire run forms; overridable per record.',
+        enum: ['m', 'ft'],
+        enumNames: ['Meters', 'Feet'],
+        default: 'm'
       }
     }
   }
