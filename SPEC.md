@@ -133,6 +133,9 @@ import is a deferred feature (see 10.2), not an MVP input source.
   (`/signalk/v2/api/resources/wiringCircuits`, `.../wiringWireRuns`,
   `.../wiringDevices`) via standard `listResources` / `getResource` /
   `setResource` / `deleteResource` semantics.
+- The plugin configuration (§9) is served read-only as
+  `/signalk/v2/api/resources/wiringSettings/config`, so the anonymously
+  loaded webapp can apply it.
 - Attachment upload/download and the diagram-rendering data endpoint are
   served under the plugin's own admin-gated routes
   (`/plugins/signalk-wiring/...`), since they're only ever used by the
@@ -180,7 +183,8 @@ Storage mechanism is detailed in ARCHITECTURE.md.
 ## 9. Configuration
 
 - **Convention**: ABYC E-11 | DIN EN ISO 13297 | freestyle (default:
-  freestyle).
+  freestyle). Shows example wire colours as the colour field's
+  placeholder on the wire run form; freestyle shows none.
 - **Default gauge unit**: AWG | mm² — pre-selected on new wire run forms,
   overridable per record (default: AWG).
 - **Default length unit**: m | ft — pre-selected on new wire run forms,

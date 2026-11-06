@@ -44,6 +44,13 @@ SQLite store for those three tables. Served at
 (see SPEC.md §6.1 for the contract, §2 of the `signalk-plugin` skill for
 why this pattern over a raw router).
 
+A fourth, read-only type, `wiringSettings` (`src/settings.js`), serves
+the plugin configuration as a single `config` resource. The webapp loads
+anonymously and the plugin's routes are admin-gated, so the resource API
+is the only way for it to read the settings (convention and default
+units). Writes and deletes are rejected; changing a setting means
+editing the plugin configuration.
+
 ### 2.2 Admin routes (`src/routes.js`)
 
 Registered via `registerWithRouter(router)`. Owns:

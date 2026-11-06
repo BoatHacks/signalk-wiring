@@ -2,6 +2,7 @@ import { html, render, useState, useEffect } from './vendor/preact-standalone.mo
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
+import { useSettings, wireRunInitialValues, colorPlaceholder } from './settings.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -497,6 +498,10 @@ function CircuitDetail ({ circuitId, onBack }) {
   const [showCircuitHistory, setShowCircuitHistory] = useState(false)
   const { items: allWireRuns, loading: wireRunsLoading } = useResourceList('wiringWireRuns', reloadKey)
   const { items: devices } = useResourceList('wiringDevices')
+  const settings = useSettings()
+  const wireRunFields = WIRE_RUN_FIELDS.map((f) =>
+    f.key === 'color' ? { ...f, placeholder: colorPlaceholder(settings.convention) } : f
+  )
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
   const endpointLabel = (endpoint) => deviceNameById.get(endpoint) || endpoint
 
@@ -642,8 +647,9 @@ function CircuitDetail ({ circuitId, onBack }) {
       `}
       ${wireRunForm !== null && html`
         <${Form}
-          fields=${WIRE_RUN_FIELDS}
-          initial=${wireRunForm === 'create' ? null : wireRunForm}
+          key=${`${settings.defaultGaugeUnit}/${settings.defaultLengthUnit}/${wireRunForm === 'create' ? 'new' : wireRunForm.id}`}
+          fields=${wireRunFields}
+          initial=${wireRunForm === 'create' ? wireRunInitialValues(settings) : wireRunForm}
           onSubmit=${saveWireRun}
           onCancel=${() => setWireRunForm(null)}
           submitLabel=${wireRunForm === 'create' ? 'Add wire run' : 'Save'}

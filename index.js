@@ -3,6 +3,7 @@
 const path = require('path')
 const { Store } = require('./src/store')
 const { createResourceProvider } = require('./src/resources')
+const { resolveSettings, createSettingsProvider } = require('./src/settings')
 const { registerRoutes } = require('./src/routes')
 
 module.exports = function (app) {
@@ -52,7 +53,8 @@ module.exports = function (app) {
     const providers = [
       createResourceProvider(store, 'circuit', 'wiringCircuits'),
       createResourceProvider(store, 'wireRun', 'wiringWireRuns'),
-      createResourceProvider(store, 'device', 'wiringDevices')
+      createResourceProvider(store, 'device', 'wiringDevices'),
+      createSettingsProvider(resolveSettings(options))
     ]
     for (const provider of providers) {
       app.registerResourceProvider(provider)

@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+
+- The plugin configuration had no effect. The default gauge and length
+  units now pre-select on new wire run forms, and the wiring convention
+  sets the colour field's example placeholder. The settings are served
+  read-only at `wiringSettings/config`.
+
 ## [0.2.0] - 2026-09-23
 
 ### Added
