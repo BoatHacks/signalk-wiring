@@ -5,13 +5,14 @@ const path = require('path')
 const crypto = require('crypto')
 const Database = require('better-sqlite3')
 const { deriveCircuits } = require('./circuits')
+const { isCriticalType } = require('./safety')
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 
 const TABLES = {
   circuit: {
     table: 'circuits',
-    columns: ['id', 'name', 'key', 'cable_ids', 'voltage', 'convention', 'status', 'notes']
+    columns: ['id', 'name', 'key', 'cable_ids', 'voltage', 'convention', 'meter_path', 'meter_unit', 'status', 'notes']
   },
   wireRun: {
     table: 'wire_runs',
@@ -25,7 +26,8 @@ const TABLES = {
     table: 'devices',
     columns: [
       'id', 'name', 'type', 'role', 'icon_attachment_id', 'zone', 'rated_power_w', 'signalk_path',
-      'trip_rating_a', 'nominal_voltage', 'power_factor', 'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
+      'trip_rating_a', 'nominal_voltage', 'power_factor', 'switch_path', 'confirm_switching', 'never_remote',
+      'meter_path', 'meter_unit', 'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
   conduit: {
@@ -338,8 +340,58 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_devices_schematic ON schematic_devices (schematic_id)')
       db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_wires_schematic ON schematic_wires (schematic_id)')
     }
+  },
+  {
+    version: 9,
+    description: 'plan 0017: devices + switch_path, confirm_switching, never_remote, meter_path, meter_unit; ' +
+      'circuits + meter_path, meter_unit; calibration_runs',
+    apply (db) {
+      const hasColumn = (table, column) =>
+        db.prepare('PRAGMA table_info(' + table + ')').all().some((c) => c.name === column)
+      const addColumn = (table, column, type) => {
+        if (!hasColumn(table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+      }
+      addColumn('devices', 'switch_path', 'TEXT')
+      addColumn('devices', 'confirm_switching', 'INTEGER NOT NULL DEFAULT 0')
+      addColumn('devices', 'never_remote', 'INTEGER NOT NULL DEFAULT 0')
+      addColumn('devices', 'meter_path', 'TEXT')
+      addColumn('devices', 'meter_unit', 'TEXT')
+      addColumn('circuits', 'meter_path', 'TEXT')
+      addColumn('circuits', 'meter_unit', 'TEXT')
+      // schema.sql has created calibration_runs by now, for fresh and old
+      // databases alike; this only matters if it was skipped.
+      db.exec(`CREATE TABLE IF NOT EXISTS calibration_runs (
+        id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id),
+        switch_device_id TEXT REFERENCES devices(id), consumer_ids TEXT,
+        method TEXT NOT NULL CHECK (method IN ('delta', 'watch')),
+        status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'done', 'failed', 'cancelled')),
+        review TEXT NOT NULL DEFAULT 'pending' CHECK (review IN ('pending', 'accepted', 'rejected')),
+        meter_path TEXT, meter_unit TEXT, voltage REAL, estimate INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL, ended_at TEXT, params TEXT, samples TEXT, details TEXT,
+        avg_w REAL, peak_w REAL, duty_cycle REAL, confidence TEXT, error TEXT)`)
+      db.exec('CREATE INDEX IF NOT EXISTS idx_calibration_runs_device ON calibration_runs (device_id)')
+    }
   }
 ]
+
+const METER_UNITS = ['A', 'W']
+const RUN_METHODS = ['delta', 'watch']
+const RUN_STATUSES = ['running', 'done', 'failed', 'cancelled']
+const RUN_REVIEWS = ['pending', 'accepted', 'rejected']
+const RUN_COLUMNS = [
+  'device_id', 'switch_device_id', 'consumer_ids', 'method', 'status', 'review', 'meter_path', 'meter_unit',
+  'voltage', 'estimate', 'started_at', 'ended_at', 'params', 'samples', 'details', 'avg_w', 'peak_w',
+  'duty_cycle', 'confidence', 'error'
+]
+const RUN_JSON_COLUMNS = ['consumer_ids', 'params', 'samples', 'details']
+
+// A run row as the rest of the code sees it: JSON columns parsed.
+function runFromRow (row) {
+  if (!row) return null
+  const out = { ...row }
+  for (const c of RUN_JSON_COLUMNS) out[c] = typeof row[c] === 'string' ? JSON.parse(row[c]) : null
+  return out
+}
 
 const numberOrNull = (v) => (v === null || v === undefined || v === '' ? null : Number(v))
 const textOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
@@ -440,7 +492,8 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
-    if (kind === 'device') row = this._checkIcon(id, this._checkRole(row))
+    if (kind === 'device') row = this._checkSwitching(this._checkIcon(id, this._checkRole(row)), true)
+    else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'wireRun') this._checkWireRunEnds(row)
     if (kind === 'schematic') row.name = this._checkSchematicName(row.name)
     const lists = kind === 'schematic' ? this._checkSchematicLists(row) : null
@@ -733,7 +786,8 @@ class Store {
     if (kind === 'schematic') return this._updateSchematic(id, patch, existing)
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkIcon(id, this._checkRole(patch))
+    if (kind === 'device') patch = this._checkSwitching(this._checkIcon(id, this._checkRole(patch)), false)
+    else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
     if (kind === 'wireRun') this._checkWireRunEnds(patch)
 
@@ -910,6 +964,139 @@ class Store {
     return fields
   }
 
+  // Plan 0017 fields. Paths are trimmed text or null, the meter unit is A or
+  // W, and the two safety flags are stored as 0/1 whatever the caller sends.
+  // On creation, a device of a critical-looking type that says nothing about
+  // confirm_switching starts with it on; an explicit value always wins and an
+  // existing device is never flagged by a later type change.
+  _checkSwitching (fields, creating) {
+    let out = fields
+    for (const key of ['switch_path', 'meter_path']) {
+      if (key in out) out = { ...out, [key]: textOrNull(out[key]) }
+    }
+    if ('meter_unit' in out) {
+      const unit = out.meter_unit === '' || out.meter_unit === undefined ? null : out.meter_unit
+      if (unit !== null && !METER_UNITS.includes(unit)) throw new Error(`meter_unit must be one of: ${METER_UNITS.join(', ')}`)
+      out = { ...out, meter_unit: unit }
+    }
+    for (const key of ['confirm_switching', 'never_remote']) {
+      if (key in out) out = { ...out, [key]: out[key] && out[key] !== '0' ? 1 : 0 }
+    }
+    if (creating && !('confirm_switching' in out)) {
+      out = { ...out, confirm_switching: isCriticalType(out.type) ? 1 : 0 }
+    }
+    return out
+  }
+
+  // ---- Calibration runs (plan 0017). A run is a record of its own, written
+  // often while it executes, so it is not part of the change log; accepting
+  // or rejecting one is logged on the device it measures.
+  createRun (fields) {
+    if (!RUN_METHODS.includes(fields.method)) throw new Error(`method must be one of: ${RUN_METHODS.join(', ')}`)
+    for (const key of ['device_id', 'switch_device_id']) {
+      if (fields[key] && !this.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(fields[key])) {
+        throw new Error(`device not found: ${fields[key]}`)
+      }
+    }
+    if (!fields.device_id) throw new Error('a run needs a device')
+    const row = {
+      status: 'running', review: 'pending', estimate: 0, started_at: new Date().toISOString(), ...fields,
+      id: fields.id || crypto.randomUUID()
+    }
+    this._checkRunFields(row)
+    this._insertRun(row)
+    return this.getRun(row.id)
+  }
+
+  _checkRunFields (row) {
+    if ('status' in row && !RUN_STATUSES.includes(row.status)) throw new Error(`status must be one of: ${RUN_STATUSES.join(', ')}`)
+    if ('review' in row && !RUN_REVIEWS.includes(row.review)) throw new Error(`review must be one of: ${RUN_REVIEWS.join(', ')}`)
+    if ('meter_unit' in row && row.meter_unit != null && !METER_UNITS.includes(row.meter_unit)) {
+      throw new Error(`meter_unit must be one of: ${METER_UNITS.join(', ')}`)
+    }
+  }
+
+  _insertRun (row) {
+    const cols = ['id', ...RUN_COLUMNS.filter((c) => c in row)]
+    const bound = Object.fromEntries(cols.map((c) => [c, this._runValue(c, row[c])]))
+    this.db.prepare(`INSERT INTO calibration_runs (${cols.join(', ')}) VALUES (${cols.map((c) => '@' + c).join(', ')})`).run(bound)
+  }
+
+  _runValue (column, value) {
+    if (value === undefined) return null
+    if (RUN_JSON_COLUMNS.includes(column)) return value === null ? null : JSON.stringify(value)
+    if (column === 'estimate') return value ? 1 : 0
+    return value
+  }
+
+  getRun (id) {
+    return runFromRow(this.db.prepare('SELECT * FROM calibration_runs WHERE id = ?').get(id))
+  }
+
+  listRuns ({ deviceId } = {}) {
+    const rows = deviceId
+      ? this.db.prepare('SELECT * FROM calibration_runs WHERE device_id = ? ORDER BY started_at DESC, rowid DESC').all(deviceId)
+      : this.db.prepare('SELECT * FROM calibration_runs ORDER BY started_at DESC, rowid DESC').all()
+    return rows.map(runFromRow)
+  }
+
+  updateRun (id, patch) {
+    if (!this.getRun(id)) throw new Error(`run not found: ${id}`)
+    this._checkRunFields(patch)
+    const cols = RUN_COLUMNS.filter((c) => c in patch)
+    if (cols.length === 0) return this.getRun(id)
+    const bound = Object.fromEntries(cols.map((c) => [c, this._runValue(c, patch[c])]))
+    this.db.prepare(`UPDATE calibration_runs SET ${cols.map((c) => `${c} = @${c}`).join(', ')} WHERE id = @id`).run({ ...bound, id })
+    return this.getRun(id)
+  }
+
+  // Accepting or rejecting a finished run. Accepted runs feed the load
+  // check; the decision is logged on the device the result is about.
+  reviewRun (id, review) {
+    const run = this.getRun(id)
+    if (!run) throw new Error(`run not found: ${id}`)
+    if (!['accepted', 'rejected'].includes(review)) throw new Error('review must be accepted or rejected')
+    if (run.status !== 'done') throw new Error('only a finished run can be accepted or rejected')
+    this.db.prepare('UPDATE calibration_runs SET review = ? WHERE id = ?').run(review, id)
+    this._logChange('device', run.device_id, `calibration ${review}`, {
+      runId: id, method: run.method, avgW: run.avg_w, peakW: run.peak_w, dutyCycle: run.duty_cycle
+    })
+    return this.getRun(id)
+  }
+
+  // The accepted run that currently describes a device: its own, or a group
+  // run on a switch that lists it among its consumers. Newest first.
+  latestAcceptedRun (deviceId) {
+    const rows = this.db
+      .prepare("SELECT * FROM calibration_runs WHERE review = 'accepted' AND status = 'done' ORDER BY ended_at DESC, started_at DESC, rowid DESC")
+      .all()
+    const found = rows.map(runFromRow).find((r) => r.device_id === deviceId ||
+      (Array.isArray(r.consumer_ids) && r.consumer_ids.includes(deviceId)))
+    return found || null
+  }
+
+  // Every device's latest accepted run at once, for listing.
+  latestAcceptedRuns () {
+    const rows = this.db
+      .prepare("SELECT * FROM calibration_runs WHERE review = 'accepted' AND status = 'done' ORDER BY ended_at DESC, started_at DESC, rowid DESC")
+      .all().map(runFromRow)
+    const byDevice = new Map()
+    for (const r of rows) {
+      for (const id of new Set([r.device_id, ...(r.consumer_ids || [])])) {
+        if (!byDevice.has(id)) byDevice.set(id, r)
+      }
+    }
+    return byDevice
+  }
+
+  // A run still marked running when the plugin starts was cut short by a
+  // stop or a crash: it can not be resumed, so it is marked failed.
+  abandonRunningRuns () {
+    return this.db.prepare(
+      "UPDATE calibration_runs SET status = 'failed', ended_at = ?, error = 'The plugin stopped while the run was in progress.' WHERE status = 'running'"
+    ).run(new Date().toISOString()).changes
+  }
+
   // A zone name is trimmed, required, and unique ignoring case.
   _checkZoneName (name, ownId) {
     const trimmed = typeof name === 'string' ? name.trim() : ''
@@ -1060,4 +1247,4 @@ class Store {
   }
 }
 
-module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES }
+module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES, METER_UNITS }

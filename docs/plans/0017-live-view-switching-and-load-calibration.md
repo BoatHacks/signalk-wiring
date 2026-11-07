@@ -153,7 +153,7 @@ breaker checks become based on what the boat actually draws.
 ## Implementation Steps (draft)
 
 - [x] Settle the open design questions.
-- [ ] Schema, migration, store and resources: switch and meter fields, safety
+- [x] Schema, migration, store and resources: switch and meter fields, safety
       flags, calibration runs, with tests.
 - [ ] Switchability derivation and the switching route, with tests.
 - [ ] Calibration: pure statistics, then the run state machine, then the

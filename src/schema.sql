@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS circuits (
   cable_ids TEXT,
   voltage REAL,
   convention TEXT,
+  meter_path TEXT,
+  meter_unit TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );
@@ -64,6 +66,11 @@ CREATE TABLE IF NOT EXISTS devices (
   trip_rating_a REAL,
   nominal_voltage REAL,
   power_factor REAL,
+  switch_path TEXT,
+  confirm_switching INTEGER NOT NULL DEFAULT 0,
+  never_remote INTEGER NOT NULL DEFAULT 0,
+  meter_path TEXT,
+  meter_unit TEXT,
   pos_x REAL,
   pos_y REAL,
   pos_z REAL,
@@ -170,3 +177,33 @@ CREATE TABLE IF NOT EXISTS schematic_wires (
 
 CREATE INDEX IF NOT EXISTS idx_schematic_devices_schematic ON schematic_devices (schematic_id);
 CREATE INDEX IF NOT EXISTS idx_schematic_wires_schematic ON schematic_wires (schematic_id);
+
+-- Plan 0017: load calibration runs. `device_id` is the device the result is
+-- about: a consumer, or the switch for a group result, in which case
+-- `consumer_ids` lists the consumers that share it. The result is in watts;
+-- `estimate` marks one worked out from amps and a voltage.
+CREATE TABLE IF NOT EXISTS calibration_runs (
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(id),
+  switch_device_id TEXT REFERENCES devices(id),
+  consumer_ids TEXT,
+  method TEXT NOT NULL CHECK (method IN ('delta', 'watch')),
+  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'done', 'failed', 'cancelled')),
+  review TEXT NOT NULL DEFAULT 'pending' CHECK (review IN ('pending', 'accepted', 'rejected')),
+  meter_path TEXT,
+  meter_unit TEXT,
+  voltage REAL,
+  estimate INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  params TEXT,
+  samples TEXT,
+  details TEXT,
+  avg_w REAL,
+  peak_w REAL,
+  duty_cycle REAL,
+  confidence TEXT,
+  error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_calibration_runs_device ON calibration_runs (device_id);

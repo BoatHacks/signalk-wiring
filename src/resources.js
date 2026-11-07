@@ -13,12 +13,44 @@ function toSnakeKey (key) {
 // records one diff per column; resources expose them as real values.
 const JSON_COLUMNS = new Set(['route', 'calibration', 'tags', 'cable_ids'])
 
+// Flags kept as 0/1 in the database and served as true/false.
+const BOOLEAN_COLUMNS = new Set(['confirm_switching', 'never_remote'])
+
 function rowToResource (row) {
   if (!row) return row
   const out = {}
   for (const [k, v] of Object.entries(row)) {
-    out[toCamelKey(k)] = JSON_COLUMNS.has(k) && typeof v === 'string' ? JSON.parse(v) : v
+    out[toCamelKey(k)] = JSON_COLUMNS.has(k) && typeof v === 'string'
+      ? JSON.parse(v)
+      : BOOLEAN_COLUMNS.has(k) && v !== null && v !== undefined ? Boolean(v) : v
   }
+  return out
+}
+
+// What a device's latest accepted calibration run says (plan 0017), or null.
+// A group run, made on a shared switch, lists the switch and its consumers.
+function measuredOf (run) {
+  if (!run) return null
+  return {
+    runId: run.id,
+    method: run.method,
+    at: run.ended_at || run.started_at,
+    avgW: run.avg_w,
+    peakW: run.peak_w,
+    dutyCycle: run.duty_cycle,
+    confidence: run.confidence,
+    estimate: Boolean(run.estimate),
+    group: Array.isArray(run.consumer_ids) && run.consumer_ids.length > 0
+      ? { switchDeviceId: run.switch_device_id || run.device_id, consumerIds: run.consumer_ids }
+      : null
+  }
+}
+
+// A calibration run as a resource: camelCase, JSON parsed, flags boolean.
+function runToResource (run) {
+  if (!run) return run
+  const out = {}
+  for (const [k, v] of Object.entries(run)) out[toCamelKey(k)] = k === 'estimate' ? Boolean(v) : v
   return out
 }
 
@@ -74,7 +106,7 @@ function withDerived (resource, derived) {
 }
 
 // Only these fields of a circuit record are set from outside.
-const CIRCUIT_EDITABLE = ['name', 'notes', 'voltage', 'convention']
+const CIRCUIT_EDITABLE = ['name', 'notes', 'voltage', 'convention', 'meter_path', 'meter_unit']
 
 function applyAssignments (store, kind, id, value) {
   if (kind === 'conduit' && Array.isArray(value.cableIds)) {
@@ -99,9 +131,14 @@ function createResourceProvider (store, kind, type) {
         const out = {}
         const maps = kind === 'conduit' || kind === 'wireRun' ? store.conduitAssignmentMaps() : null
         const derived = kind === 'circuit' ? store.deriveAll() : null
+        const accepted = kind === 'device' ? store.latestAcceptedRuns() : null
         for (const row of store.list(kind)) {
           const resource = rowToResource(row)
-          out[row.id] = maps ? withAssignments(kind, resource, maps) : derived ? withDerived(resource, derived) : resource
+          out[row.id] = maps
+            ? withAssignments(kind, resource, maps)
+            : derived
+              ? withDerived(resource, derived)
+              : accepted ? { ...resource, measured: measuredOf(accepted.get(row.id)) } : resource
         }
         return out
       },
@@ -110,6 +147,7 @@ function createResourceProvider (store, kind, type) {
         if (!row) throw new Error(`${type} resource not found: ${id}`)
         const resource = rowToResource(row)
         if (kind === 'circuit') return withDerived(resource, store.deriveAll())
+        if (kind === 'device') return { ...resource, measured: measuredOf(store.latestAcceptedRun(id)) }
         return kind === 'conduit' || kind === 'wireRun'
           ? withAssignments(kind, resource, store.conduitAssignmentMaps())
           : resource
@@ -126,6 +164,7 @@ function createResourceProvider (store, kind, type) {
         }
         delete row.cable_ids
         delete row.conduit_ids
+        delete row.measured
         if (existing) {
           store.update(kind, id, row)
         } else {
@@ -148,4 +187,4 @@ function createResourceProvider (store, kind, type) {
   }
 }
 
-module.exports = { createResourceProvider, rowToResource, resourceToRow }
+module.exports = { createResourceProvider, rowToResource, resourceToRow, runToResource, measuredOf }

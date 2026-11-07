@@ -943,7 +943,7 @@ test('a fresh database has the new shape', () => {
   assert.ok(cols('devices').includes('trip_rating_a'))
   assert.ok(cols('circuits').includes('key'))
   assert.ok(!cols('circuits').includes('source_label'))
-  assert.ok(store.db.pragma('user_version', { simple: true }) >= 7)
+  assert.ok(store.db.pragma('user_version', { simple: true }) >= 9)
   store.close()
 })
 
