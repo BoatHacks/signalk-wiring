@@ -1,0 +1,151 @@
+// Pure geometry for the floorplan view. No DOM, no network, so it can be
+// tested directly. Boat coordinates are meters: x along the boat, y
+// athwartships (0 on the centerline), z height. A top view shows [x, y],
+// a side view shows [x, z]; the axis a view does not show is left alone.
+
+const VIEW_AXES = { top: ['x', 'y'], side: ['x', 'z'] }
+const AXES = ['x', 'y', 'z']
+
+export function axesForView (view) {
+  const axes = VIEW_AXES[view]
+  if (!axes) throw new Error(`unknown view: ${view}`)
+  return axes
+}
+
+// Calibration comes from two clicks and a typed distance: the origin, a
+// second point along the first axis, and the real distance between them.
+// The second axis is perpendicular: "up" on screen for a side view; for a
+// top view it points the same way (toward the top of the drawing), and
+// `flip` reverses it when the drawing is the other way round. Uniform
+// scale only; a warped drawing is not corrected.
+export function calibrationFromClicks (originPx, axisPointPx, distanceM, { flip = false } = {}) {
+  const dx = axisPointPx[0] - originPx[0]
+  const dy = axisPointPx[1] - originPx[1]
+  const len = Math.hypot(dx, dy)
+  if (!(len > 0)) throw new Error('the two calibration points must differ')
+  if (!(distanceM > 0)) throw new Error('the real distance must be greater than zero')
+  return {
+    originPx: [originPx[0], originPx[1]],
+    pxPerMeter: len / distanceM,
+    dir: [dx / len, dy / len],
+    flip: Boolean(flip)
+  }
+}
+
+function secondAxisDir (cal) {
+  const [ux, uy] = cal.dir
+  const sign = cal.flip ? -1 : 1
+  return [sign * uy, -sign * ux]
+}
+
+// Drawing coordinates (SVG user units) to meters on the view's two axes.
+export function pxToMeters (cal, px) {
+  const dx = px[0] - cal.originPx[0]
+  const dy = px[1] - cal.originPx[1]
+  const [wx, wy] = secondAxisDir(cal)
+  return [
+    (dx * cal.dir[0] + dy * cal.dir[1]) / cal.pxPerMeter,
+    (dx * wx + dy * wy) / cal.pxPerMeter
+  ]
+}
+
+export function metersToPx (cal, a, b) {
+  const [wx, wy] = secondAxisDir(cal)
+  return [
+    cal.originPx[0] + (a * cal.dir[0] + b * wx) * cal.pxPerMeter,
+    cal.originPx[1] + (a * cal.dir[1] + b * wy) * cal.pxPerMeter
+  ]
+}
+
+function pointOf (p) {
+  return { x: p?.x ?? null, y: p?.y ?? null, z: p?.z ?? null }
+}
+
+// A click in a view sets that view's two axes and keeps the third, so a
+// device moved in the side view also moves in the top view.
+export function applyClick (position, view, a, b) {
+  const [first, second] = axesForView(view)
+  return { ...pointOf(position), [first]: a, [second]: b }
+}
+
+// A new waypoint takes the axis its view does not show from the previous
+// point (or the route's start), and can be corrected from the other view.
+export function waypointFromClick (previous, view, a, b) {
+  return applyClick(previous, view, a, b)
+}
+
+// Length of the 3D polyline. A segment only counts axes set at both of its
+// ends, so a half-placed route gives a lower bound and `complete` is false.
+export function routeLength (route) {
+  const points = (route || []).map(pointOf)
+  let length = 0
+  let complete = true
+  for (let i = 1; i < points.length; i++) {
+    let sum = 0
+    let usedAxes = 0
+    for (const axis of AXES) {
+      const p = points[i - 1][axis]
+      const q = points[i][axis]
+      if (p === null || q === null) continue
+      sum += (q - p) ** 2
+      usedAxes++
+    }
+    if (usedAxes < AXES.length) complete = false
+    length += Math.sqrt(sum)
+  }
+  return { length, complete }
+}
+
+function isPlaced (device) {
+  return Boolean(device) && device.status !== 'removed' &&
+    AXES.some((axis) => device[`pos${axis.toUpperCase()}`] != null)
+}
+
+function positionOf (device) {
+  return { x: device.posX ?? null, y: device.posY ?? null, z: device.posZ ?? null }
+}
+
+// Where a wire run's drawn route begins: its from-device if that is placed,
+// else the circuit's panel device, else nothing (the first clicked waypoint
+// starts the route). Removed or unplaced devices are skipped.
+export function resolveRouteStart (wireRun, circuit, devicesById) {
+  const fromDevice = devicesById.get(wireRun.fromEndpoint)
+  if (isPlaced(fromDevice)) return positionOf(fromDevice)
+  const panel = circuit ? devicesById.get(circuit.panelDeviceId) : null
+  if (isPlaced(panel)) return positionOf(panel)
+  return null
+}
+
+// A top-view plan with a height range shows only what lies inside it, so
+// each deck plan shows its own deck. A point with no height is shown, since
+// it cannot be ruled out. Plans without a range, and side views, show all.
+export function planShowsPoint (plan, point) {
+  if (plan.view !== 'top') return true
+  const z = point?.z ?? null
+  if (z === null) return true
+  if (plan.zMin != null && z < plan.zMin) return false
+  if (plan.zMax != null && z > plan.zMax) return false
+  return true
+}
+
+// Reads the drawing's size from the root <svg> element: viewBox if there
+// is one, else width and height in plain numbers or px. Null when neither
+// gives a usable size.
+export function parseSvgSize (svgText) {
+  const tag = /<svg\b[^>]*>/i.exec(svgText)
+  if (!tag) return null
+  const attr = (name) => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag[0])?.[1]
+
+  const viewBox = attr('viewBox')
+  if (viewBox) {
+    const n = viewBox.trim().split(/[\s,]+/).map(Number)
+    if (n.length === 4 && n.every(Number.isFinite) && n[2] > 0 && n[3] > 0) {
+      return { x: n[0], y: n[1], width: n[2], height: n[3] }
+    }
+  }
+  const plain = (v) => (/^\s*[\d.]+\s*(px)?\s*$/i.test(v || '') ? parseFloat(v) : NaN)
+  const width = plain(attr('width'))
+  const height = plain(attr('height'))
+  if (width > 0 && height > 0) return { x: 0, y: 0, width, height }
+  return null
+}
