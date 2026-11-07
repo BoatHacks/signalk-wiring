@@ -1,4 +1,6 @@
 import { html, render, useState, useEffect } from './vendor/preact-standalone.module.js'
+import { newId } from './ids.js'
+import { PathCombobox } from './signalkPaths.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
@@ -128,6 +130,13 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
               <option value="">—</option>
               ${f.options.map((o) => html`<option value=${o} key=${o}>${o}</option>`)}
             </select>
+          `}
+          ${f.type === 'signalkPath' && html`
+            <${PathCombobox}
+              value=${values[f.key]}
+              placeholder=${f.placeholder || ''}
+              onChange=${(v) => setField(f.key, v)}
+            />
           `}
           ${(f.type === 'text' || f.type === 'number') && html`
             <input
@@ -341,7 +350,7 @@ const DEVICE_FIELDS = [
   {
     key: 'signalkPath',
     label: 'SignalK path',
-    type: 'text',
+    type: 'signalkPath',
     placeholder: 'e.g. electrical.switches.anchorLight'
   },
   { key: 'posX', label: 'Position x (m, along the boat)', type: 'number' },
@@ -371,7 +380,7 @@ function CircuitsList ({ onSelect }) {
   const { loading, error, items } = useResourceList('wiringCircuits', reloadKey)
 
   const createCircuit = async (payload) => {
-    await putResource('wiringCircuits', crypto.randomUUID(), payload)
+    await putResource('wiringCircuits', newId(), payload)
     setShowForm(false)
     setReloadKey((k) => k + 1)
   }
@@ -532,7 +541,7 @@ function CircuitDetail ({ circuitId, onBack }) {
   }
 
   const saveWireRun = async (payload) => {
-    const id = (wireRunForm && wireRunForm.id) || crypto.randomUUID()
+    const id = (wireRunForm && wireRunForm.id) || newId()
     await putResource('wiringWireRuns', id, { ...payload, circuitId })
     setWireRunForm(null)
     setReloadKey((k) => k + 1)
@@ -669,7 +678,7 @@ function DevicesList ({ onSelect }) {
   const { loading, error, items } = useResourceList('wiringDevices', reloadKey)
 
   const createDevice = async (payload) => {
-    await putResource('wiringDevices', crypto.randomUUID(), payload)
+    await putResource('wiringDevices', newId(), payload)
     setShowForm(false)
     setReloadKey((k) => k + 1)
   }

@@ -1,4 +1,5 @@
 import { html, useState, useEffect, useRef } from './vendor/preact-standalone.module.js'
+import { newId } from './ids.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
   moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
@@ -80,7 +81,7 @@ function NewPlanForm ({ onCreated, onError }) {
     setBusy(true)
     onError(null)
     try {
-      const id = crypto.randomUUID()
+      const id = newId()
       await putPlan(id, {
         name: name.trim(),
         view,

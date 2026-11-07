@@ -476,3 +476,23 @@ label.inline {
 .waypoint.selected { fill: #dc2626; }
 
 #app:has(.floorplan-pair) { max-width: 1800px; }
+
+.combobox { position: relative; }
+.combobox input { width: 100%; box-sizing: border-box; }
+.combobox-list {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.combobox-list li { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; word-break: break-all; }
+.combobox-list li.active, .combobox-list li:hover { background: var(--bg-alt); }

@@ -1,4 +1,5 @@
 import { html, useState } from './vendor/preact-standalone.module.js'
+import { newId } from './ids.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 
@@ -270,7 +271,7 @@ async function putResource (type, id, value) {
 export async function importToStore (grouped) {
   const circuitIdByTempId = new Map()
   for (const c of grouped.circuits) {
-    const id = crypto.randomUUID()
+    const id = newId()
     await putResource('wiringCircuits', id, {
       name: c.name,
       sourceLabel: c.sourceLabel || undefined,
@@ -282,7 +283,7 @@ export async function importToStore (grouped) {
 
   const deviceIdByTempId = new Map()
   for (const d of grouped.devices) {
-    const id = crypto.randomUUID()
+    const id = newId()
     await putResource('wiringDevices', id, {
       name: d.name,
       type: d.type || undefined,
@@ -294,7 +295,7 @@ export async function importToStore (grouped) {
   }
 
   for (const wr of grouped.wireRuns) {
-    const id = crypto.randomUUID()
+    const id = newId()
     await putResource('wiringWireRuns', id, {
       circuitId: circuitIdByTempId.get(wr.circuitTempId),
       fromEndpoint: wr.fromEndpoint,
