@@ -39,6 +39,10 @@ const TABLES = {
     table: 'zones',
     columns: ['id', 'name']
   },
+  schematic: {
+    table: 'schematics',
+    columns: ['id', 'name', 'status', 'notes']
+  },
   plan: {
     table: 'plans',
     columns: ['id', 'name', 'view', 'filename', 'z_min', 'z_max', 'calibration', 'status', 'notes']
@@ -315,6 +319,25 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_terminals_device ON device_terminals (device_id)')
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_circuits_key ON circuits (key) WHERE key IS NOT NULL')
     }
+  },
+  {
+    version: 8,
+    description: 'plan 0016: schematics with their devices and bent wires (tables come from schema.sql; this guards the version)',
+    apply (db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS schematics (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active', notes TEXT)`)
+      db.exec(`CREATE TABLE IF NOT EXISTS schematic_devices (
+        id TEXT PRIMARY KEY, schematic_id TEXT NOT NULL REFERENCES schematics(id),
+        position INTEGER NOT NULL, device_id TEXT NOT NULL REFERENCES devices(id),
+        x REAL NOT NULL, y REAL NOT NULL)`)
+      db.exec(`CREATE TABLE IF NOT EXISTS schematic_wires (
+        id TEXT PRIMARY KEY, schematic_id TEXT NOT NULL REFERENCES schematics(id),
+        position INTEGER NOT NULL, wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+        points TEXT)`)
+      db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_devices_schematic ON schematic_devices (schematic_id)')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_wires_schematic ON schematic_wires (schematic_id)')
+    }
   }
 ]
 
@@ -419,6 +442,8 @@ class Store {
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
     if (kind === 'device') row = this._checkIcon(id, this._checkRole(row))
     if (kind === 'wireRun') this._checkWireRunEnds(row)
+    if (kind === 'schematic') row.name = this._checkSchematicName(row.name)
+    const lists = kind === 'schematic' ? this._checkSchematicLists(row) : null
     const children = this._childrenOf(kind)
     const list = children ? this._checkChildren(kind, children, row[children.field], row) : null
     const cols = columns.filter((c) => c in row)
@@ -428,6 +453,7 @@ class Store {
         .prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`)
         .run(row)
       if (list) this._writeChildren(children, id, list)
+      if (lists) this._writeSchematicLists(id, lists)
     })()
     this._logChange(kind, id, 'created', { after: this.get(kind, id) })
     this._afterWrite(kind)
@@ -446,6 +472,132 @@ class Store {
     return this._withChildren(kind, this.db.prepare(`SELECT * FROM ${table}${order}`).all())
   }
 
+  // Schematics (plan 0016). A page lists its devices (with x and y) and the
+  // cables the user bent (with their bend points). Both are written with the
+  // page. Only adding or removing a device on a page is a logged change:
+  // moving a device or a bend point is layout and is not, and a wire needs no
+  // entry because the cable itself carries the wiring facts.
+  _withSchematicLists (rows) {
+    if (rows.length === 0) return rows
+    const one = rows.length === 1
+    const devices = one
+      ? this.db.prepare('SELECT * FROM schematic_devices WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
+      : this.db.prepare('SELECT * FROM schematic_devices ORDER BY schematic_id, position').all()
+    const wires = one
+      ? this.db.prepare('SELECT * FROM schematic_wires WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
+      : this.db.prepare('SELECT * FROM schematic_wires ORDER BY schematic_id, position').all()
+    const group = (list, map) => {
+      const by = new Map()
+      for (const r of list) {
+        if (!by.has(r.schematic_id)) by.set(r.schematic_id, [])
+        by.get(r.schematic_id).push(map(r))
+      }
+      return by
+    }
+    const dByS = group(devices, (r) => ({ deviceId: r.device_id, x: r.x, y: r.y }))
+    const wByS = group(wires, (r) => ({ wireRunId: r.wire_run_id, points: r.points ? JSON.parse(r.points) : [] }))
+    return rows.map((row) => ({ ...row, devices: dByS.get(row.id) || [], wires: wByS.get(row.id) || [] }))
+  }
+
+  _checkSchematicName (name) {
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    if (!trimmed) throw new Error('a schematic needs a name')
+    return trimmed
+  }
+
+  // Validates and normalises the lists of a schematic write. A list that was
+  // not given is null (left alone). A wire without bend points is dropped,
+  // since an unbent wire needs no row.
+  _checkSchematicLists (fields) {
+    const out = { devices: null, wires: null }
+    const finite = (v, what) => {
+      const n = Number(v)
+      if (v === null || v === '' || v === undefined || !Number.isFinite(n)) throw new Error(`${what} must be a number`)
+      return n
+    }
+    if (fields.devices !== undefined) {
+      if (!Array.isArray(fields.devices)) throw new Error('devices must be a list')
+      const seen = new Set()
+      out.devices = fields.devices.map((item) => {
+        const deviceId = item && item.deviceId
+        if (!deviceId || !this.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(deviceId)) {
+          throw new Error(`device not found: ${deviceId}`)
+        }
+        if (seen.has(deviceId)) throw new Error(`device listed twice: ${deviceId}`)
+        seen.add(deviceId)
+        return { deviceId, x: finite(item.x, 'x'), y: finite(item.y, 'y') }
+      })
+    }
+    if (fields.wires !== undefined) {
+      if (!Array.isArray(fields.wires)) throw new Error('wires must be a list')
+      const seen = new Set()
+      out.wires = []
+      for (const item of fields.wires) {
+        const wireRunId = item && item.wireRunId
+        if (!wireRunId || !this.db.prepare('SELECT 1 FROM wire_runs WHERE id = ?').get(wireRunId)) {
+          throw new Error(`wire run not found: ${wireRunId}`)
+        }
+        if (seen.has(wireRunId)) throw new Error(`wire run listed twice: ${wireRunId}`)
+        seen.add(wireRunId)
+        if (item.points !== undefined && item.points !== null && !Array.isArray(item.points)) {
+          throw new Error('points must be a list')
+        }
+        const points = (item.points || []).map((p) => ({ x: finite(p && p.x, 'x'), y: finite(p && p.y, 'y') }))
+        if (points.length > 0) out.wires.push({ wireRunId, points })
+      }
+    }
+    return out
+  }
+
+  _writeSchematicLists (id, lists) {
+    if (lists.devices) {
+      this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
+      const insert = this.db.prepare(
+        'INSERT INTO schematic_devices (id, schematic_id, position, device_id, x, y) VALUES (?, ?, ?, ?, ?, ?)')
+      lists.devices.forEach((d, i) => insert.run(crypto.randomUUID(), id, i, d.deviceId, d.x, d.y))
+    }
+    if (lists.wires) {
+      this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
+      const insert = this.db.prepare(
+        'INSERT INTO schematic_wires (id, schematic_id, position, wire_run_id, points) VALUES (?, ?, ?, ?, ?)')
+      lists.wires.forEach((w, i) => insert.run(crypto.randomUUID(), id, i, w.wireRunId, JSON.stringify(w.points)))
+    }
+  }
+
+  _updateSchematic (id, patch, existing) {
+    const fields = { ...patch }
+    if ('name' in fields) fields.name = this._checkSchematicName(fields.name)
+    const lists = this._checkSchematicLists(fields)
+    const cols = TABLES.schematic.columns.filter((c) => c !== 'id' && c in fields)
+    const idsOf = (list, key) => (list || []).map((i) => i[key]).sort()
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+    const layoutChanged =
+      (lists.devices && !same(lists.devices, existing.devices)) ||
+      (lists.wires && !same(lists.wires, existing.wires))
+    const diff = {}
+    this.db.transaction(() => {
+      if (cols.length) {
+        this.db.prepare(`UPDATE schematics SET ${cols.map((c) => `${c} = @${c}`).join(', ')} WHERE id = @id`)
+          .run({ ...fields, id })
+      }
+      if (layoutChanged) this._writeSchematicLists(id, lists)
+    })()
+    const updated = this.get('schematic', id)
+    for (const c of cols) {
+      if (existing[c] !== updated[c]) diff[c] = { before: existing[c], after: updated[c] }
+    }
+    if (lists.devices) {
+      const before = idsOf(existing.devices, 'deviceId')
+      const after = idsOf(updated.devices, 'deviceId')
+      if (!same(before, after)) diff.devices = { before, after }
+    }
+    if (Object.keys(diff).length > 0) {
+      const summary = existing.status !== REMOVED_STATUS && updated.status === REMOVED_STATUS ? 'removed' : 'updated'
+      this._logChange('schematic', id, summary, diff)
+    }
+    return updated
+  }
+
   // Cables list their conductors and devices their terminals. Both live in
   // child tables but are written and logged as part of their parent.
   _childrenOf (kind) {
@@ -453,6 +605,7 @@ class Store {
   }
 
   _withChildren (kind, rows) {
+    if (kind === 'schematic') return this._withSchematicLists(rows)
     const children = this._childrenOf(kind)
     if (!children || rows.length === 0) return rows
     const all = rows.length === 1
@@ -577,6 +730,7 @@ class Store {
     const existing = this.get(kind, id)
     if (!existing) return null
 
+    if (kind === 'schematic') return this._updateSchematic(id, patch, existing)
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
     if (kind === 'device') patch = this._checkIcon(id, this._checkRole(patch))

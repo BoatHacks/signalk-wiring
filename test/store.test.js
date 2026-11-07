@@ -943,7 +943,7 @@ test('a fresh database has the new shape', () => {
   assert.ok(cols('devices').includes('trip_rating_a'))
   assert.ok(cols('circuits').includes('key'))
   assert.ok(!cols('circuits').includes('source_label'))
-  assert.equal(store.db.pragma('user_version', { simple: true }), 7)
+  assert.ok(store.db.pragma('user_version', { simple: true }) >= 7)
   store.close()
 })
 
@@ -1055,5 +1055,140 @@ test('circuits: records left by hand (no key) are kept as removed at the next sy
   const kept = store.get('circuit', old.id)
   assert.equal(kept.status, 'removed')
   assert.equal(kept.notes, 'from 0.4')
+  store.close()
+})
+
+// Schematics (plan 0016)
+
+test('migration: a 0.4.2 database gains the schematic tables and keeps its data', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+  const first = new Store(dbPath)
+  first.create('device', { id: 'd1', name: 'Pump' })
+  first.close()
+
+  const oldDb = new Database(dbPath)
+  oldDb.exec('DROP TABLE schematic_wires; DROP TABLE schematic_devices; DROP TABLE schematics;')
+  oldDb.pragma('user_version = 7')
+  oldDb.close()
+
+  const store = new Store(dbPath)
+  assert.equal(store.get('device', 'd1').name, 'Pump')
+  const names = tableNames(store.db)
+  for (const t of ['schematics', 'schematic_devices', 'schematic_wires']) assert.ok(names.includes(t), t)
+  assert.ok(store.db.pragma('user_version', { simple: true }) >= 8)
+  store.create('schematic', { id: 's1', name: 'Page', devices: [{ deviceId: 'd1', x: 1, y: 2 }] })
+  store.close()
+
+  const again = new Store(dbPath)
+  assert.equal(again.get('schematic', 's1').devices.length, 1)
+  assert.ok(again.db.pragma('user_version', { simple: true }) >= 8)
+  again.close()
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})
+
+test('schematics: create with devices and bent wires, read back', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  const b = store.create('device', { name: 'B' })
+  const cable = store.create('wireRun', { from_device_id: a.id, to_device_id: b.id, conductors: [{ conductor: 'positive' }] })
+  const s = store.create('schematic', {
+    name: '  12 V system ',
+    devices: [{ deviceId: a.id, x: 10, y: 20 }, { deviceId: b.id, x: 300, y: 40 }],
+    wires: [{ wireRunId: cable.id, points: [{ x: 100, y: 50 }] }]
+  })
+  assert.equal(s.name, '12 V system')
+  assert.equal(s.status, 'active')
+  assert.deepEqual(s.devices, [{ deviceId: a.id, x: 10, y: 20 }, { deviceId: b.id, x: 300, y: 40 }])
+  assert.deepEqual(s.wires, [{ wireRunId: cable.id, points: [{ x: 100, y: 50 }] }])
+  assert.deepEqual(store.list('schematic')[0], s)
+  store.close()
+})
+
+test('schematics: a device can be on several pages with its own position', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  const s1 = store.create('schematic', { name: 'One', devices: [{ deviceId: a.id, x: 1, y: 1 }] })
+  const s2 = store.create('schematic', { name: 'Two', devices: [{ deviceId: a.id, x: 9, y: 9 }] })
+  assert.equal(store.get('schematic', s1.id).devices[0].x, 1)
+  assert.equal(store.get('schematic', s2.id).devices[0].x, 9)
+  assert.equal(store.list('schematic').length, 2)
+  store.close()
+})
+
+test('schematics: validation', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  assert.throws(() => store.create('schematic', { name: '  ' }), /needs a name/)
+  assert.throws(() => store.create('schematic', { name: 'x', devices: [{ deviceId: 'nope', x: 0, y: 0 }] }), /device not found/)
+  assert.throws(() => store.create('schematic', { name: 'x', devices: [{ deviceId: a.id, x: 'a', y: 0 }] }), /number/)
+  assert.throws(() => store.create('schematic', {
+    name: 'x', devices: [{ deviceId: a.id, x: 0, y: 0 }, { deviceId: a.id, x: 1, y: 1 }]
+  }), /twice/)
+  assert.throws(() => store.create('schematic', { name: 'x', wires: [{ wireRunId: 'nope', points: [{ x: 0, y: 0 }] }] }), /wire run not found/)
+  assert.equal(store.list('schematic').length, 0)
+  store.close()
+})
+
+test('schematics: a wire without bend points is not kept', () => {
+  const store = freshStore()
+  const cable = store.create('wireRun', {})
+  const s = store.create('schematic', { name: 'x', wires: [{ wireRunId: cable.id, points: [] }] })
+  assert.deepEqual(s.wires, [])
+  const bent = store.update('schematic', s.id, { wires: [{ wireRunId: cable.id, points: [{ x: 1, y: 2 }] }] })
+  assert.equal(bent.wires.length, 1)
+  const straight = store.update('schematic', s.id, { wires: [{ wireRunId: cable.id, points: [] }] })
+  assert.equal(straight.wires.length, 0)
+  store.close()
+})
+
+test('schematics: adding or removing a device is logged, moving one is not', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  const b = store.create('device', { name: 'B' })
+  const s = store.create('schematic', { name: 'Page', devices: [{ deviceId: a.id, x: 0, y: 0 }] })
+  const count = () => store.changeLog('schematic', s.id).length
+  assert.equal(count(), 1)
+
+  store.update('schematic', s.id, { devices: [{ deviceId: a.id, x: 50, y: 60 }] })
+  assert.equal(count(), 1)
+  assert.equal(store.get('schematic', s.id).devices[0].x, 50)
+
+  store.update('schematic', s.id, { wires: [] })
+  assert.equal(count(), 1)
+
+  store.update('schematic', s.id, { devices: [{ deviceId: a.id, x: 50, y: 60 }, { deviceId: b.id, x: 1, y: 1 }] })
+  assert.equal(count(), 2)
+  store.update('schematic', s.id, { devices: [{ deviceId: b.id, x: 1, y: 1 }] })
+  assert.equal(count(), 3)
+  const last = store.changeLog('schematic', s.id)[2]
+  assert.deepEqual(JSON.parse(last.diff_json).devices.after, [b.id])
+  store.close()
+})
+
+test('schematics: rename, notes and soft delete keep the page and its history', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  const s = store.create('schematic', { name: 'Page', devices: [{ deviceId: a.id, x: 0, y: 0 }] })
+  assert.equal(store.update('schematic', s.id, { name: 'Renamed', notes: 'n' }).name, 'Renamed')
+  assert.throws(() => store.update('schematic', s.id, { name: '' }), /needs a name/)
+  const gone = store.remove('schematic', s.id)
+  assert.equal(gone.status, 'removed')
+  assert.equal(gone.devices.length, 1)
+  assert.equal(store.list('schematic').length, 1)
+  const summaries = store.changeLog('schematic', s.id).map((l) => l.summary)
+  assert.deepEqual(summaries, ['created', 'updated', 'removed'])
+  assert.equal(store.update('schematic', 'missing', { name: 'x' }), null)
+  store.close()
+})
+
+test('schematics: removing a device from a page does not touch the device or its cables', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  const b = store.create('device', { name: 'B' })
+  const cable = store.create('wireRun', { from_device_id: a.id, to_device_id: b.id, conductors: [{ conductor: 'positive' }] })
+  const s = store.create('schematic', { name: 'P', devices: [{ deviceId: a.id, x: 0, y: 0 }, { deviceId: b.id, x: 1, y: 1 }] })
+  store.update('schematic', s.id, { devices: [{ deviceId: a.id, x: 0, y: 0 }] })
+  assert.equal(store.get('device', b.id).status, 'active')
+  assert.equal(store.get('wireRun', cable.id).status, 'active')
   store.close()
 })

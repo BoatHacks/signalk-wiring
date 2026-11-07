@@ -116,7 +116,7 @@ the load check and everything else follow without changes.
 
 ## Implementation Steps (draft)
 
-- [ ] Schema, migration, store and resource: schematics, their devices and
+- [x] Schema, migration, store and resource: schematics, their devices and
       wires, with tests.
 - [ ] `public/schematic.js`: geometry and routing, with tests.
 - [ ] Schematics tab: list, create, rename, remove; canvas with pan and zoom;
@@ -141,3 +141,15 @@ the load check and everything else follow without changes.
 ## Open questions
 
 None. The design is settled; the next step is the schema and store work.
+
+## Decisions made during implementation
+
+- Migration 8 creates `schematics`, `schematic_devices` and
+  `schematic_wires`. `schematic_wires` rows exist only for bent cables, and a
+  wire whose bend points are emptied is dropped.
+- The lists on a schematic record are `devices` (`deviceId`, `x`, `y`) and
+  `wires` (`wireRunId`, `points`). A write that carries a list replaces it;
+  one that omits it leaves it alone.
+- Only a change in which devices are on a page is written to the change log
+  (as a `devices` diff of ids). Moving a device or bending a wire is not.
+  Adding a wire needs no entry because the cable itself is logged.

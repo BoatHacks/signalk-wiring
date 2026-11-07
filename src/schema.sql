@@ -138,3 +138,35 @@ CREATE TABLE IF NOT EXISTS wire_run_conduits (
 );
 
 CREATE INDEX IF NOT EXISTS idx_wire_run_conduits_conduit ON wire_run_conduits (conduit_id);
+
+-- Schematics (plan 0016): named diagrams of the electrical system. A device
+-- can sit on several pages, each with its own position. Wires are not stored:
+-- the cables between two devices on a page appear there by themselves. A
+-- schematic_wires row exists only for a cable the user bent; `points` is the
+-- JSON list of {x, y} bend points.
+CREATE TABLE IF NOT EXISTS schematics (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS schematic_devices (
+  id TEXT PRIMARY KEY,
+  schematic_id TEXT NOT NULL REFERENCES schematics(id),
+  position INTEGER NOT NULL,
+  device_id TEXT NOT NULL REFERENCES devices(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS schematic_wires (
+  id TEXT PRIMARY KEY,
+  schematic_id TEXT NOT NULL REFERENCES schematics(id),
+  position INTEGER NOT NULL,
+  wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+  points TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_schematic_devices_schematic ON schematic_devices (schematic_id);
+CREATE INDEX IF NOT EXISTS idx_schematic_wires_schematic ON schematic_wires (schematic_id);

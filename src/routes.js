@@ -16,7 +16,7 @@ const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024 // 15MB
 
 const MAX_PLAN_IMAGE_BYTES = 15 * 1024 * 1024 // 15MB, same cap as attachments
 
-const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit'])
+const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit', 'schematic'])
 
 // Locked down in case someone opens the download URL directly: no scripts,
 // no network, no framing. In the webapp the file only ever loads through an

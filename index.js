@@ -63,6 +63,7 @@ module.exports = function (app) {
       createResourceProvider(store, 'plan', 'wiringPlans'),
       createResourceProvider(store, 'zone', 'wiringZones'),
       createResourceProvider(store, 'conduit', 'wiringConduits'),
+      createResourceProvider(store, 'schematic', 'wiringSchematics'),
       createSettingsProvider(resolveSettings(options))
     ]
     for (const provider of providers) {

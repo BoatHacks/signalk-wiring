@@ -285,3 +285,32 @@ test('circuits: the resource carries what the cables imply, and cannot be made o
   await assert.rejects(() => circuits.methods.deleteResource(circuit.id), /follow the cables/)
   store.close()
 })
+
+test('wiringSchematics: a schematic resource carries its devices and bent wires', async () => {
+  const { store, provider } = freshProvider('schematic', 'wiringSchematics')
+  const devices = createResourceProvider(store, 'device', 'wiringDevices')
+  const cables = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
+  await devices.methods.setResource('d1', { name: 'A' })
+  await devices.methods.setResource('d2', { name: 'B' })
+  await cables.methods.setResource('w1', { fromDeviceId: 'd1', toDeviceId: 'd2', conductors: [{ conductor: 'positive' }] })
+
+  await provider.methods.setResource('s1', {
+    name: '12 V',
+    devices: [{ deviceId: 'd1', x: 1, y: 2 }, { deviceId: 'd2', x: 3, y: 4 }],
+    wires: [{ wireRunId: 'w1', points: [{ x: 2, y: 2 }] }]
+  })
+  const one = await provider.methods.getResource('s1')
+  assert.equal(one.name, '12 V')
+  assert.deepEqual(one.devices[1], { deviceId: 'd2', x: 3, y: 4 })
+  assert.deepEqual(one.wires, [{ wireRunId: 'w1', points: [{ x: 2, y: 2 }] }])
+
+  await provider.methods.setResource('s1', { name: '12 V', devices: [{ deviceId: 'd1', x: 9, y: 9 }] })
+  const all = await provider.methods.listResources()
+  assert.deepEqual(Object.keys(all), ['s1'])
+  assert.equal(all.s1.devices.length, 1)
+  assert.equal(all.s1.wires.length, 1)
+
+  await provider.methods.deleteResource('s1')
+  assert.equal((await provider.methods.getResource('s1')).status, 'removed')
+  store.close()
+})
