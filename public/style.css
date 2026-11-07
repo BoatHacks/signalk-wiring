@@ -1,58 +1,141 @@
-/* Design target: an iPad-sized tablet (~768-1024px), used mid-repair.
-   Large touch targets, single-column list/detail — see ARCHITECTURE.md §2.4. */
+/* Look and feel shared with the stowage webapp: a dark header bar, an
+   underlined tab strip, warm light surfaces, and a red-shifted night theme.
+   The night theme is deliberately all shades of red, since red light
+   disturbs night-adapted vision far less than white, blue or green. */
 
 :root {
-  --border: #d8dce1;
-  --text: #1c2430;
-  --text-muted: #5b6472;
-  --accent: #2563eb;
-  --removed: #9aa3af;
-  --bg: #ffffff;
-  --bg-alt: #f5f7fa;
+  --bg: #f5f4f1;
+  --surface: #fff;
+  --surface-alt: #f7f7f5;
+  --text: #22221f;
+  --text-muted: #888;
+  --text-muted-strong: #555;
+  --border: #eee;
+  --border-strong: #ccc;
+  --header-bg: #1f2937;
+  --header-text: #fff;
+  --accent: #2f6f2f;
+  --accent-hover: #275e27;
+  --link: #185fa5;
+  --danger: #a33;
+  --danger-bg: #fbeaea;
+  --danger-border: #e3b3b3;
+  --warn: #a35f00;
+  --warn-bg: #f8ecd9;
+  --on-accent-text: #fff;
+  --ok-bg: #eaf3ea;
+  --ok-border: #4a8f4a;
+  --marker-stroke: #6b4a12;
+  --marker-consumer: #d49a1f;
+  --marker-source: #2f8a2f;
+  --marker-storage: #185fa5;
+  --marker-distribution: #8a8a85;
+  --marker-converter: #7a3f98;
 }
 
-* {
-  box-sizing: border-box;
+[data-theme="dark"] {
+  --bg: #16181c;
+  --surface: #21242a;
+  --surface-alt: #262a31;
+  --text: #d9776a;
+  --text-muted: #a15850;
+  --text-muted-strong: #c06657;
+  --border: #3a2c29;
+  --border-strong: #4d332e;
+  --header-bg: #100c0b;
+  --header-text: #d9776a;
+  --accent: #a8443a;
+  --accent-hover: #bd5347;
+  --link: #cc6a54;
+  --danger: #e0574a;
+  --danger-bg: #3a2320;
+  --danger-border: #5a3530;
+  --warn: #c2694f;
+  --warn-bg: #402920;
+  --on-accent-text: #fbdbd3;
+  --ok-bg: #5a1f1a;
+  --ok-border: #ff5c47;
+  --marker-stroke: #3a1a16;
+  --marker-consumer: #d9776a;
+  --marker-source: #ff5c47;
+  --marker-storage: #a8443a;
+  --marker-distribution: #a15850;
+  --marker-converter: #c06657;
+}
+
+* { box-sizing: border-box; }
+
+/* Form controls do not inherit colours from the page, so without this they
+   fall back to the browser's own (white box, dark text) in the night theme. */
+button, input, select, textarea {
+  color: var(--text);
+  background: var(--surface);
+  font-family: inherit;
 }
 
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
   color: var(--text);
-  background: var(--bg-alt);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-#app {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 16px;
+header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 20px;
+  background: var(--header-bg);
+  color: var(--header-text);
 }
+
+header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
+
+.theme-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--header-text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.12); }
 
 nav.tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 4px;
+  padding: 10px 20px 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
 }
 
 nav.tabs button {
-  flex: 1;
-  padding: 12px;
-  font-size: 1rem;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 8px;
+  border: none;
+  background: none;
+  border-radius: 0;
+  padding: 10px 16px;
+  font-size: 14px;
   cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted-strong);
+  white-space: nowrap;
 }
+nav.tabs button:hover { background: none; color: var(--text); }
+nav.tabs button.active { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
 
-nav.tabs button.active {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 .card {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 12px;
@@ -62,120 +145,90 @@ nav.tabs button.active {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   margin-bottom: 8px;
-  background: var(--bg);
+  background: var(--surface);
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 14px;
 }
+.list-item:hover { background: var(--surface-alt); }
+.list-item .meta { color: var(--text-muted); font-size: 12px; }
+.list-item.removed, .badge.removed { color: var(--text-muted); }
 
-.list-item:hover {
-  border-color: var(--accent);
-}
-
-.list-item .meta {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.list-item.removed,
-.badge.removed {
-  color: var(--removed);
-}
+.meta { color: var(--text-muted); font-size: 13px; }
+.hint { font-size: 12px; color: var(--text-muted); }
 
 .badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 0.75rem;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
+  font-size: 11px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted-strong);
 }
+.badge.over-rating { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+.badge.ok { background: var(--ok-bg); border-color: var(--ok-border); color: var(--accent); }
 
-.badge.over-rating {
-  background: #fde8e8;
-  border-color: #f5b5b5;
-  color: #9b1c1c;
-}
-
-.badge.ok {
-  background: #e8f7ec;
-  border-color: #b7e4c2;
-  color: #1c6b34;
-}
-
-.back-link {
-  display: inline-block;
-  margin-bottom: 12px;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 1rem;
-}
+.back-link { display: inline-block; margin-bottom: 12px; color: var(--link); cursor: pointer; font-size: 14px; }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13px;
 }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted-strong); font-weight: 600; background: var(--surface-alt); }
 
-th, td {
-  text-align: left;
-  padding: 10px 8px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.95rem;
-}
-
-.empty-state {
-  color: var(--text-muted);
-  padding: 24px;
-  text-align: center;
-}
+.empty-state { color: var(--text-muted); padding: 24px; text-align: center; }
 
 .error-banner {
-  background: #fde8e8;
-  border: 1px solid #f5b5b5;
-  color: #9b1c1c;
-  padding: 12px 16px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+  padding: 10px 14px;
   border-radius: 8px;
   margin-bottom: 16px;
+  font-size: 13px;
 }
 
 button {
   font: inherit;
-  padding: 10px 16px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 8px;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: 6px;
   cursor: pointer;
 }
+button:hover { background: var(--surface-alt); }
+button:disabled { opacity: 0.55; cursor: default; }
+button:disabled:hover { background: var(--surface); }
 
-button:hover {
+.list-header { margin-bottom: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+td.row-actions { padding: 6px 8px; }
+
+.row-actions button.active,
+.form-actions button[type="submit"],
+.primary-btn {
+  background: var(--accent);
+  color: var(--on-accent-text);
   border-color: var(--accent);
 }
-
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.list-header {
-  margin-bottom: 12px;
-}
-
-.row-actions {
-  display: flex;
-  gap: 8px;
-}
-
-td.row-actions {
-  border-bottom: 1px solid var(--border);
-  padding: 6px 8px;
-}
+.row-actions button.active:hover,
+.form-actions button[type="submit"]:hover { background: var(--accent-hover); }
 
 .inline-form {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;
@@ -184,48 +237,27 @@ td.row-actions {
   gap: 12px;
 }
 
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.95rem;
-}
+.form-field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.form-field span { color: var(--text-muted-strong); font-size: 12px; font-weight: 600; }
 
-.form-field span {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.form-field input,
-.form-field select,
-.form-field textarea {
+input, select, textarea { font-size: 13px; }
+.form-field input, .form-field select, .form-field textarea,
+.row-actions input, .row-actions select, .filter-bar select,
+.calibrate-help input {
   font: inherit;
-  padding: 10px;
-  border: 1px solid var(--border);
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--surface);
   color: var(--text);
 }
-
-.form-field textarea {
-  min-height: 4.5em;
-  resize: vertical;
-}
-
-.form-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.form-actions button[type="submit"] {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
+.form-field textarea { min-height: 4.5em; resize: vertical; }
+.form-actions { display: flex; gap: 8px; }
 
 .diagram-wrap {
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 16px;
@@ -242,7 +274,7 @@ td.row-actions {
 }
 
 .diagram-node {
-  fill: var(--bg);
+  fill: var(--surface);
   stroke: var(--border);
   stroke-width: 1.5;
 }
@@ -276,7 +308,7 @@ td.row-actions {
   height: 140px;
   object-fit: cover;
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   display: block;
 }
 
@@ -287,8 +319,8 @@ td.row-actions {
   width: 140px;
   height: 140px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-alt);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-alt);
   color: var(--accent);
   text-align: center;
   padding: 8px;
@@ -320,9 +352,9 @@ td.row-actions {
 .upload-button {
   display: inline-block;
   padding: 10px 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--surface);
   cursor: pointer;
 }
 
@@ -383,8 +415,8 @@ td.row-actions {
   width: 100%;
   height: 60vh;
   min-height: 280px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   touch-action: none;
   cursor: grab;
@@ -406,23 +438,23 @@ td.row-actions {
 }
 
 .calibrate-help {
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 8px 12px;
 }
 
 .row-actions button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent-text);
   border-color: var(--accent);
 }
 
 .form-box {
   margin-top: 16px;
   padding: 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
 }
 
@@ -458,27 +490,36 @@ label.inline {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 8px 12px;
 }
 
-.device-marker circle { fill: #f59e0b; fill-opacity: 0.55; stroke: #92400e; stroke-width: 0.4; cursor: grab; }
-.device-marker text { fill: var(--text); paint-order: stroke; stroke: #fff; stroke-width: 0.6; pointer-events: none; }
-.device-marker.highlighted circle { fill: var(--accent); fill-opacity: 0.8; stroke: #1e3a8a; }
+.device-marker circle { fill: var(--marker-consumer); fill-opacity: 0.6; stroke: var(--marker-stroke); stroke-width: 0.4; cursor: grab; }
+.device-marker text { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 0.6; pointer-events: none; }
 
-.run-line { stroke: #6b7280; stroke-opacity: 0.5; stroke-linejoin: round; pointer-events: none; }
+.run-line { stroke: var(--text-muted); stroke-opacity: 0.5; stroke-linejoin: round; pointer-events: none; }
 .run-line.highlighted { stroke: var(--accent); stroke-opacity: 0.9; }
-.run-line.active { stroke: #dc2626; stroke-opacity: 1; }
+.run-line.active { stroke: var(--danger); stroke-opacity: 1; }
 
-.waypoint { fill: #fff; stroke: #dc2626; stroke-width: 0.5; cursor: grab; }
-.waypoint.selected { fill: #dc2626; }
+.waypoint { fill: var(--surface); stroke: var(--danger); stroke-width: 0.5; cursor: grab; }
+.waypoint.selected { fill: var(--danger); }
 
-#app:has(.floorplan-pair) { max-width: 1800px; }
+main:has(.floorplan-pair) { max-width: none; }
+
+
+
+.device-marker.role-source circle { fill: var(--marker-source); }
+.device-marker.role-storage circle { fill: var(--marker-storage); }
+.device-marker.role-distribution circle { fill: var(--marker-distribution); }
+.device-marker.role-converter circle { fill: var(--marker-converter); }
+
+.filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+.filter-bar .form-field { min-width: 180px; }
 
 .combobox { position: relative; }
-.combobox input { width: 100%; box-sizing: border-box; }
+.combobox input { width: 100%; }
 .combobox-list {
   position: absolute;
   z-index: 10;
@@ -489,20 +530,18 @@ label.inline {
   list-style: none;
   max-height: 260px;
   overflow-y: auto;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
-.combobox-list li { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; word-break: break-all; }
-.combobox-list li.active, .combobox-list li:hover { background: var(--bg-alt); }
+.combobox-list li { padding: 8px 12px; cursor: pointer; font-size: 13px; word-break: break-all; }
+.combobox-list li.active, .combobox-list li:hover { background: var(--surface-alt); }
 
-.hint { color: var(--text-muted); font-size: 0.8rem; }
-.filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
-.filter-bar .form-field { min-width: 180px; }
+.device-marker.highlighted circle { stroke: var(--link); stroke-width: 1.2; fill-opacity: 0.9; }
 
-.device-marker.role-source circle { fill: #16a34a; stroke: #14532d; }
-.device-marker.role-storage circle { fill: #7c3aed; stroke: #4c1d95; }
-.device-marker.role-distribution circle { fill: #64748b; stroke: #1e293b; }
-.device-marker.role-converter circle { fill: #0891b2; stroke: #164e63; }
-.device-marker.highlighted circle { stroke: var(--accent); stroke-width: 1.2; fill-opacity: 0.9; }
+/* Drawings are black lines on white paper. At night they are inverted and
+   tinted red, like the rest of the theme, instead of glaring white. */
+[data-theme="dark"] .floorplan-canvas image {
+  filter: invert(1) sepia(1) saturate(4) hue-rotate(-50deg) brightness(0.6);
+}

@@ -40,6 +40,12 @@ module.exports = function (app) {
         enum: ['m', 'ft'],
         enumNames: ['Meters', 'Feet'],
         default: 'm'
+      },
+      autoTheme: {
+        type: 'boolean',
+        title: 'Switch light/dark theme automatically',
+        description: 'The webapp follows vessels.self.environment.sun (day, dawn, sunrise, sunset, dusk, night) or, failing that, environment.mode (day or night) instead of the manual toggle. Needs a plugin that publishes one of those paths.',
+        default: false
       }
     }
   }

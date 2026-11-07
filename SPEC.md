@@ -223,6 +223,14 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   (a device fed by more than one circuit counts its full wattage on
   each) rather than presenting a number without that caveat.
 
+The webapp shares the stowage webapp's look and feel: a dark header bar
+with the title and a theme toggle, an underlined tab strip, warm light
+surfaces, and a red-shifted night theme (every colour a shade of red, so it
+does not disturb night vision). The theme is remembered in the browser,
+defaults to the browser's preference, and can optionally follow
+`environment.sun` or `environment.mode` (plugin option `autoTheme`). In the
+night theme the plan drawings are inverted and tinted red.
+
 No mobile-specific design constraints beyond the SignalK admin UI's own
 responsive behavior.
 

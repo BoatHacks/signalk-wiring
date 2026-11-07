@@ -3,7 +3,8 @@ import { useState, useEffect } from './vendor/preact-standalone.module.js'
 export const DEFAULT_SETTINGS = {
   convention: 'freestyle',
   defaultGaugeUnit: 'AWG',
-  defaultLengthUnit: 'm'
+  defaultLengthUnit: 'm',
+  autoTheme: false
 }
 
 // Values a new wire run form starts with. Edits use the record's own

@@ -38,6 +38,10 @@ to someone else doesn't depend on the current owner being present.
   intact — a refit doesn't erase what used to be there.
 - A **change log** per record: every create/edit/removal is timestamped
   with a before/after diff, viewable from the webapp.
+- The same look as the stowage webapp: a header bar, an underlined tab
+  strip, and a red-shifted **night theme** that protects night vision,
+  switched by a button or, with the `autoTheme` option, by the vessel's
+  `environment.sun` or `environment.mode`.
 - A **floorplan view**: upload a top-down or side drawing (SVG, PNG,
   JPEG or WebP), calibrate it once with two clicks and a real distance,
   then place devices by clicking (one 3D position shown in both views)

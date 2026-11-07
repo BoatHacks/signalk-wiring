@@ -8,6 +8,7 @@ import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { useSettings, wireRunInitialValues, colorPlaceholder } from './settings.js'
+import { useTheme } from './theme.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -1032,7 +1033,22 @@ function DeviceDetail ({ deviceId, onBack }) {
   `
 }
 
+const ICON_MOON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+const ICON_SUN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+
+function ThemeToggle ({ theme, onToggle }) {
+  const toDark = theme !== 'dark'
+  return html`
+    <button class="theme-toggle" onClick=${onToggle}
+      title=${toDark ? 'Switch to the red night theme' : 'Switch to the light theme'}
+      aria-label=${toDark ? 'Switch to the red night theme' : 'Switch to the light theme'}
+      dangerouslySetInnerHTML=${{ __html: toDark ? ICON_MOON : ICON_SUN }}></button>
+  `
+}
+
 function App () {
+  const settings = useSettings()
+  const [theme, toggleTheme] = useTheme(settings.autoTheme)
   const [tab, setTab] = useState('circuits')
   const [selectedCircuitId, setSelectedCircuitId] = useState(null)
   const [selectedDeviceId, setSelectedDeviceId] = useState(null)
@@ -1045,6 +1061,10 @@ function App () {
 
   return html`
     <div>
+      <header>
+        <h1>Wiring Documentation</h1>
+        <${ThemeToggle} theme=${theme} onToggle=${toggleTheme} />
+      </header>
       <nav class="tabs">
         <button class=${tab === 'circuits' ? 'active' : ''} onClick=${() => switchTab('circuits')}>Circuits</button>
         <button class=${tab === 'devices' ? 'active' : ''} onClick=${() => switchTab('devices')}>Devices</button>
@@ -1052,6 +1072,7 @@ function App () {
         <button class=${tab === 'zones' ? 'active' : ''} onClick=${() => switchTab('zones')}>Zones</button>
         <button class=${tab === 'floorplan' ? 'active' : ''} onClick=${() => switchTab('floorplan')}>Floorplan</button>
       </nav>
+      <main>
       ${tab === 'circuits' && !selectedCircuitId && html`<${CircuitsList} onSelect=${setSelectedCircuitId} />`}
       ${tab === 'circuits' && selectedCircuitId && html`
         <${CircuitDetail} circuitId=${selectedCircuitId} onBack=${() => setSelectedCircuitId(null)} />
@@ -1063,6 +1084,7 @@ function App () {
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
       ${tab === 'floorplan' && html`<${FloorplanTab} />`}
+      </main>
     </div>
   `
 }

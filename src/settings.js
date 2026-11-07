@@ -12,7 +12,8 @@ function resolveSettings (options) {
   return {
     convention: CONVENTIONS.includes(o.convention) ? o.convention : 'freestyle',
     defaultGaugeUnit: GAUGE_UNITS.includes(o.defaultGaugeUnit) ? o.defaultGaugeUnit : 'AWG',
-    defaultLengthUnit: LENGTH_UNITS.includes(o.defaultLengthUnit) ? o.defaultLengthUnit : 'm'
+    defaultLengthUnit: LENGTH_UNITS.includes(o.defaultLengthUnit) ? o.defaultLengthUnit : 'm',
+    autoTheme: o.autoTheme === true
   }
 }
 

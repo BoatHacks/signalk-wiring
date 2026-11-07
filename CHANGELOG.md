@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- The webapp now looks like the stowage webapp: a dark header bar with a
+  theme toggle, an underlined tab strip, warm light surfaces, and a
+  red-shifted night theme. Plan drawings are tinted red in the night theme.
+
+### Added
+
+- Plugin option `autoTheme`: follow `environment.sun` or `environment.mode`
+  to switch between the light and night themes automatically.
+
 ## [0.4.0] - 2026-11-07
 
 ### Changed

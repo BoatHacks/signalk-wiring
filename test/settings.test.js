@@ -8,7 +8,8 @@ test('resolveSettings fills defaults when options are missing', () => {
   assert.deepEqual(resolveSettings(undefined), {
     convention: 'freestyle',
     defaultGaugeUnit: 'AWG',
-    defaultLengthUnit: 'm'
+    defaultLengthUnit: 'm',
+    autoTheme: false
   })
   assert.deepEqual(resolveSettings({}), resolveSettings(undefined))
 })
@@ -22,6 +23,9 @@ test('resolveSettings keeps valid values', () => {
   assert.equal(settings.convention, 'abyc-e11')
   assert.equal(settings.defaultGaugeUnit, 'mm2')
   assert.equal(settings.defaultLengthUnit, 'ft')
+  assert.equal(settings.autoTheme, false)
+  assert.equal(resolveSettings({ autoTheme: true }).autoTheme, true)
+  assert.equal(resolveSettings({ autoTheme: 'yes' }).autoTheme, false)
 })
 
 test('resolveSettings falls back to the default for unknown values', () => {

@@ -346,6 +346,7 @@ signalk-wiring/
     app.js                   # UI: browse/search, forms, diagram, changelog view
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
+    theme.js                   # light and red night theme, optional auto switching
     roles.js                   # device roles: labels and hints
     zones.js                   # tags parsing, zone and tag filters
     floorplan.js               # pure geometry: calibration, projection, routes
@@ -361,6 +362,7 @@ signalk-wiring/
     floorplan.test.mjs
     zones.test.mjs
     roles.test.mjs
+    theme.test.mjs
     fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md
