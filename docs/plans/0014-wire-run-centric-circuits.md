@@ -1,8 +1,7 @@
 # Implementation Plan: 0014 - Wire-run-centric circuits (draft)
 
-This is a draft from a design discussion. Nothing is implemented. The main
-design questions are answered below; the few left at the end are details to
-settle before or during step 1.
+This is a draft from a design discussion. Nothing is implemented. The design
+questions are all answered below.
 
 ## Overview
 
@@ -73,6 +72,35 @@ are worked out from them. A circuit is what a fuse or breaker protects.
   circuit, keyed to its first wire run and flagged "no protection" in the
   overview. Adding a fuse later moves the circuit onto it and keeps its
   name and notes.
+- **DC first.** Most wiring on a boat is DC, so the cable form puts two DC
+  cases up front as a choice: a single conductor (positive or negative), and
+  a two-conductor cable (positive and negative in one jacket). AC and
+  earth conductors sit behind "More". A plain DC cable from a fuse to a
+  light is then a few fields: From, To, gauge, length and colour.
+- **Negative at the supply end.** In a two-conductor cable the positive
+  starts at the fuse but the negative lands on a negative bus bar or a
+  battery post. The form has a "negative lands on at the supply end" field
+  that defaults to the last negative bus bar or battery post you used, so a
+  run of cables from one panel is one pick and then nothing. If none has
+  been used yet, it asks.
+- **Cable properties.** Gauge, length, zone, route and cable label are on
+  the cable, one gauge per cable. A cable with a thinner conductor is
+  documented by splitting it or in a note. Colour is per conductor.
+- **Ports.** A port is only a name for a group of a converter's terminals
+  (for example DC in, AC out), not a second thing to create. You enter
+  terminals; each port is one side of the converter.
+- **Battery banks.** No bank record. Batteries are devices, and
+  battery-to-battery cables join them into a bank, which is derived the same
+  way circuits are.
+- **AC and DC.** The load check stays watts divided by volts. A circuit is AC
+  when it is fed by line and neutral conductors, otherwise DC, and consumers
+  get an optional power factor that is applied on AC circuits when set
+  (left blank it counts as 1). The field is only shown on a consumer once
+  its circuit is AC, so DC devices never see it.
+- **CSV import.** Imports devices and cables: map columns to From device, To
+  device, conductor, gauge, length and so on. Devices are matched by name
+  (case-insensitive) and created when missing, and circuits follow. The old
+  circuit column can name the derived circuits.
 - **Voltage.** A circuit takes the voltage of the supply end it is fed from:
   batteries and sources get a nominal voltage, and terminals and converter
   ports declare theirs. It can be overridden on the circuit record.
@@ -150,7 +178,7 @@ are worked out from them. A circuit is what a fuse or breaker protects.
 
 ## Implementation Steps (draft)
 
-- [ ] Settle the remaining open questions below and update this plan.
+- [x] Settle the open design questions.
 - [ ] `src/circuits.js` derivation with golden tests, no UI.
 - [ ] Schema and migration: wire run ends as devices, conductors and
       terminals, trip rating and nominal voltage on devices.
@@ -165,18 +193,5 @@ are worked out from them. A circuit is what a fuse or breaker protects.
 
 ## Open questions
 
-- **Cable properties.** Gauge, length, zone and route stay on the cable. Do
-  conductors in one cable ever differ in gauge (a thin earth in a thick
-  cable)? If so, gauge moves to the conductor.
-- **Naming.** "Terminals" and "ports" are both used above. Is "port" only a
-  name for a group of terminals on a converter, or something users enter?
-- **Battery banks.** With named posts, a series bank is wired post to post.
-  Does the bank need to be a thing of its own (a "House bank" made of
-  several cells), or is each battery just a device with a bank link?
-- **Alternating current voltage.** A shore power inlet is 230 V AC while a
-  battery is 12 V DC: does the load check need to say AC or DC, and handle
-  power factor, or stay a plain amps estimate?
-- **Entry of the common case.** The cable form should need very little for
-  a plain two-wire connection. Worth a mock-up before building.
-- **CSV import and sample data** move from circuit-first to device-based
-  ends and need a small mapping redesign.
+None. The design is settled; the next step is to turn this into the
+implementation steps above and start with the derivation (step 2).
