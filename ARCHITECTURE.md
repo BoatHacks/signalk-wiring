@@ -63,6 +63,11 @@ Registered via `registerWithRouter(router)`. Owns:
   denormalized read (circuit + its wire runs + their devices) shaped for
   the client-side diagram renderer, to avoid N+1 fetches from the webapp.
 - Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`).
+- Device icons (`GET /plugins/signalk-wiring/devices/:id/icon`), registered
+  with `router.access('readonly')` like the plan download so drawings can
+  show them to any logged-in user. It serves only the one image marked as
+  the icon, with `nosniff` and a restrictive Content-Security-Policy; the
+  device's other attachments stay behind the admin-only routes above.
 - Plan drawings (`POST` and `GET /plugins/signalk-wiring/plans/:id/image`).
   Upload accepts SVG, PNG, JPEG and WebP, caps size at 15MB, checks the
   bytes against the declared type, and stores the file as `<id>.<ext>`
@@ -188,6 +193,7 @@ CREATE TABLE devices (
   name TEXT NOT NULL,
   type TEXT,
   role TEXT NOT NULL DEFAULT 'consumer',  -- consumer | source | storage | distribution | converter -- 0011
+  icon_attachment_id TEXT, -- one of this device's own images -- 0013
   zone TEXT,              -- the zone's name, kept in step with zone_id
   zone_id TEXT REFERENCES zones(id),  -- 0010
   tags TEXT,              -- JSON array of strings -- 0010
@@ -247,7 +253,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are four migrations (the third and fourth are described below): plan 0008's field
+every subsequent restart. There are five migrations (the third to fifth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -269,6 +275,11 @@ Plan 0011's migration adds `devices.role` with the default `consumer`, so
 every existing device is a consumer. `store.js` validates the role on every
 write (a cleared role returns to the default), and `public/roles.js` holds
 the labels and hints the webapp shows.
+
+Plan 0013's migration adds `devices.icon_attachment_id`. `store.js` accepts
+it only for a JPEG, PNG or WebP attachment of the same device, and
+`deleteAttachment` clears it (with a change-log entry) when its image is
+deleted.
 
 ## 4. Technology Stack
 
@@ -346,6 +357,7 @@ signalk-wiring/
     app.js                   # UI: browse/search, forms, diagram, changelog view
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
+    deviceIcons.js             # icon url, which images can be icons
     theme.js                   # light and red night theme, optional auto switching
     roles.js                   # device roles: labels and hints
     zones.js                   # tags parsing, zone and tag filters
@@ -363,6 +375,7 @@ signalk-wiring/
     zones.test.mjs
     roles.test.mjs
     theme.test.mjs
+    deviceIcons.test.mjs
     fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md

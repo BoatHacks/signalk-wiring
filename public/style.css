@@ -549,3 +549,10 @@ main:has(.floorplan-pair) { max-width: none; }
 .axis-indicator line { stroke: var(--link); stroke-linecap: round; }
 .axis-indicator circle { fill: var(--link); }
 .axis-indicator text { fill: var(--link); paint-order: stroke; stroke: var(--surface); stroke-width: 0.6; pointer-events: none; }
+
+.list-item-main { display: flex; align-items: center; gap: 10px; }
+.device-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-alt); }
+.device-icon-large { width: 44px; height: 44px; vertical-align: middle; margin-right: 8px; }
+[data-theme="dark"] .device-icon, [data-theme="dark"] .floorplan-canvas .device-marker image, [data-theme="dark"] .diagram-wrap image {
+  filter: sepia(1) saturate(3) hue-rotate(-40deg) brightness(0.8);
+}

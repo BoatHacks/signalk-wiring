@@ -201,3 +201,15 @@ test('clearing a device position through the provider sets every axis to null', 
   assert.deepEqual([device.posX, device.posY, device.posZ], [null, null, null])
   store.close()
 })
+
+test('a device icon attachment id round-trips through the provider', async () => {
+  const store = new Store(':memory:')
+  const devices = createResourceProvider(store, 'device', 'wiringDevices')
+  await devices.methods.setResource('d1', { name: 'Plotter' })
+  const attachment = store.createAttachment({
+    owner_type: 'device', owner_id: 'd1', filename: 'a.png', mime_type: 'image/png', uploaded_at: 't'
+  })
+  await devices.methods.setResource('d1', { name: 'Plotter', iconAttachmentId: attachment.id })
+  assert.equal((await devices.methods.getResource('d1')).iconAttachmentId, attachment.id)
+  store.close()
+})

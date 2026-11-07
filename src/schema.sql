@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS devices (
   name TEXT NOT NULL,
   type TEXT,
   role TEXT NOT NULL DEFAULT 'consumer',
+  icon_attachment_id TEXT,
   zone TEXT,
   rated_power_w REAL,
   signalk_path TEXT,

@@ -1,5 +1,6 @@
 import { html, useState, useEffect, useRef } from './vendor/preact-standalone.module.js'
 import { newId } from './ids.js'
+import { deviceIconUrl } from './deviceIcons.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
   moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
@@ -421,6 +422,11 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
             <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''}"
               onPointerDown=${(e) => onMarkerDown(e, { kind: 'device', key: device.id })}>
               <circle cx=${px[0]} cy=${px[1]} r=${unit * 1.3} />
+              ${deviceIconUrl(device) && html`
+                <image href=${deviceIconUrl(device)} x=${px[0] - unit * 1.1} y=${px[1] - unit * 1.1}
+                  width=${unit * 2.2} height=${unit * 2.2} preserveAspectRatio="xMidYMid slice"
+                  clip-path="circle(50%)" style="pointer-events: none" />
+              `}
               <text x=${px[0] + unit * 1.8} y=${px[1] + unit * 0.6} font-size=${unit * 1.9}>${device.name}</text>
             </g>
           `

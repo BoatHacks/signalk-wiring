@@ -7,6 +7,17 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Device icons: mark one of a device's images as its icon (or clear it).
+  The icon appears in the device list and details, on circuit diagrams and
+  on floorplan markers, and is tinted red in the night theme. Deleting the
+  icon image clears the icon. Icons are served by a read-only route, so
+  they show for anyone who can see the drawing; a device's other
+  attachments stay admin-only.
+- Attachments: images open full size, PDFs and other files show a labelled
+  tile, and the upload button says it takes photos, schematics and files.
+
+### Added
+
 - Plans can be removed from the Floorplan tab. They stay in the record as
   removed, like other records, and placed devices and routes are kept.
 - A placed device can be removed from the plans: select its marker and use

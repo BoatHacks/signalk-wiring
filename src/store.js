@@ -26,7 +26,7 @@ const TABLES = {
   device: {
     table: 'devices',
     columns: [
-      'id', 'name', 'type', 'role', 'zone', 'rated_power_w', 'signalk_path',
+      'id', 'name', 'type', 'role', 'icon_attachment_id', 'zone', 'rated_power_w', 'signalk_path',
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
@@ -45,6 +45,10 @@ const TABLES = {
 // breakers, fuses, bus bars, panels, isolators and relays; converters are
 // inverters, chargers and DC-DC units.
 const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter']
+
+// Image types a browser can draw in a small icon. HEIC is accepted as an
+// attachment but not here, since most browsers cannot display it.
+const ICON_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 // Each migration is applied at most once per database, tracked via
 // SQLite's own `PRAGMA user_version` (an integer SQLite reserves
@@ -153,6 +157,14 @@ const MIGRATIONS = [
       const hasRole = db.prepare('PRAGMA table_info(devices)').all().some((c) => c.name === 'role')
       if (!hasRole) db.exec("ALTER TABLE devices ADD COLUMN role TEXT NOT NULL DEFAULT 'consumer'")
     }
+  },
+  {
+    version: 5,
+    description: 'devices: + icon_attachment_id',
+    apply (db) {
+      const has = db.prepare('PRAGMA table_info(devices)').all().some((c) => c.name === 'icon_attachment_id')
+      if (!has) db.exec('ALTER TABLE devices ADD COLUMN icon_attachment_id TEXT')
+    }
   }
 ]
 
@@ -188,7 +200,7 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (kind === 'device' || kind === 'wireRun') row = this._resolveZone(row)
-    if (kind === 'device') row = this._checkRole(row)
+    if (kind === 'device') row = this._checkIcon(id, this._checkRole(row))
     const cols = columns.filter((c) => c in row)
     const placeholders = cols.map((c) => `@${c}`).join(', ')
     this.db
@@ -215,7 +227,7 @@ class Store {
 
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (kind === 'device' || kind === 'wireRun') patch = this._resolveZone(patch)
-    if (kind === 'device') patch = this._checkRole(patch)
+    if (kind === 'device') patch = this._checkIcon(id, this._checkRole(patch))
 
     const { table, columns } = TABLES[kind]
     const cols = columns.filter((c) => c !== 'id' && c in patch)
@@ -239,6 +251,19 @@ class Store {
       this._logChange(kind, id, summary, diff)
     }
     return updated
+  }
+
+  // A device's icon must be one of its own JPEG, PNG or WebP attachments.
+  _checkIcon (deviceId, fields) {
+    if (!('icon_attachment_id' in fields)) return fields
+    const id = fields.icon_attachment_id
+    if (id === null || id === undefined || id === '') return { ...fields, icon_attachment_id: null }
+    const attachment = this.getAttachment(id)
+    if (!attachment || attachment.owner_type !== 'device' || attachment.owner_id !== deviceId ||
+        !ICON_MIME_TYPES.includes(attachment.mime_type)) {
+      throw new Error('icon must be a JPEG, PNG or WebP image attached to this device')
+    }
+    return fields
   }
 
   // An absent role stays absent (the column default applies); a cleared one
@@ -384,6 +409,14 @@ class Store {
   // Hard delete: the file on disk is the only thing worth keeping a
   // record of, and that's the caller's job (routes.js removes it too).
   deleteAttachment (id) {
+    // A device whose icon this was loses the icon, and the change is logged.
+    const attachment = this.getAttachment(id)
+    if (attachment && attachment.owner_type === 'device') {
+      const device = this.get('device', attachment.owner_id)
+      if (device && device.icon_attachment_id === id) {
+        this.update('device', device.id, { icon_attachment_id: null })
+      }
+    }
     this.db.prepare('DELETE FROM attachments WHERE id = ?').run(id)
   }
 
@@ -396,4 +429,4 @@ class Store {
   }
 }
 
-module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES }
+module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES }

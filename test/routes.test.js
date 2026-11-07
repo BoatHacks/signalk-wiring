@@ -451,7 +451,10 @@ test('the SVG download is registered readonly when the server supports router.ac
 
   registerRoutes(router, () => store, os.tmpdir())
 
-  assert.deepEqual(registered, [{ level: 'readonly', method: 'get', routePath: '/plans/:id/image' }])
+  assert.deepEqual(registered, [
+    { level: 'readonly', method: 'get', routePath: '/plans/:id/image' },
+    { level: 'readonly', method: 'get', routePath: '/devices/:id/icon' }
+  ])
   store.close()
 })
 
@@ -483,5 +486,71 @@ test('POST /zones/:id/merge answers 400 without a target and 404 for an unknown 
   const unknown = new FakeResponse()
   router.invoke('post', '/zones/:id/merge', new FakeRequest({ params: { id: 'nope' }, query: { into: zone.id } }), unknown)
   assert.equal(unknown.statusCode, 404)
+  cleanup()
+})
+
+async function deviceWithIcon (store, router, bytes = PNG_BYTES, dataDir) {
+  const device = store.create('device', { name: 'Chartplotter' })
+  const req = new FakeRequest({
+    query: { ownerType: 'device', ownerId: device.id, filename: 'front.png' },
+    headers: { 'content-type': 'image/png' }
+  })
+  const res = new FakeResponse()
+  const done = new Promise((resolve) => res.on('finish', resolve))
+  router.invoke('post', '/attachments', req, res)
+  req.emit('data', bytes)
+  req.emit('end')
+  await done
+  store.update('device', device.id, { icon_attachment_id: res.body.id })
+  return { device, attachmentId: res.body.id }
+}
+
+test('GET /devices/:id/icon serves the icon image with the safe headers', async () => {
+  const { store, router, cleanup } = setup()
+  const { device } = await deviceWithIcon(store, router)
+
+  const res = new FakeResponse()
+  const done = new Promise((resolve) => res.on('finish', resolve))
+  router.invoke('get', '/devices/:id/icon', new FakeRequest({ params: { id: device.id } }), res)
+  await done
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['Content-Type'], 'image/png')
+  assert.equal(res.headers['X-Content-Type-Options'], 'nosniff')
+  assert.match(res.headers['Content-Security-Policy'], /default-src 'none'/)
+  assert.deepEqual(res.body, PNG_BYTES)
+  cleanup()
+})
+
+test('GET /devices/:id/icon is 404 without an icon or for an unknown device, and 503 when disabled', async () => {
+  const { store, router, disable, cleanup } = setup()
+  const plain = store.create('device', { name: 'Pump' })
+
+  const noIcon = new FakeResponse()
+  router.invoke('get', '/devices/:id/icon', new FakeRequest({ params: { id: plain.id } }), noIcon)
+  assert.equal(noIcon.statusCode, 404)
+
+  const unknown = new FakeResponse()
+  router.invoke('get', '/devices/:id/icon', new FakeRequest({ params: { id: 'nope' } }), unknown)
+  assert.equal(unknown.statusCode, 404)
+
+  disable()
+  const off = new FakeResponse()
+  router.invoke('get', '/devices/:id/icon', new FakeRequest({ params: { id: plain.id } }), off)
+  assert.equal(off.statusCode, 503)
+  cleanup()
+})
+
+test('DELETE /attachments/:id clears the device icon when it was the icon', async () => {
+  const { store, router, cleanup } = setup()
+  const { device, attachmentId } = await deviceWithIcon(store, router)
+
+  const res = new FakeResponse()
+  const done = new Promise((resolve) => res.on('finish', resolve))
+  router.invoke('delete', '/attachments/:id', new FakeRequest({ params: { id: attachmentId } }), res)
+  await done
+
+  assert.equal(res.statusCode, 204)
+  assert.equal(store.get('device', device.id).icon_attachment_id, null)
   cleanup()
 })

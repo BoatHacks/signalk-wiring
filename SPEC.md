@@ -119,7 +119,9 @@ A wire run or device is either:
     circuit's panel device and is not stored), `status`,
     `attachments` (photo/file ids), `notes`.
 - **Device**
-  - `id`, `name`, `type` (free text, e.g. "bilge pump", "solar"), `role`
+  - `id`, `name`, `type` (free text, e.g. "bilge pump", "solar"), `iconAttachmentId`
+    (optional: one of the device's own JPEG, PNG or WebP attachments, used as
+    its icon), `role`
     (consumer | source | storage | distribution | converter; consumer by
     default, so devices recorded before roles existed stay valid),
     `zoneId` and `tags` (as on
@@ -175,6 +177,10 @@ import is a deferred feature (see 10.2), not an MVP input source.
   served under the plugin's own admin-gated routes
   (`/plugins/signalk-wiring/...`), since they're only ever used by the
   plugin's own UI.
+- `GET /plugins/signalk-wiring/devices/:id/icon` serves a device's icon to
+  any logged-in user where the server supports per-route access levels
+  (admin only otherwise), so drawings can show it. Only the icon is
+  exposed this way; a device's other attachments stay admin-only.
 - `POST /plugins/signalk-wiring/zones/:id/merge?into=<zone id>` (admin)
   merges one zone into another.
 - Plan drawings: `POST /plugins/signalk-wiring/plans/:id/image` (admin)
@@ -201,7 +207,12 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   and a colour per role on floorplan markers.
 - A zones manager to rename, merge and remove zones, and zone and tag
   filters on the circuit, wire run and device lists.
-- Photo/file attachment upload and viewing per wire run or device.
+- Photo/file attachment upload and viewing per wire run or device: any
+  number of photos, and PDF schematics or other files alongside them.
+  Images open full size; PDFs and other files show as labelled tiles. On a
+  device, one image can be marked as its icon (and cleared again), which is
+  then shown in device lists, on the circuit diagram and on floorplan
+  markers. Deleting the icon image clears the icon.
 - An auto-generated circuit diagram (source → wire run(s) → device(s))
   rendered from the data, per circuit.
 - A change log view per record, showing prior edits.

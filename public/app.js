@@ -9,6 +9,7 @@ import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { useSettings, wireRunInitialValues, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
+import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -237,7 +238,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
 // keep anonymously readable. So this component's own fetches can 401
 // even for a user who can otherwise browse the whole app; it shows the
 // same apiErrorMessage() text as a failed save, not a broken section.
-function AttachmentList ({ ownerType, ownerId }) {
+function AttachmentList ({ ownerType, ownerId, iconAttachmentId, onIconChange }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [attachments, setAttachments] = useState([])
   const [loading, setLoading] = useState(true)
@@ -303,22 +304,33 @@ function AttachmentList ({ ownerType, ownerId }) {
           ${attachments.map((a) => html`
             <div class="attachment" key=${a.id}>
               ${a.mimeType.startsWith('image/')
-                ? html`<img src="${ROUTES_BASE}/attachments/${a.id}" alt=${a.filename} />`
+                ? html`
+                  <a href="${ROUTES_BASE}/attachments/${a.id}" target="_blank" rel="noreferrer" title="Open full size">
+                    <img src="${ROUTES_BASE}/attachments/${a.id}" alt=${a.filename} />
+                  </a>
+                `
                 : html`
                   <a class="attachment-file" href="${ROUTES_BASE}/attachments/${a.id}" target="_blank" rel="noreferrer">
-                    ${a.filename}
+                    <span><strong>${attachmentKind(a.mimeType)}</strong><br />${a.filename}</span>
                   </a>
                 `}
               <div class="attachment-meta">
-                <span>${a.filename}</span>
+                <span title=${a.filename}>${a.filename}</span>
                 <button onClick=${() => remove(a)}>Delete</button>
               </div>
+              ${ownerType === 'device' && onIconChange && canBeIcon(a.mimeType) && html`
+                <div class="attachment-meta">
+                  ${iconAttachmentId === a.id
+                    ? html`<span class="badge ok">Icon</span><button onClick=${() => onIconChange(null)}>Clear icon</button>`
+                    : html`<button onClick=${() => onIconChange(a.id)}>Use as icon</button>`}
+                </div>
+              `}
             </div>
           `)}
         </div>
       `}
       <label class="upload-button">
-        ${uploading ? 'Uploading…' : '+ Add photo/file'}
+        ${uploading ? 'Uploading…' : '+ Add photo, schematic or file'}
         <input
           type="file"
           accept=${ALLOWED_ATTACHMENT_MIME_TYPES}
@@ -673,7 +685,7 @@ function CircuitsList ({ onSelect }) {
 // data as the wire-run table, just laid out as a graph, and gating one
 // view of it but not the other has no real security rationale (see
 // docs/plans/0005-diagram-view.md).
-function DiagramView ({ wireRuns, deviceNameById }) {
+function DiagramView ({ wireRuns, deviceNameById, deviceIconById }) {
   if (wireRuns.length === 0) return null
 
   const nodes = []
@@ -682,7 +694,7 @@ function DiagramView ({ wireRuns, deviceNameById }) {
     if (!id || seenNodeIds.has(id)) return
     seenNodeIds.add(id)
     const deviceName = deviceNameById.get(id)
-    nodes.push({ id, label: deviceName || id, kind: deviceName ? 'device' : 'label' })
+    nodes.push({ id, label: deviceName || id, kind: deviceName ? 'device' : 'label', icon: deviceIconById.get(id) || null })
   }
   for (const wr of wireRuns) {
     addNode(wr.fromEndpoint)
@@ -693,7 +705,7 @@ function DiagramView ({ wireRuns, deviceNameById }) {
   g.setGraph({ rankdir: 'LR', nodesep: 24, ranksep: 56, marginx: 16, marginy: 16 })
   g.setDefaultEdgeLabel(() => ({}))
   for (const n of nodes) {
-    g.setNode(n.id, { width: Math.max(90, n.label.length * 7 + 28), height: 40 })
+    g.setNode(n.id, { width: Math.max(90, n.label.length * 7 + 28) + (n.icon ? 36 : 0), height: n.icon ? 48 : 40 })
   }
   for (const wr of wireRuns) {
     g.setEdge(wr.fromEndpoint, wr.toEndpoint, { wireRun: wr })
@@ -726,7 +738,8 @@ function DiagramView ({ wireRuns, deviceNameById }) {
           return html`
             <g key=${n.id} transform="translate(${pos.x - pos.width / 2}, ${pos.y - pos.height / 2})">
               <rect width=${pos.width} height=${pos.height} rx="6" class="diagram-node diagram-node-${n.kind}" />
-              <text x=${pos.width / 2} y=${pos.height / 2 + 4} text-anchor="middle" class="diagram-label">
+              ${n.icon && html`<image href=${n.icon} x="6" y=${(pos.height - 36) / 2} width="36" height="36" preserveAspectRatio="xMidYMid meet" />`}
+              <text x=${(pos.width + (n.icon ? 36 : 0)) / 2} y=${pos.height / 2 + 4} text-anchor="middle" class="diagram-label">
                 ${n.label}
               </text>
             </g>
@@ -753,6 +766,7 @@ function CircuitDetail ({ circuitId, onBack }) {
     f.key === 'color' ? { ...f, placeholder: colorPlaceholder(settings.convention) } : f
   )
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
+  const deviceIconById = new Map(devices.filter((d) => deviceIconUrl(d)).map((d) => [d.id, deviceIconUrl(d)]))
   const endpointLabel = (endpoint) => deviceNameById.get(endpoint) || endpoint
 
   useEffect(() => {
@@ -828,7 +842,7 @@ function CircuitDetail ({ circuitId, onBack }) {
 
       ${circuitRuns.length > 0 && html`
         <h3>Diagram</h3>
-        <${DiagramView} wireRuns=${circuitRuns} deviceNameById=${deviceNameById} />
+        <${DiagramView} wireRuns=${circuitRuns} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById} />
       `}
 
       <h3>Wire runs</h3>
@@ -954,9 +968,12 @@ function DevicesList ({ onSelect }) {
           class="list-item ${device.status === 'removed' ? 'removed' : ''}"
           onClick=${() => onSelect(device.id)}
         >
-          <div>
+          <div class="list-item-main">
+            ${deviceIconUrl(device) && html`<img class="device-icon" src=${deviceIconUrl(device)} alt="" />`}
+            <div>
             <div>${device.name}</div>
             <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
+            </div>
           </div>
           <${StatusBadge} status=${device.status} />
         </div>
@@ -986,6 +1003,16 @@ function DeviceDetail ({ deviceId, onBack }) {
     setReloadKey((k) => k + 1)
   }
 
+  const setIcon = async (attachmentId) => {
+    setError(null)
+    try {
+      await putResource('wiringDevices', deviceId, { ...device, iconAttachmentId: attachmentId })
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const removeDevice = async () => {
     if (!device || !confirmRemove(device.name)) return
     await deleteResource('wiringDevices', deviceId)
@@ -998,7 +1025,10 @@ function DeviceDetail ({ deviceId, onBack }) {
       <${ErrorBanner} message=${error} />
       ${device && !editing && html`
         <div class="card">
-          <h2>${device.name} <${StatusBadge} status=${device.status} /></h2>
+          <h2>
+            ${deviceIconUrl(device) && html`<img class="device-icon device-icon-large" src=${deviceIconUrl(device)} alt="" />`}
+            ${device.name} <${StatusBadge} status=${device.status} />
+          </h2>
           <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
           ${device.signalkPath && html`
@@ -1027,7 +1057,8 @@ function DeviceDetail ({ deviceId, onBack }) {
       ${showHistory && html`<${ChangeLog} kind="device" id=${deviceId} />`}
       ${device && html`
         <h3>Attachments</h3>
-        <${AttachmentList} ownerType="device" ownerId=${deviceId} />
+        <${AttachmentList} ownerType="device" ownerId=${deviceId}
+          iconAttachmentId=${device.iconAttachmentId} onIconChange=${setIcon} />
       `}
     </div>
   `

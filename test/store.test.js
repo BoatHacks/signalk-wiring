@@ -557,3 +557,95 @@ test('roles: migration gives every existing device the consumer role', () => {
   again.close()
   fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
 })
+
+// Device icons (plan 0013)
+
+function deviceWithImage (store, mimeType = 'image/png') {
+  const device = store.create('device', { name: 'Chartplotter' })
+  const attachment = store.createAttachment({
+    owner_type: 'device', owner_id: device.id, filename: 'front.png',
+    mime_type: mimeType, uploaded_at: new Date().toISOString()
+  })
+  return { device, attachment }
+}
+
+test('icons: a device can use one of its own images as its icon, and clear it again', () => {
+  const store = freshStore()
+  const { device, attachment } = deviceWithImage(store)
+
+  const withIcon = store.update('device', device.id, { icon_attachment_id: attachment.id })
+  assert.equal(withIcon.icon_attachment_id, attachment.id)
+  assert.equal(store.update('device', device.id, { icon_attachment_id: null }).icon_attachment_id, null)
+  assert.equal(store.changeLog('device', device.id).length, 3)
+
+  store.close()
+})
+
+test('icons: only a JPEG, PNG or WebP image attached to the same device is accepted', () => {
+  const store = freshStore()
+  const { device } = deviceWithImage(store)
+  const pdf = store.createAttachment({
+    owner_type: 'device', owner_id: device.id, filename: 'schematic.pdf',
+    mime_type: 'application/pdf', uploaded_at: 't'
+  })
+  const other = store.create('device', { name: 'Other' })
+  const foreign = store.createAttachment({
+    owner_type: 'device', owner_id: other.id, filename: 'x.png', mime_type: 'image/png', uploaded_at: 't'
+  })
+
+  assert.throws(() => store.update('device', device.id, { icon_attachment_id: pdf.id }), /icon must be/)
+  assert.throws(() => store.update('device', device.id, { icon_attachment_id: foreign.id }), /icon must be/)
+  assert.throws(() => store.update('device', device.id, { icon_attachment_id: 'missing' }), /icon must be/)
+
+  const heic = deviceWithImage(store, 'image/heic')
+  assert.throws(() => store.update('device', heic.device.id, { icon_attachment_id: heic.attachment.id }), /icon must be/)
+
+  store.close()
+})
+
+test('icons: deleting the icon image clears the icon and logs it', () => {
+  const store = freshStore()
+  const { device, attachment } = deviceWithImage(store)
+  store.update('device', device.id, { icon_attachment_id: attachment.id })
+
+  store.deleteAttachment(attachment.id)
+
+  assert.equal(store.get('device', device.id).icon_attachment_id, null)
+  assert.equal(store.getAttachment(attachment.id), null)
+  store.close()
+})
+
+test('icons: deleting some other image leaves the icon alone', () => {
+  const store = freshStore()
+  const { device, attachment } = deviceWithImage(store)
+  const spare = store.createAttachment({
+    owner_type: 'device', owner_id: device.id, filename: 'back.png', mime_type: 'image/png', uploaded_at: 't'
+  })
+  store.update('device', device.id, { icon_attachment_id: attachment.id })
+
+  store.deleteAttachment(spare.id)
+
+  assert.equal(store.get('device', device.id).icon_attachment_id, attachment.id)
+  store.close()
+})
+
+test('icons: migration adds the icon column to an existing database', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+  const oldDb = new Database(dbPath)
+  oldDb.exec(`
+    CREATE TABLE circuits (id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active');
+    CREATE TABLE wire_runs (id TEXT PRIMARY KEY, circuit_id TEXT NOT NULL, zone TEXT, zone_id TEXT, tags TEXT,
+      status TEXT NOT NULL DEFAULT 'active');
+    CREATE TABLE devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, role TEXT NOT NULL DEFAULT 'consumer',
+      zone TEXT, zone_id TEXT, tags TEXT, status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    INSERT INTO devices (id, name) VALUES ('d1', 'Pump');
+  `)
+  oldDb.pragma('user_version = 4')
+  oldDb.close()
+
+  const store = new Store(dbPath)
+  assert.equal(store.get('device', 'd1').icon_attachment_id, null)
+  store.close()
+  new Store(dbPath).close() // a restart is harmless
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})

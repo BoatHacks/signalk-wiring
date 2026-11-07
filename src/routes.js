@@ -264,6 +264,26 @@ function registerRoutes (router, getStore, dataDir) {
     }
   })
 
+  // The icon of a device, readable like the plans so drawings can show it
+  // to anyone who can see them. Only this one image is exposed this way;
+  // the rest of a device's attachments stay admin-only.
+  readOnlyRoutes.get('/devices/:id/icon', requireStore, (req, res) => {
+    const device = req.wiringStore.get('device', req.params.id)
+    const attachment = device && device.icon_attachment_id
+      ? req.wiringStore.getAttachment(device.icon_attachment_id)
+      : null
+    const filePath = attachment ? storedFilePath(dataDir, attachment) : null
+    if (!filePath || !fs.existsSync(filePath)) {
+      res.status(404).json({ error: `no icon for device: ${req.params.id}` })
+      return
+    }
+    res.setHeader('Content-Type', attachment.mime_type)
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Content-Security-Policy', PLAN_IMAGE_CSP)
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    fs.createReadStream(filePath).pipe(res)
+  })
+
   router.get('/circuits/:id/diagram', requireStore, (req, res) => {
     const diagram = buildCircuitDiagram(req.wiringStore, req.params.id)
     if (!diagram) {

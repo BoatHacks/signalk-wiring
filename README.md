@@ -48,6 +48,8 @@ to someone else doesn't depend on the current owner being present.
   and draw wire run routes over it. The route's measured length is
   offered next to the recorded length. Several deck plans are supported,
   each with an optional height range.
+- **Device icons**: mark one of a device's images as its icon, shown in
+  device lists, on circuit diagrams and on floorplan markers.
 - **Photo/file attachments** per wire run or device (JPEG/PNG/WebP/HEIC/
   PDF, 15MB cap).
 - An **auto-generated diagram** per circuit (source → wire run(s) →
