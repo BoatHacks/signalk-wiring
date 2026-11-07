@@ -90,7 +90,7 @@ cable.
 
 - [x] Settle the open design questions.
 - [x] Schema and migration: conduits, cable assignments, conduit route.
-- [ ] Store and resource provider: conduits, assignments, change log.
+- [x] Store and resource provider: conduits, assignments, change log.
 - [ ] Conduits tab with cable assignment on the conduit's detail page.
 - [ ] Floorplan: draw a conduit route and show cables along it.
 - [ ] Effective route and length of a cable from its conduits.

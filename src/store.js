@@ -30,6 +30,13 @@ const TABLES = {
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
+  conduit: {
+    table: 'conduits',
+    columns: [
+      'id', 'name', 'kind', 'inner_diameter', 'diameter_unit', 'zone', 'zone_id', 'route',
+      'status', 'notes'
+    ]
+  },
   zone: {
     table: 'zones',
     columns: ['id', 'name']
@@ -45,6 +52,10 @@ const TABLES = {
 // breakers, fuses, bus bars, panels, isolators and relays; converters are
 // inverters, chargers and DC-DC units.
 const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter']
+
+// Tables whose rows can belong to a zone.
+const ZONED_TABLES = ['devices', 'wire_runs', 'conduits']
+const ZONED_KINDS = ['device', 'wireRun', 'conduit']
 
 // Image types a browser can draw in a small icon. HEIC is accepted as an
 // attachment but not here, since most browsers cannot display it.
@@ -222,7 +233,7 @@ class Store {
     const id = fields.id || crypto.randomUUID()
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
-    else if (kind === 'device' || kind === 'wireRun') row = this._resolveZone(row)
+    else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
     if (kind === 'device') row = this._checkIcon(id, this._checkRole(row))
     const cols = columns.filter((c) => c in row)
     const placeholders = cols.map((c) => `@${c}`).join(', ')
@@ -249,7 +260,7 @@ class Store {
     if (!existing) return null
 
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
-    else if (kind === 'device' || kind === 'wireRun') patch = this._resolveZone(patch)
+    else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
     if (kind === 'device') patch = this._checkIcon(id, this._checkRole(patch))
 
     const { table, columns } = TABLES[kind]
@@ -274,6 +285,118 @@ class Store {
       this._logChange(kind, id, summary, diff)
     }
     return updated
+  }
+
+  // A conduit needs a name; its kind is free text, trimmed.
+  _checkConduit (kind, fields, creating) {
+    if (kind !== 'conduit') return fields
+    let out = fields
+    if (creating || 'name' in fields) {
+      const name = typeof fields.name === 'string' ? fields.name.trim() : ''
+      if (!name) throw new Error('a conduit needs a name')
+      out = { ...out, name }
+    }
+    if ('kind' in out && typeof out.kind === 'string') {
+      out = { ...out, kind: out.kind.trim() || null }
+    }
+    return out
+  }
+
+  // Cable assignments (plan 0015). A cable, which is a wire run, lists the
+  // conduits it passes through in order; `position` is that order, counted
+  // from 0 per cable. Assignments are not records of their own: a change is
+  // logged on the conduit (assigned, unassigned) or on the wire run (the
+  // whole list replaced).
+  conduitsOfCable (wireRunId) {
+    return this.db
+      .prepare('SELECT conduit_id FROM wire_run_conduits WHERE wire_run_id = ? ORDER BY position')
+      .all(wireRunId).map((r) => r.conduit_id)
+  }
+
+  cablesOfConduit (conduitId) {
+    return this.db
+      .prepare('SELECT wire_run_id FROM wire_run_conduits WHERE conduit_id = ? ORDER BY rowid')
+      .all(conduitId).map((r) => r.wire_run_id)
+  }
+
+  // Every assignment at once, for listing: { conduitId: [wireRunId], ... }
+  // and { wireRunId: [conduitId], ... }.
+  conduitAssignmentMaps () {
+    const byConduit = {}
+    const byCable = {}
+    const rows = this.db
+      .prepare('SELECT wire_run_id, conduit_id FROM wire_run_conduits ORDER BY position, rowid')
+      .all()
+    for (const r of rows) {
+      (byCable[r.wire_run_id] = byCable[r.wire_run_id] || []).push(r.conduit_id)
+    }
+    const byRowid = this.db.prepare('SELECT wire_run_id, conduit_id FROM wire_run_conduits ORDER BY rowid').all()
+    for (const r of byRowid) {
+      (byConduit[r.conduit_id] = byConduit[r.conduit_id] || []).push(r.wire_run_id)
+    }
+    return { byConduit, byCable }
+  }
+
+  _requireAssignable (conduitId, wireRunId) {
+    if (!this.get('conduit', conduitId)) throw new Error(`conduit not found: ${conduitId}`)
+    if (!this.get('wireRun', wireRunId)) throw new Error(`wire run not found: ${wireRunId}`)
+  }
+
+  // Adds the cable to the end of its own conduit list. Already assigned is
+  // a no-op (nothing logged).
+  assignCable (conduitId, wireRunId) {
+    this._requireAssignable(conduitId, wireRunId)
+    const current = this.conduitsOfCable(wireRunId)
+    if (current.includes(conduitId)) return current
+    this.db
+      .prepare('INSERT INTO wire_run_conduits (wire_run_id, conduit_id, position) VALUES (?, ?, ?)')
+      .run(wireRunId, conduitId, current.length)
+    this._logChange('conduit', conduitId, 'cable assigned', { wireRunId })
+    return this.conduitsOfCable(wireRunId)
+  }
+
+  // Takes the cable out of the conduit; its other conduits keep their order.
+  unassignCable (conduitId, wireRunId) {
+    this._requireAssignable(conduitId, wireRunId)
+    const current = this.conduitsOfCable(wireRunId)
+    if (!current.includes(conduitId)) return current
+    const apply = this.db.transaction(() => {
+      this.db
+        .prepare('DELETE FROM wire_run_conduits WHERE wire_run_id = ? AND conduit_id = ?')
+        .run(wireRunId, conduitId)
+      this._writeCableOrder(wireRunId, current.filter((c) => c !== conduitId))
+    })
+    apply()
+    this._logChange('conduit', conduitId, 'cable unassigned', { wireRunId })
+    return this.conduitsOfCable(wireRunId)
+  }
+
+  // Replaces the whole ordered conduit list of a cable (this is also how
+  // conduits are reordered). One change-log entry on the wire run.
+  setCableConduits (wireRunId, conduitIds) {
+    if (!this.get('wireRun', wireRunId)) throw new Error(`wire run not found: ${wireRunId}`)
+    const next = []
+    for (const id of conduitIds || []) {
+      if (!this.get('conduit', id)) throw new Error(`conduit not found: ${id}`)
+      if (!next.includes(id)) next.push(id)
+    }
+    const before = this.conduitsOfCable(wireRunId)
+    if (before.length === next.length && before.every((c, i) => c === next[i])) return before
+    const apply = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM wire_run_conduits WHERE wire_run_id = ?').run(wireRunId)
+      this._writeCableOrder(wireRunId, next)
+    })
+    apply()
+    this._logChange('wireRun', wireRunId, 'conduits changed', { conduits: { before, after: next } })
+    return next
+  }
+
+  _writeCableOrder (wireRunId, conduitIds) {
+    const upsert = this.db.prepare(
+      `INSERT INTO wire_run_conduits (wire_run_id, conduit_id, position) VALUES (?, ?, ?)
+       ON CONFLICT (wire_run_id, conduit_id) DO UPDATE SET position = excluded.position`
+    )
+    conduitIds.forEach((id, i) => upsert.run(wireRunId, id, i))
   }
 
   // A device's icon must be one of its own JPEG, PNG or WebP attachments.
@@ -343,7 +466,7 @@ class Store {
   }
 
   _syncZoneName (zoneId, name) {
-    for (const table of ['devices', 'wire_runs']) {
+    for (const table of ZONED_TABLES) {
       this.db.prepare(`UPDATE ${table} SET zone = ? WHERE zone_id = ?`).run(name, zoneId)
     }
   }
@@ -352,7 +475,7 @@ class Store {
     const count = (table) => this.db
       .prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE zone_id = ? AND status != 'removed'`)
       .get(zoneId).n
-    return { devices: count('devices'), wireRuns: count('wire_runs') }
+    return { devices: count('devices'), wireRuns: count('wire_runs'), conduits: count('conduits') }
   }
 
   // Zones are a plain list, not part of the removed-but-kept lifecycle, so
@@ -362,10 +485,10 @@ class Store {
     const zone = this.get('zone', zoneId)
     if (!zone) throw new Error(`zone not found: ${zoneId}`)
     const usage = this.zoneUsage(zoneId)
-    if (usage.devices + usage.wireRuns > 0) {
-      throw new Error(`zone in use by ${usage.devices} devices and ${usage.wireRuns} wire runs: ${zone.name}`)
+    if (usage.devices + usage.wireRuns + usage.conduits > 0) {
+      throw new Error(`zone in use by ${usage.devices} devices, ${usage.wireRuns} wire runs and ${usage.conduits} conduits: ${zone.name}`)
     }
-    for (const table of ['devices', 'wire_runs']) {
+    for (const table of ZONED_TABLES) {
       this.db.prepare(`UPDATE ${table} SET zone_id = NULL, zone = NULL WHERE zone_id = ?`).run(zoneId)
     }
     this.db.prepare('DELETE FROM zones WHERE id = ?').run(zoneId)
@@ -382,7 +505,7 @@ class Store {
     if (fromId === intoId) throw new Error('cannot merge a zone into itself')
 
     const merge = this.db.transaction(() => {
-      for (const kind of ['device', 'wireRun']) {
+      for (const kind of ZONED_KINDS) {
         for (const item of this.list(kind).filter((i) => i.zone_id === fromId)) {
           this.update(kind, item.id, { zone_id: intoId })
         }

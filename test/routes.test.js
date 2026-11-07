@@ -554,3 +554,25 @@ test('DELETE /attachments/:id clears the device icon when it was the icon', asyn
   assert.equal(store.get('device', device.id).icon_attachment_id, null)
   cleanup()
 })
+
+test('GET /changelog accepts the conduit kind and attachments can belong to a conduit', async () => {
+  const { store, router, cleanup } = setup()
+  const conduit = store.create('conduit', { name: 'Galley' })
+  const res = new FakeResponse()
+  router.invoke('get', '/changelog/:kind/:id', new FakeRequest({ params: { kind: 'conduit', id: conduit.id } }), res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.length, 1)
+
+  const req = new FakeRequest({
+    query: { ownerType: 'conduit', ownerId: conduit.id, filename: 'conduit.jpg' },
+    headers: { 'content-type': 'image/jpeg' }
+  })
+  const up = new FakeResponse()
+  const done = new Promise((resolve) => up.on('finish', resolve))
+  router.invoke('post', '/attachments', req, up)
+  req.emit('data', Buffer.from('x'))
+  req.emit('end')
+  await done
+  assert.equal(up.statusCode, 201)
+  cleanup()
+})

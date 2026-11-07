@@ -451,7 +451,7 @@ test('zones: delete is refused while in use and allowed once empty', () => {
   const device = store.create('device', { name: 'Light', zone_id: zone.id })
 
   assert.throws(() => store.deleteZone(zone.id), /in use/)
-  assert.deepEqual(store.zoneUsage(zone.id), { devices: 1, wireRuns: 0 })
+  assert.deepEqual(store.zoneUsage(zone.id), { devices: 1, wireRuns: 0, conduits: 0 })
 
   store.update('device', device.id, { zone_id: null })
   store.deleteZone(zone.id)
@@ -696,5 +696,119 @@ test('a fresh database already has the conduit tables', () => {
   const names = tableNames(store.db)
   assert.ok(names.includes('conduits'))
   assert.ok(names.includes('wire_run_conduits'))
+  store.close()
+})
+
+function conduitFixture () {
+  const store = freshStore()
+  const circuit = store.create('circuit', { name: 'C' })
+  const cable = (label) => store.create('wireRun', { circuit_id: circuit.id, cable_label: label })
+  return { store, circuit, cable }
+}
+
+test('conduits: create, update and remove keep one change-log entry per change', () => {
+  const store = freshStore()
+  const conduit = store.create('conduit', { name: '  Galley conduit ', kind: 'conduit', inner_diameter: 25, diameter_unit: 'mm' })
+  assert.equal(conduit.name, 'Galley conduit')
+  assert.equal(conduit.status, 'active')
+  assert.equal(conduit.route, null)
+
+  store.update('conduit', conduit.id, { route: JSON.stringify([{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }]) })
+  store.update('conduit', conduit.id, { name: 'Galley conduit' }) // no change
+  store.remove('conduit', conduit.id)
+
+  assert.equal(store.get('conduit', conduit.id).status, 'removed')
+  const log = store.changeLog('conduit', conduit.id)
+  assert.deepEqual(log.map((e) => e.summary), ['created', 'updated', 'removed'])
+  assert.deepEqual(Object.keys(JSON.parse(log[1].diff_json)), ['route'])
+  store.close()
+})
+
+test('conduits: a name is required and the kind is trimmed free text', () => {
+  const store = freshStore()
+  assert.throws(() => store.create('conduit', { name: '  ' }), /needs a name/)
+  const conduit = store.create('conduit', { name: 'Loom', kind: ' wiring loom ' })
+  assert.equal(conduit.kind, 'wiring loom')
+  assert.throws(() => store.update('conduit', conduit.id, { name: '' }), /needs a name/)
+  store.close()
+})
+
+test('conduits: zones resolve by name or id, follow renames and count as usage', () => {
+  const store = freshStore()
+  const conduit = store.create('conduit', { name: 'Run', zone: ' Galley ' })
+  assert.equal(conduit.zone, 'Galley')
+  assert.ok(conduit.zone_id)
+  store.update('zone', conduit.zone_id, { name: 'Kitchen' })
+  assert.equal(store.get('conduit', conduit.id).zone, 'Kitchen')
+  assert.equal(store.zoneUsage(conduit.zone_id).conduits, 1)
+  assert.throws(() => store.deleteZone(conduit.zone_id), /in use/)
+
+  const other = store.create('zone', { name: 'Salon' })
+  store.mergeZones(conduit.zone_id, other.id)
+  assert.equal(store.get('conduit', conduit.id).zone_id, other.id)
+  store.close()
+})
+
+test('conduit assignments: a cable lists its conduits in order and each change is logged', () => {
+  const { store, cable } = conduitFixture()
+  const a = store.create('conduit', { name: 'A' })
+  const b = store.create('conduit', { name: 'B' })
+  const c1 = cable('one')
+  const c2 = cable('two')
+
+  store.assignCable(a.id, c1.id)
+  store.assignCable(b.id, c1.id)
+  store.assignCable(b.id, c2.id)
+  store.assignCable(b.id, c2.id) // repeat is a no-op
+
+  assert.deepEqual(store.conduitsOfCable(c1.id), [a.id, b.id])
+  assert.deepEqual(store.cablesOfConduit(b.id), [c1.id, c2.id])
+  assert.deepEqual(store.changeLog('conduit', b.id).map((e) => e.summary), ['created', 'cable assigned', 'cable assigned'])
+  assert.deepEqual(JSON.parse(store.changeLog('conduit', b.id)[1].diff_json), { wireRunId: c1.id })
+
+  store.setCableConduits(c1.id, [b.id, a.id])
+  assert.deepEqual(store.conduitsOfCable(c1.id), [b.id, a.id])
+  const log = store.changeLog('wireRun', c1.id)
+  assert.equal(log[log.length - 1].summary, 'conduits changed')
+  assert.deepEqual(JSON.parse(log[log.length - 1].diff_json).conduits, { before: [a.id, b.id], after: [b.id, a.id] })
+
+  // Same list again writes nothing.
+  const count = store.changeLog('wireRun', c1.id).length
+  store.setCableConduits(c1.id, [b.id, a.id])
+  assert.equal(store.changeLog('wireRun', c1.id).length, count)
+
+  store.unassignCable(b.id, c1.id)
+  assert.deepEqual(store.conduitsOfCable(c1.id), [a.id])
+  assert.equal(store.changeLog('conduit', b.id).slice(-1)[0].summary, 'cable unassigned')
+  store.assignCable(b.id, c1.id)
+  assert.deepEqual(store.conduitsOfCable(c1.id), [a.id, b.id])
+  store.close()
+})
+
+test('conduit assignments: unknown ids are refused and removal keeps the assignments', () => {
+  const { store, cable } = conduitFixture()
+  const a = store.create('conduit', { name: 'A' })
+  const c1 = cable('one')
+  assert.throws(() => store.assignCable('nope', c1.id), /conduit not found/)
+  assert.throws(() => store.assignCable(a.id, 'nope'), /wire run not found/)
+  assert.throws(() => store.setCableConduits(c1.id, ['nope']), /conduit not found/)
+
+  store.assignCable(a.id, c1.id)
+  store.remove('conduit', a.id)
+  store.remove('wireRun', c1.id)
+  assert.deepEqual(store.conduitsOfCable(c1.id), [a.id])
+  store.close()
+})
+
+test('conduit assignment maps list both directions in order', () => {
+  const { store, cable } = conduitFixture()
+  const a = store.create('conduit', { name: 'A' })
+  const b = store.create('conduit', { name: 'B' })
+  const c1 = cable('one')
+  store.assignCable(b.id, c1.id)
+  store.assignCable(a.id, c1.id)
+  const maps = store.conduitAssignmentMaps()
+  assert.deepEqual(maps.byCable[c1.id], [b.id, a.id])
+  assert.deepEqual(maps.byConduit[a.id], [c1.id])
   store.close()
 })

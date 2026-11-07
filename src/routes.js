@@ -16,7 +16,7 @@ const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024 // 15MB
 
 const MAX_PLAN_IMAGE_BYTES = 15 * 1024 * 1024 // 15MB, same cap as attachments
 
-const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan', 'zone'])
+const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit'])
 
 // Locked down in case someone opens the download URL directly: no scripts,
 // no network, no framing. In the webapp the file only ever loads through an
@@ -142,8 +142,8 @@ function registerRoutes (router, getStore, dataDir) {
 
   router.post('/attachments', requireStore, (req, res) => {
     const { ownerType, ownerId, filename } = req.query
-    if (!['wireRun', 'device'].includes(ownerType) || !ownerId || !filename) {
-      res.status(400).json({ error: 'ownerType (wireRun|device), ownerId, and filename query params are required' })
+    if (!['wireRun', 'device', 'conduit'].includes(ownerType) || !ownerId || !filename) {
+      res.status(400).json({ error: 'ownerType (wireRun|device|conduit), ownerId, and filename query params are required' })
       return
     }
 
