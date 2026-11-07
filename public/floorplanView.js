@@ -5,7 +5,7 @@ import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
   moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
   metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints, conduitRoutePoints, unroutedCables,
-  conduitMembers
+  conduitMembers, effectiveCableRoute
 } from './floorplan.js'
 import { cableName } from './conduits.js'
 
@@ -350,18 +350,22 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     for (const run of data.wireRuns) {
       if (run.status === 'removed') continue
       const circuit = data.circuitsById.get(run.circuitId)
-      const points = routePoints(run, circuit, data.devicesById)
+      // A cable with no route of its own follows its conduits; those points
+      // are the conduits' and cannot be edited as waypoints here.
+      const effective = effectiveCableRoute(run, circuit, data.devicesById, data.conduitsById)
+      const points = effective.points
+      const ownRoute = effective.source === 'own'
       const isActive = run.id === ctx.runId
       const inCircuit = members && members.runIds.has(run.id)
       const pxs = points.map((p, i) => {
         const offset = points.length - (run.route || []).length
         const key = i - offset // index into the stored route; negative for the derived start
-        return key >= 0 && isActive ? pxFor('waypoint', key, p) : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)
+        return ownRoute && key >= 0 && isActive ? pxFor('waypoint', key, p) : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)
       })
       for (const seg of visibleSegments(pxs)) {
         runLines.push({ id: run.id, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' ') })
       }
-      if (isActive) {
+      if (isActive && ownRoute) {
         const offset = points.length - (run.route || []).length
         points.slice(offset).forEach((p, i) => {
           const px = pxFor('waypoint', i, p)
@@ -565,7 +569,7 @@ export function FloorplanTab () {
   const members = circuit
     ? circuitMembers(circuit, wireRuns)
     : (conduit ? conduitMembers(conduit, wireRuns) : null)
-  const data = { devices, wireRuns, devicesById, circuitsById, conduits }
+  const data = { devices, wireRuns, devicesById, circuitsById, conduits, conduitsById }
 
   const guard = async (fn) => {
     setError(null)
@@ -628,7 +632,8 @@ export function FloorplanTab () {
   }
   const undoLast = () => saveRoute(removeWaypoint(currentRoute(), currentRoute().length - 1))
 
-  const measured = run ? routeLength(routePoints(run, circuitsById.get(run.circuitId), devicesById)) : null
+  const effective = run ? effectiveCableRoute(run, circuitsById.get(run.circuitId), devicesById, conduitsById) : null
+  const measured = effective
   const conduitMeasured = conduit ? routeLength(conduitRoutePoints(conduit)) : null
   const unrouted = unroutedCables(wireRuns, conduits)
   const drawCable = (id) => {
@@ -721,7 +726,7 @@ export function FloorplanTab () {
           `}
           ${run && html`
             <div class="route-info">
-              <span>Measured route: <strong>${measured.length.toFixed(2)} m</strong>${measured.complete ? '' : ' (incomplete, some heights unset)'}</span>
+              <span>Measured route: <strong>${measured.length.toFixed(2)} m</strong>${measured.complete ? '' : ' (incomplete, some heights unset or a conduit has no route)'}${effective.source === 'conduits' ? ', following its conduits' : ''}</span>
               <span>Recorded length: ${run.length != null ? `${run.length} ${run.lengthUnit || ''}` : 'none'}</span>
               <div class="row-actions">
                 <button disabled=${measured.length === 0} onClick=${useMeasured}>Use measured length</button>

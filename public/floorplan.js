@@ -265,3 +265,69 @@ export function conduitMembers (conduit, wireRuns) {
   }
   return { runIds, deviceIds }
 }
+
+function distanceBetween (p, q) {
+  let sum = 0
+  for (const axis of AXES) {
+    if (p[axis] === null || q[axis] === null) continue
+    sum += (q[axis] - p[axis]) ** 2
+  }
+  return Math.sqrt(sum)
+}
+
+// What a cable (a wire run) is drawn as and how long it measures.
+//
+// A cable with route points of its own keeps them (source 'own'): its route
+// is its resolved start plus its waypoints, as before. Otherwise it follows
+// the conduits it passes through, each for its whole length, in the cable's
+// order (source 'conduits'). A conduit may have been drawn in either
+// direction, so each is turned to meet the end of the one before; the first
+// is turned toward the cable's start device when that is placed, else toward
+// the second conduit. Where one conduit ends away from where the next
+// begins, a straight link joins them and counts toward the length. Removed
+// conduits and ones with fewer than two points are skipped, which makes the
+// result incomplete. A cable with neither has source 'none'.
+//
+// `complete` is false when a conduit was skipped or when heights are unset
+// (see routeLength), meaning the length is a lower bound.
+export function effectiveCableRoute (wireRun, circuit, devicesById, conduitsById) {
+  const ownWaypoints = Array.isArray(wireRun.route) && wireRun.route.length > 0
+  if (ownWaypoints) {
+    const points = routePoints(wireRun, circuit, devicesById)
+    return { source: 'own', points, ...routeLength(points) }
+  }
+
+  let complete = true
+  const routes = []
+  for (const id of wireRun.conduitIds || []) {
+    const conduit = conduitsById.get(id)
+    if (!conduit || conduit.status === 'removed') continue
+    const points = conduitRoutePoints(conduit)
+    if (points.length < 2) { complete = false; continue }
+    routes.push(points)
+  }
+  if (routes.length === 0) return { source: 'none', points: [], length: 0, complete }
+
+  const reversed = (points) => points.slice().reverse()
+  const ends = (points) => [points[0], points[points.length - 1]]
+  let anchor = resolveRouteStart(wireRun, circuit, devicesById)
+  const oriented = []
+  routes.forEach((points, i) => {
+    let route = points
+    const [first, last] = ends(points)
+    if (anchor) {
+      if (distanceBetween(anchor, last) < distanceBetween(anchor, first)) route = reversed(points)
+    } else if (i === 0 && routes.length > 1) {
+      // No anchor: turn the first conduit so its end is nearest the next one.
+      const [nextFirst, nextLast] = ends(routes[1])
+      const toNext = (p) => Math.min(distanceBetween(p, nextFirst), distanceBetween(p, nextLast))
+      if (toNext(first) < toNext(last)) route = reversed(points)
+    }
+    oriented.push(route)
+    anchor = route[route.length - 1]
+  })
+
+  const points = oriented.flat()
+  const measured = routeLength(points)
+  return { source: 'conduits', points, length: measured.length, complete: complete && measured.complete }
+}

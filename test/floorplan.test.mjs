@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   axesForView, calibrationFromClicks, pxToMeters, metersToPx, applyClick,
   waypointFromClick, routeLength, resolveRouteStart, planShowsPoint, parseSvgSize,
-  conduitRoutePoints, unroutedCables, conduitMembers
+  conduitRoutePoints, unroutedCables, conduitMembers, effectiveCableRoute
 } from '../public/floorplan.js'
 
 const near = (actual, expected, eps = 1e-9) =>
@@ -256,4 +256,75 @@ test('conduit members are its live cables and their ends, for highlighting', () 
   const { runIds, deviceIds } = conduitMembers(conduit, runs)
   assert.deepEqual([...runIds], ['a'])
   assert.deepEqual([...deviceIds].sort(), ['d1', 'd2'])
+})
+
+// Effective route of a cable (plan 0015)
+
+const conduitMap = (...list) => new Map(list.map((c) => [c.id, c]))
+const straight = (id, x1, x2, extra = {}) =>
+  ({ id, status: 'active', route: [pt(x1, 0, 0), pt(x2, 0, 0)], ...extra })
+
+test('effective route: a cable wholly in one conduit follows it, with its length', () => {
+  const k1 = straight('k1', 0, 4)
+  const result = effectiveCableRoute({ id: 'w', conduitIds: ['k1'] }, null, new Map(), conduitMap(k1))
+  assert.equal(result.source, 'conduits')
+  assert.deepEqual(result.points, [pt(0, 0, 0), pt(4, 0, 0)])
+  near(result.length, 4)
+  assert.equal(result.complete, true)
+})
+
+test('effective route: two conduits in sequence are chained, the second turned to meet the first', () => {
+  const k1 = straight('k1', 0, 4)
+  const k2 = straight('k2', 10, 5) // drawn the other way round
+  const result = effectiveCableRoute({ id: 'w', conduitIds: ['k1', 'k2'] }, null, new Map(), conduitMap(k1, k2))
+  assert.deepEqual(result.points.map((p) => p.x), [0, 4, 5, 10])
+  near(result.length, 4 + 1 + 5) // two conduits plus the 1 m link between them
+  assert.equal(result.source, 'conduits')
+})
+
+test('effective route: the first conduit is turned toward the cable start device or the second conduit', () => {
+  const k1 = straight('k1', 4, 0) // drawn away from the start
+  const devices = new Map([['d1', { id: 'd1', status: 'active', posX: 0, posY: 0, posZ: 0 }]])
+  const byDevice = effectiveCableRoute({ id: 'w', fromEndpoint: 'd1', conduitIds: ['k1'] }, null, devices, conduitMap(k1))
+  assert.deepEqual(byDevice.points.map((p) => p.x), [0, 4])
+
+  const k2 = straight('k2', 10, 20)
+  const byNext = effectiveCableRoute({ id: 'w', conduitIds: ['k1', 'k2'] }, null, new Map(), conduitMap(k1, k2))
+  assert.deepEqual(byNext.points.map((p) => p.x), [0, 4, 10, 20])
+})
+
+test('effective route: a cable with its own route keeps it, whatever conduits it is in', () => {
+  const k1 = straight('k1', 0, 4)
+  const run = { id: 'w', route: [pt(1, 1, 0), pt(2, 1, 0)], conduitIds: ['k1'] }
+  const result = effectiveCableRoute(run, null, new Map(), conduitMap(k1))
+  assert.equal(result.source, 'own')
+  assert.deepEqual(result.points, [pt(1, 1, 0), pt(2, 1, 0)])
+  near(result.length, 1)
+})
+
+test('effective route: a cable in no drawn conduit and with no route has nothing', () => {
+  const bare = { id: 'k2', status: 'active', route: null }
+  const removed = straight('k3', 0, 5, { status: 'removed' })
+  for (const run of [{ id: 'w' }, { id: 'w', conduitIds: ['k2', 'k3', 'missing'] }]) {
+    const result = effectiveCableRoute(run, null, new Map(), conduitMap(bare, removed))
+    assert.equal(result.source, 'none')
+    assert.deepEqual(result.points, [])
+    assert.equal(result.length, 0)
+  }
+})
+
+test('effective route: an undrawn conduit is skipped and the route is marked incomplete', () => {
+  const k1 = straight('k1', 0, 4)
+  const bare = { id: 'k2', status: 'active', route: [] }
+  const result = effectiveCableRoute({ id: 'w', conduitIds: ['k1', 'k2'] }, null, new Map(), conduitMap(k1, bare))
+  assert.equal(result.source, 'conduits')
+  assert.equal(result.complete, false)
+  near(result.length, 4)
+})
+
+test('effective route: unset heights make the length a lower bound', () => {
+  const k1 = { id: 'k1', status: 'active', route: [pt(0, 0), pt(3, 4)] }
+  const result = effectiveCableRoute({ id: 'w', conduitIds: ['k1'] }, null, new Map(), conduitMap(k1))
+  near(result.length, 5)
+  assert.equal(result.complete, false)
 })

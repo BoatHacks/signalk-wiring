@@ -93,7 +93,7 @@ cable.
 - [x] Store and resource provider: conduits, assignments, change log.
 - [x] Conduits tab with cable assignment on the conduit's detail page.
 - [x] Floorplan: draw a conduit route and show cables along it.
-- [ ] Effective route and length of a cable from its conduits.
+- [x] Effective route and length of a cable from its conduits.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 - [ ] CSV import: a conduit column on cables.
 
