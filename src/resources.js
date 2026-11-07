@@ -11,7 +11,7 @@ function toSnakeKey (key) {
 // Columns holding structured data (a wire run's route, a plan's
 // calibration, an item's tags). The database keeps them as JSON text so the change log
 // records one diff per column; resources expose them as real values.
-const JSON_COLUMNS = new Set(['route', 'calibration', 'tags'])
+const JSON_COLUMNS = new Set(['route', 'calibration', 'tags', 'cable_ids'])
 
 function rowToResource (row) {
   if (!row) return row

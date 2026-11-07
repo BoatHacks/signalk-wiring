@@ -180,7 +180,7 @@ are worked out from them. A circuit is what a fuse or breaker protects.
 
 - [x] Settle the open design questions.
 - [x] `src/circuits.js` derivation with golden tests, no UI.
-- [ ] Schema and migration: wire run ends as devices, conductors and
+- [x] Schema and migration: wire run ends as devices, conductors and
       terminals, trip rating and nominal voltage on devices.
 - [ ] Keep circuit records in step with wire runs (store write path).
 - [ ] Cable form with device pickers, inline new device, conductors and

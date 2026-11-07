@@ -14,7 +14,7 @@ function freshStore () {
 
 test('create + get a circuit', () => {
   const store = freshStore()
-  const circuit = store.create('circuit', { name: 'Bilge pump circuit', source_label: 'Breaker 4, 15A' })
+  const circuit = store.create('circuit', { name: 'Bilge pump circuit', notes: 'Breaker 4, 15A' })
 
   assert.equal(circuit.name, 'Bilge pump circuit')
   assert.equal(circuit.status, 'active')
@@ -37,18 +37,14 @@ test('list returns all rows for a kind', () => {
 
 test('update appends a change_log entry with a before/after diff', () => {
   const store = freshStore()
-  const circuit = store.create('circuit', { name: 'Bilge pump circuit' })
   const wireRun = store.create('wireRun', {
-    circuit_id: circuit.id,
-    from_endpoint: 'breaker-4',
-    to_endpoint: 'bilge-pump',
     gauge: 14,
     gauge_unit: 'AWG',
-    color: 'red'
+    cable_label: 'red'
   })
 
-  const updated = store.update('wireRun', wireRun.id, { color: 'yellow' })
-  assert.equal(updated.color, 'yellow')
+  const updated = store.update('wireRun', wireRun.id, { cable_label: 'yellow' })
+  assert.equal(updated.cable_label, 'yellow')
 
   const log = store.changeLog('wireRun', wireRun.id)
   // one entry for creation, one for this update
@@ -56,7 +52,7 @@ test('update appends a change_log entry with a before/after diff', () => {
   const updateEntry = log[1]
   assert.equal(updateEntry.summary, 'updated')
   const diff = JSON.parse(updateEntry.diff_json)
-  assert.deepEqual(diff.color, { before: 'red', after: 'yellow' })
+  assert.deepEqual(diff.cable_label, { before: 'red', after: 'yellow' })
 
   store.close()
 })
@@ -196,19 +192,15 @@ test('migration: opening a pre-0008 database renames circuits.source to source_l
   const store = new Store(dbPath)
 
   const circuit = store.get('circuit', 'c1')
-  assert.equal(circuit.source_label, 'Breaker 4, 15A')
+  assert.equal(circuit.name, 'Old circuit')
   assert.equal(circuit.source, undefined)
-  assert.equal(circuit.breaker_rating, null)
+  assert.equal(circuit.source_label, undefined) // retired by plan 0014
   assert.equal(circuit.voltage, null)
 
-  const updatedCircuit = store.update('circuit', 'c1', { breaker_rating: 15, voltage: 12 })
-  assert.equal(updatedCircuit.breaker_rating, 15)
+  const updatedCircuit = store.update('circuit', 'c1', { voltage: 12 })
   assert.equal(updatedCircuit.voltage, 12)
 
   const wireRun = store.create('wireRun', {
-    circuit_id: 'c1',
-    from_endpoint: 'a',
-    to_endpoint: 'b',
     cable_label: '19',
     switch_ref: '1',
     length_unit: 'm'
@@ -233,7 +225,7 @@ test('migration is a no-op (safe to run twice) on an already-migrated database',
   const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
 
   const store1 = new Store(dbPath)
-  store1.create('circuit', { id: 'c1', name: 'Circuit', source_label: 'Breaker 1' })
+  store1.create('circuit', { id: 'c1', name: 'Circuit', notes: 'Breaker 1' })
   store1.close()
 
   // Re-opening (as a server restart would) runs _migrate() again; every
@@ -241,7 +233,7 @@ test('migration is a no-op (safe to run twice) on an already-migrated database',
   // (e.g. "duplicate column name") or lose data.
   const store2 = new Store(dbPath)
   const circuit = store2.get('circuit', 'c1')
-  assert.equal(circuit.source_label, 'Breaker 1')
+  assert.equal(circuit.notes, 'Breaker 1')
   store2.close()
 
   fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
@@ -281,9 +273,7 @@ test('migration: a 0.2.0 database gains position, route, panel link and the plan
   assert.equal(device.pos_y, null)
   assert.equal(device.pos_z, null)
 
-  const circuit = store.create('circuit', { name: 'C', panel_device_id: 'd1' })
-  assert.equal(circuit.panel_device_id, 'd1')
-  const run = store.create('wireRun', { circuit_id: circuit.id, route: '[]' })
+  const run = store.create('wireRun', { route: '[]' })
   assert.equal(run.route, '[]')
   assert.equal(store.list('plan').length, 0)
 
@@ -327,8 +317,7 @@ test('a position change writes one change-log entry and a half-placed device is 
 
 test('a route edit writes a single route diff, not one entry per point', () => {
   const store = freshStore()
-  const circuit = store.create('circuit', { name: 'C' })
-  const run = store.create('wireRun', { circuit_id: circuit.id })
+  const run = store.create('wireRun', {})
 
   const route = JSON.stringify([{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }])
   store.update('wireRun', run.id, { route })
@@ -410,8 +399,7 @@ test('zones: rename updates every item and is logged', () => {
   const store = freshStore()
   const zone = store.create('zone', { name: 'Salon' })
   const device = store.create('device', { name: 'Light', zone_id: zone.id })
-  const circuit = store.create('circuit', { name: 'C' })
-  const run = store.create('wireRun', { circuit_id: circuit.id, zone_id: zone.id })
+  const run = store.create('wireRun', { zone_id: zone.id })
 
   store.update('zone', zone.id, { name: 'Main salon' })
 
@@ -430,8 +418,7 @@ test('zones: merge repoints items, logs them and removes the source zone', () =>
   const from = store.create('zone', { name: 'Lazarette' })
   const into = store.create('zone', { name: 'Aft locker' })
   const device = store.create('device', { name: 'Pump', zone_id: from.id })
-  const circuit = store.create('circuit', { name: 'C' })
-  const run = store.create('wireRun', { circuit_id: circuit.id, zone_id: from.id })
+  const run = store.create('wireRun', { zone_id: from.id })
 
   store.mergeZones(from.id, into.id)
 
@@ -810,5 +797,149 @@ test('conduit assignment maps list both directions in order', () => {
   const maps = store.conduitAssignmentMaps()
   assert.deepEqual(maps.byCable[c1.id], [b.id, a.id])
   assert.deepEqual(maps.byConduit[a.id], [c1.id])
+// ---- Plan 0014: cables between devices, conductors, terminals ----
+
+test('a cable joins two devices and lists its conductors, logged as one change', () => {
+  const store = freshStore()
+  const fuse = store.create('device', { name: 'Fuse', role: 'distribution', trip_rating_a: 10 })
+  const lamp = store.create('device', { name: 'Lamp' })
+  const cable = store.create('wireRun', {
+    from_device_id: fuse.id,
+    to_device_id: lamp.id,
+    gauge: 2.5,
+    conductors: [
+      { conductor: 'positive', color: 'red' },
+      { conductor: 'negative', color: 'black' }
+    ]
+  })
+  assert.equal(cable.from_device_id, fuse.id)
+  assert.deepEqual(cable.conductors.map((c) => c.conductor), ['positive', 'negative'])
+  assert.equal(cable.conductors[0].color, 'red')
+  assert.equal(store.get('device', fuse.id).trip_rating_a, 10)
+
+  store.update('wireRun', cable.id, { conductors: [{ conductor: 'positive', color: 'brown' }] })
+  const log = store.changeLog('wireRun', cable.id)
+  assert.equal(log.length, 2)
+  const diff = JSON.parse(log[1].diff_json)
+  assert.deepEqual(Object.keys(diff), ['conductors'])
+  assert.equal(diff.conductors.after[0].color, 'brown')
+
+  // The same list again is not a change.
+  store.update('wireRun', cable.id, { conductors: [{ conductor: 'positive', color: 'brown' }] })
+  assert.equal(store.changeLog('wireRun', cable.id).length, 2)
+  // Leaving conductors out leaves them alone.
+  store.update('wireRun', cable.id, { gauge: 4 })
+  assert.equal(store.get('wireRun', cable.id).conductors.length, 1)
+  store.close()
+})
+
+test('a cable needs real devices and known conductor types', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  assert.throws(() => store.create('wireRun', { from_device_id: 'nope' }), /device not found/)
+  assert.throws(() => store.create('wireRun', { from_device_id: a.id, conductors: [{ conductor: 'blue' }] }), /conductor must be one of/)
+  assert.throws(() => store.create('wireRun', { conductors: [{ conductor: 'negative', toDeviceId: 'nope' }] }), /device not found/)
+  assert.equal(store.list('wireRun').length, 0)
+  store.close()
+})
+
+test('device terminals are written with the device and validated', () => {
+  const store = freshStore()
+  const inverter = store.create('device', {
+    name: 'Inverter',
+    role: 'converter',
+    terminals: [
+      { name: 'DC +', conductor: 'positive', voltage: 12, port: 'DC in' },
+      { name: 'AC L', conductor: 'line', voltage: 230, port: 'AC out' }
+    ]
+  })
+  assert.equal(inverter.terminals.length, 2)
+  assert.equal(inverter.terminals[1].port, 'AC out')
+  assert.throws(() => store.update('device', inverter.id, { terminals: [{ conductor: 'positive' }] }), /needs a name/)
+  assert.throws(() => store.update('device', inverter.id, { terminals: [{ name: 'x', conductor: 'red' }] }), /must be one of/)
+
+  store.update('device', inverter.id, { terminals: [{ name: 'DC +', conductor: 'positive' }] })
+  assert.equal(store.get('device', inverter.id).terminals.length, 1)
+  const diff = JSON.parse(store.changeLog('device', inverter.id)[1].diff_json)
+  assert.deepEqual(Object.keys(diff), ['terminals'])
+  store.close()
+})
+
+function legacyV6Db (dbPath) {
+  const oldDb = new Database(dbPath)
+  oldDb.exec(`
+    CREATE TABLE zones (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE);
+    CREATE TABLE circuits (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, source_label TEXT, breaker_rating REAL, voltage REAL,
+      panel_ref TEXT, panel_device_id TEXT, convention TEXT, status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    CREATE TABLE wire_runs (
+      id TEXT PRIMARY KEY, circuit_id TEXT NOT NULL REFERENCES circuits(id), from_endpoint TEXT, to_endpoint TEXT,
+      gauge REAL, gauge_unit TEXT, color TEXT, length REAL, length_unit TEXT, zone TEXT, cable_label TEXT,
+      switch_ref TEXT, route TEXT, zone_id TEXT REFERENCES zones(id), tags TEXT,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    CREATE INDEX idx_wire_runs_circuit_id ON wire_runs (circuit_id);
+    CREATE TABLE devices (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, role TEXT NOT NULL DEFAULT 'consumer',
+      icon_attachment_id TEXT, zone TEXT, rated_power_w REAL, signalk_path TEXT, pos_x REAL, pos_y REAL, pos_z REAL,
+      zone_id TEXT REFERENCES zones(id), tags TEXT, status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    CREATE TABLE conduits (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT, inner_diameter REAL,
+      diameter_unit TEXT, zone TEXT, zone_id TEXT REFERENCES zones(id), route TEXT,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    CREATE TABLE wire_run_conduits (wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+      conduit_id TEXT NOT NULL REFERENCES conduits(id), position INTEGER NOT NULL, PRIMARY KEY (wire_run_id, conduit_id));
+    INSERT INTO devices (id, name) VALUES ('d1', 'Bilge pump'), ('d2', 'Fuse 4');
+    INSERT INTO circuits (id, name, source_label, breaker_rating, notes) VALUES ('c1', 'Bilge', 'Breaker 4', 15, 'old note');
+    INSERT INTO wire_runs (id, circuit_id, from_endpoint, to_endpoint, gauge, gauge_unit, color, route, notes)
+      VALUES ('w1', 'c1', ' fuse 4 ', 'd1', 2.5, 'mm2', 'red', '[]', 'keep me'),
+             ('w2', 'c1', 'Mystery box', 'Bilge Pump', 1, 'mm2', NULL, NULL, NULL);
+    INSERT INTO conduits (id, name) VALUES ('k1', 'Loom');
+    INSERT INTO wire_run_conduits VALUES ('w1', 'k1', 0);
+  `)
+  oldDb.pragma('user_version = 6')
+  oldDb.close()
+}
+
+test('migration 7: a 0.4.x database gets device ends, conductors and keeps its data, twice over', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+  legacyV6Db(dbPath)
+
+  for (let pass = 0; pass < 2; pass++) {
+    const store = new Store(dbPath)
+    assert.ok(store.db.pragma('user_version', { simple: true }) >= 7)
+    const w1 = store.get('wireRun', 'w1')
+    assert.equal(w1.from_device_id, 'd2') // matched by name, ignoring case and padding
+    assert.equal(w1.to_device_id, 'd1') // matched by id
+    assert.equal(w1.gauge, 2.5)
+    assert.equal(w1.route, '[]')
+    assert.deepEqual(w1.conductors, [{ conductor: 'positive', color: 'red', fromDeviceId: null, toDeviceId: null, fromTerminal: null, toTerminal: null }])
+    assert.equal(w1.circuit_id, undefined)
+    assert.equal(w1.from_endpoint, undefined)
+
+    const w2 = store.get('wireRun', 'w2')
+    assert.equal(w2.from_device_id, null)
+    assert.equal(w2.to_device_id, 'd1')
+    assert.match(w2.notes, /From: Mystery box/)
+
+    const circuit = store.get('circuit', 'c1')
+    assert.equal(circuit.notes, 'old note')
+    assert.equal(circuit.source_label, undefined)
+    assert.equal(circuit.breaker_rating, undefined)
+    assert.equal(store.get('device', 'd1').trip_rating_a, null)
+    assert.deepEqual(store.db.prepare('SELECT * FROM wire_run_conduits').all(), [{ wire_run_id: 'w1', conduit_id: 'k1', position: 0 }])
+    assert.deepEqual(store.db.pragma('foreign_key_check'), [])
+    store.close()
+  }
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})
+
+test('a fresh database has the new shape', () => {
+  const store = freshStore()
+  const cols = (t) => store.db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name)
+  assert.ok(cols('wire_runs').includes('from_device_id'))
+  assert.ok(!cols('wire_runs').includes('circuit_id'))
+  assert.ok(cols('devices').includes('trip_rating_a'))
+  assert.ok(cols('circuits').includes('key'))
+  assert.ok(!cols('circuits').includes('source_label'))
+  assert.equal(store.db.pragma('user_version', { simple: true }), 7)
   store.close()
 })

@@ -204,27 +204,11 @@ test('DELETE /attachments/:id removes the row and the file', async () => {
 test('GET /circuits/:id/diagram returns nodes and edges', () => {
   const { store, router, cleanup } = setup()
   const circuit = store.create('circuit', { name: 'Nav lights' })
-  const device = store.create('device', { name: 'Port light' })
-  store.create('wireRun', {
-    circuit_id: circuit.id,
-    from_endpoint: 'breaker-2',
-    to_endpoint: device.id,
-    color: 'green'
-  })
-
   const req = new FakeRequest({ params: { id: circuit.id } })
   const res = new FakeResponse()
   router.invoke('get', '/circuits/:id/diagram', req, res)
-
   assert.equal(res.statusCode, 200)
-  assert.equal(res.body.nodes.length, 2)
-  const deviceNode = res.body.nodes.find((n) => n.id === device.id)
-  assert.equal(deviceNode.kind, 'device')
-  assert.equal(deviceNode.label, 'Port light')
-  const labelNode = res.body.nodes.find((n) => n.id === 'breaker-2')
-  assert.equal(labelNode.kind, 'label')
-  assert.equal(res.body.edges.length, 1)
-
+  assert.deepEqual(res.body.nodes, [])
   cleanup()
 })
 

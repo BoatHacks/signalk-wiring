@@ -3,14 +3,17 @@ CREATE TABLE IF NOT EXISTS zones (
   name TEXT NOT NULL COLLATE NOCASE UNIQUE
 );
 
+-- A circuit record is never created by hand: it follows the circuit derived
+-- from the cables (src/circuits.js). `key` is protector:<device id> or
+-- cable:<first cable id>; `cable_ids` is the JSON list of the cables it had
+-- when last synced, used to carry a name over when the key changes. `voltage`
+-- is an optional override of the derived voltage.
 CREATE TABLE IF NOT EXISTS circuits (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  source_label TEXT,
-  breaker_rating REAL,
+  key TEXT,
+  cable_ids TEXT,
   voltage REAL,
-  panel_ref TEXT,
-  panel_device_id TEXT,
   convention TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
@@ -18,12 +21,10 @@ CREATE TABLE IF NOT EXISTS circuits (
 
 CREATE TABLE IF NOT EXISTS wire_runs (
   id TEXT PRIMARY KEY,
-  circuit_id TEXT NOT NULL REFERENCES circuits(id),
-  from_endpoint TEXT,
-  to_endpoint TEXT,
+  from_device_id TEXT REFERENCES devices(id),
+  to_device_id TEXT REFERENCES devices(id),
   gauge REAL,
   gauge_unit TEXT,
-  color TEXT,
   length REAL,
   length_unit TEXT,
   zone TEXT,
@@ -36,7 +37,20 @@ CREATE TABLE IF NOT EXISTS wire_runs (
   notes TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_wire_runs_circuit_id ON wire_runs (circuit_id);
+-- The conductors inside one cable (a wire run). A conductor may land on
+-- other devices than the cable's ends (for example a negative landing on a
+-- negative bus bar) and optionally on named terminals.
+CREATE TABLE IF NOT EXISTS wire_run_conductors (
+  id TEXT PRIMARY KEY,
+  wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+  position INTEGER NOT NULL,
+  conductor TEXT NOT NULL,
+  color TEXT,
+  from_device_id TEXT REFERENCES devices(id),
+  to_device_id TEXT REFERENCES devices(id),
+  from_terminal TEXT,
+  to_terminal TEXT
+);
 
 CREATE TABLE IF NOT EXISTS devices (
   id TEXT PRIMARY KEY,
@@ -47,6 +61,9 @@ CREATE TABLE IF NOT EXISTS devices (
   zone TEXT,
   rated_power_w REAL,
   signalk_path TEXT,
+  trip_rating_a REAL,
+  nominal_voltage REAL,
+  power_factor REAL,
   pos_x REAL,
   pos_y REAL,
   pos_z REAL,
@@ -54,6 +71,16 @@ CREATE TABLE IF NOT EXISTS devices (
   tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS device_terminals (
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(id),
+  position INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  conductor TEXT NOT NULL,
+  voltage REAL,
+  port TEXT
 );
 
 CREATE TABLE IF NOT EXISTS plans (

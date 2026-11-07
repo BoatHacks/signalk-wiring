@@ -40,20 +40,22 @@ test('setResource updates an existing record in place', async () => {
 
 test('listResources returns an id-keyed map with camelCase fields', async () => {
   const { store, provider } = freshProvider('wireRun', 'wiringWireRuns')
-  const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
-  await circuits.methods.setResource('c1', { name: 'Bilge pump circuit' })
+  const devices = createResourceProvider(store, 'device', 'wiringDevices')
+  await devices.methods.setResource('d1', { name: 'Fuse' })
+  await devices.methods.setResource('d2', { name: 'Bilge pump' })
 
   await provider.methods.setResource('wr-1', {
-    circuitId: 'c1',
-    fromEndpoint: 'breaker-4',
-    toEndpoint: 'bilge-pump',
+    fromDeviceId: 'd1',
+    toDeviceId: 'd2',
+    conductors: [{ conductor: 'positive', color: 'red' }],
     gauge: 14,
     gaugeUnit: 'AWG'
   })
 
   const all = await provider.methods.listResources()
   assert.deepEqual(Object.keys(all), ['wr-1'])
-  assert.equal(all['wr-1'].circuitId, 'c1')
+  assert.equal(all['wr-1'].fromDeviceId, 'd1')
+  assert.deepEqual(all['wr-1'].conductors, [{ conductor: 'positive', color: 'red', fromDeviceId: null, toDeviceId: null, fromTerminal: null, toTerminal: null }])
   assert.equal(all['wr-1'].gaugeUnit, 'AWG')
 
   store.close()
@@ -85,12 +87,10 @@ test('deleteResource on an unknown id throws', async () => {
 
 test('a wire run route round-trips as an array through the provider', async () => {
   const store = new Store(':memory:')
-  const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
   const runs = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
-  await circuits.methods.setResource('c1', { name: 'C' })
 
   const route = [{ x: 0, y: 0, z: 1 }, { x: 2, y: 0.5, z: 1 }]
-  await runs.methods.setResource('r1', { circuitId: 'c1', route })
+  await runs.methods.setResource('r1', { route })
 
   assert.deepEqual((await runs.methods.getResource('r1')).route, route)
   assert.deepEqual((await runs.methods.listResources()).r1.route, route)
@@ -103,14 +103,12 @@ test('a plan calibration round-trips as an object and a null route stays null', 
   const store = new Store(':memory:')
   const plans = createResourceProvider(store, 'plan', 'wiringPlans')
   const runs = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
-  const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
 
   const calibration = { originPx: [10, 20], pxPerMeter: 42 }
   await plans.methods.setResource('p1', { name: 'Main deck', view: 'top', calibration })
   assert.deepEqual((await plans.methods.getResource('p1')).calibration, calibration)
 
-  await circuits.methods.setResource('c1', { name: 'C' })
-  await runs.methods.setResource('r1', { circuitId: 'c1' })
+  await runs.methods.setResource('r1', {})
   assert.equal((await runs.methods.getResource('r1')).route, null)
 
   store.close()

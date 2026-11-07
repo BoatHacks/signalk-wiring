@@ -10,16 +10,13 @@ const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 const TABLES = {
   circuit: {
     table: 'circuits',
-    columns: [
-      'id', 'name', 'source_label', 'breaker_rating', 'voltage', 'panel_ref',
-      'panel_device_id', 'convention', 'status', 'notes'
-    ]
+    columns: ['id', 'name', 'key', 'cable_ids', 'voltage', 'convention', 'status', 'notes']
   },
   wireRun: {
     table: 'wire_runs',
     columns: [
-      'id', 'circuit_id', 'from_endpoint', 'to_endpoint', 'gauge', 'gauge_unit',
-      'color', 'length', 'length_unit', 'zone', 'cable_label', 'switch_ref',
+      'id', 'from_device_id', 'to_device_id', 'gauge', 'gauge_unit',
+      'length', 'length_unit', 'zone', 'cable_label', 'switch_ref',
       'route', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
@@ -27,7 +24,7 @@ const TABLES = {
     table: 'devices',
     columns: [
       'id', 'name', 'type', 'role', 'icon_attachment_id', 'zone', 'rated_power_w', 'signalk_path',
-      'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
+      'trip_rating_a', 'nominal_voltage', 'power_factor', 'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
   conduit: {
@@ -56,6 +53,8 @@ const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converte
 // Tables whose rows can belong to a zone.
 const ZONED_TABLES = ['devices', 'wire_runs', 'conduits']
 const ZONED_KINDS = ['device', 'wireRun', 'conduit']
+// The conductor types of a cable and of a device terminal.
+const CONDUCTOR_TYPES = ['positive', 'negative', 'line', 'neutral', 'earth']
 
 // Image types a browser can draw in a small icon. HEIC is accepted as an
 // attachment but not here, since most browsers cannot display it.
@@ -200,7 +199,190 @@ const MIGRATIONS = [
       }
     }
   }
+  ,
+  {
+    version: 7,
+    description: 'plan 0014: cables between devices with conductors, device terminals, trip rating, ' +
+      'nominal voltage and power factor; circuits keyed by what the cables imply',
+    apply (db) {
+      const hasColumn = (table, column) =>
+        db.prepare('PRAGMA table_info(' + table + ')').all().some((c) => c.name === column)
+      const addColumn = (table, column, type) => {
+        if (!hasColumn(table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+      }
+
+      addColumn('devices', 'trip_rating_a', 'REAL')
+      addColumn('devices', 'nominal_voltage', 'REAL')
+      addColumn('devices', 'power_factor', 'REAL')
+
+      // schema.sql has created the two new tables by now (IF NOT EXISTS), for
+      // fresh and old databases alike; this only matters if it was skipped.
+      db.exec(`CREATE TABLE IF NOT EXISTS wire_run_conductors (
+        id TEXT PRIMARY KEY, wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+        position INTEGER NOT NULL, conductor TEXT NOT NULL, color TEXT,
+        from_device_id TEXT REFERENCES devices(id), to_device_id TEXT REFERENCES devices(id),
+        from_terminal TEXT, to_terminal TEXT)`)
+      db.exec(`CREATE TABLE IF NOT EXISTS device_terminals (
+        id TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id),
+        position INTEGER NOT NULL, name TEXT NOT NULL, conductor TEXT NOT NULL,
+        voltage REAL, port TEXT)`)
+
+      // Circuits: records now follow the cables. The hand-entered source,
+      // breaker, panel fields are retired; a circuit made by hand has no key
+      // and is kept as removed at the next sync (name and notes survive).
+      addColumn('circuits', 'key', 'TEXT')
+      addColumn('circuits', 'cable_ids', 'TEXT')
+      for (const column of ['source_label', 'breaker_rating', 'panel_ref', 'panel_device_id']) {
+        if (hasColumn('circuits', column)) db.exec(`ALTER TABLE circuits DROP COLUMN ${column}`)
+      }
+
+      // Wire runs: free-text ends become devices.
+      if (hasColumn('wire_runs', 'circuit_id')) {
+        const devices = db.prepare('SELECT id, name FROM devices').all()
+        const byId = new Set(devices.map((d) => d.id))
+        const byName = new Map()
+        for (const d of devices) {
+          const key = String(d.name).trim().toLowerCase()
+          if (!byName.has(key)) byName.set(key, d.id)
+        }
+        const resolve = (text) => {
+          if (typeof text !== 'string' || !text.trim()) return null
+          if (byId.has(text)) return text
+          return byName.get(text.trim().toLowerCase()) || null
+        }
+        const old = db.prepare('SELECT * FROM wire_runs ORDER BY rowid').all()
+
+        db.pragma('foreign_keys = OFF')
+        try {
+          db.transaction(() => {
+            db.exec(`CREATE TABLE wire_runs_new (
+              id TEXT PRIMARY KEY,
+              from_device_id TEXT REFERENCES devices(id),
+              to_device_id TEXT REFERENCES devices(id),
+              gauge REAL, gauge_unit TEXT, length REAL, length_unit TEXT, zone TEXT,
+              cable_label TEXT, switch_ref TEXT, route TEXT,
+              zone_id TEXT REFERENCES zones(id), tags TEXT,
+              status TEXT NOT NULL DEFAULT 'active', notes TEXT)`)
+            const insert = db.prepare(`INSERT INTO wire_runs_new
+              (id, from_device_id, to_device_id, gauge, gauge_unit, length, length_unit, zone,
+               cable_label, switch_ref, route, zone_id, tags, status, notes)
+              VALUES (@id, @from_device_id, @to_device_id, @gauge, @gauge_unit, @length, @length_unit, @zone,
+               @cable_label, @switch_ref, @route, @zone_id, @tags, @status, @notes)`)
+            const insertConductor = db.prepare(`INSERT INTO wire_run_conductors
+              (id, wire_run_id, position, conductor, color) VALUES (?, ?, 0, 'positive', ?)`)
+            for (const row of old) {
+              const from = resolve(row.from_endpoint)
+              const to = resolve(row.to_endpoint)
+              // A free-text end that matches no device is kept in the notes
+              // so nothing is lost; the cable then shows as unfinished.
+              const lost = []
+              if (!from && row.from_endpoint) lost.push(`From: ${row.from_endpoint}`)
+              if (!to && row.to_endpoint) lost.push(`To: ${row.to_endpoint}`)
+              const notes = lost.length
+                ? [row.notes, `Before devices were linked: ${lost.join(', ')}`].filter(Boolean).join('\n')
+                : row.notes
+              insert.run({
+                id: row.id,
+                from_device_id: from,
+                to_device_id: to,
+                gauge: row.gauge,
+                gauge_unit: row.gauge_unit,
+                length: row.length,
+                length_unit: row.length_unit,
+                zone: row.zone,
+                cable_label: row.cable_label,
+                switch_ref: row.switch_ref,
+                route: row.route,
+                zone_id: row.zone_id,
+                tags: row.tags,
+                status: row.status,
+                notes
+              })
+              insertConductor.run(crypto.randomUUID(), row.id, row.color || null)
+            }
+            db.exec('DROP TABLE wire_runs')
+            db.exec('ALTER TABLE wire_runs_new RENAME TO wire_runs')
+          })()
+        } finally {
+          db.pragma('foreign_keys = ON')
+        }
+      }
+
+      db.exec('CREATE INDEX IF NOT EXISTS idx_wire_runs_from ON wire_runs (from_device_id)')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_wire_runs_to ON wire_runs (to_device_id)')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_conductors_wire_run ON wire_run_conductors (wire_run_id)')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_terminals_device ON device_terminals (device_id)')
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_circuits_key ON circuits (key) WHERE key IS NOT NULL')
+    }
+  }
 ]
+
+const numberOrNull = (v) => (v === null || v === undefined || v === '' ? null : Number(v))
+const textOrNull = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+
+const checkConductorType = (value, what) => {
+  if (!CONDUCTOR_TYPES.includes(value)) {
+    throw new Error(`${what} must be one of: ${CONDUCTOR_TYPES.join(', ')}`)
+  }
+  return value
+}
+
+// Child tables written as part of their parent record.
+const CHILDREN = {
+  wireRun: {
+    field: 'conductors',
+    table: 'wire_run_conductors',
+    parent: 'wire_run_id',
+    columns: ['conductor', 'color', 'from_device_id', 'to_device_id', 'from_terminal', 'to_terminal'],
+    toKey: (column) => column.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+    fromRow: (r) => ({
+      conductor: r.conductor,
+      color: r.color,
+      fromDeviceId: r.from_device_id,
+      toDeviceId: r.to_device_id,
+      fromTerminal: r.from_terminal,
+      toTerminal: r.to_terminal
+    }),
+    normalize: (i) => ({
+      conductor: i.conductor,
+      color: textOrNull(i.color),
+      fromDeviceId: textOrNull(i.fromDeviceId),
+      toDeviceId: textOrNull(i.toDeviceId),
+      fromTerminal: textOrNull(i.fromTerminal),
+      toTerminal: textOrNull(i.toTerminal)
+    }),
+    check (item, store) {
+      const out = CHILDREN.wireRun.normalize(item)
+      checkConductorType(out.conductor, 'conductor')
+      for (const key of ['fromDeviceId', 'toDeviceId']) {
+        if (out[key] && !store.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(out[key])) {
+          throw new Error(`device not found: ${out[key]}`)
+        }
+      }
+      return out
+    }
+  },
+  device: {
+    field: 'terminals',
+    table: 'device_terminals',
+    parent: 'device_id',
+    columns: ['name', 'conductor', 'voltage', 'port'],
+    toKey: (column) => column,
+    fromRow: (r) => ({ name: r.name, conductor: r.conductor, voltage: r.voltage, port: r.port }),
+    normalize: (i) => ({
+      name: textOrNull(i.name),
+      conductor: i.conductor,
+      voltage: numberOrNull(i.voltage),
+      port: textOrNull(i.port)
+    }),
+    check (item) {
+      const out = CHILDREN.device.normalize(item)
+      if (!out.name) throw new Error('a terminal needs a name')
+      checkConductorType(out.conductor, 'terminal conductor')
+      return out
+    }
+  }
+}
 
 // Records are never hard-deleted (SPEC.md §3.1): "removing" a wire run or
 // device means setting status to 'removed' so the history stays queryable.
@@ -235,24 +417,90 @@ class Store {
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
     if (kind === 'device') row = this._checkIcon(id, this._checkRole(row))
+    if (kind === 'wireRun') this._checkWireRunEnds(row)
+    const children = this._childrenOf(kind)
+    const list = children ? this._checkChildren(kind, children, row[children.field], row) : null
     const cols = columns.filter((c) => c in row)
     const placeholders = cols.map((c) => `@${c}`).join(', ')
-    this.db
-      .prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`)
-      .run(row)
+    this.db.transaction(() => {
+      this.db
+        .prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`)
+        .run(row)
+      if (list) this._writeChildren(children, id, list)
+    })()
     this._logChange(kind, id, 'created', { after: this.get(kind, id) })
+    this._afterWrite(kind)
     return this.get(kind, id)
   }
 
   get (kind, id) {
     const { table } = TABLES[kind]
-    return this.db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id) || null
+    const row = this.db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id) || null
+    return row ? this._withChildren(kind, [row])[0] : null
   }
 
   list (kind) {
     const { table } = TABLES[kind]
     const order = kind === 'zone' ? ' ORDER BY name COLLATE NOCASE' : ''
-    return this.db.prepare(`SELECT * FROM ${table}${order}`).all()
+    return this._withChildren(kind, this.db.prepare(`SELECT * FROM ${table}${order}`).all())
+  }
+
+  // Cables list their conductors and devices their terminals. Both live in
+  // child tables but are written and logged as part of their parent.
+  _childrenOf (kind) {
+    return CHILDREN[kind] || null
+  }
+
+  _withChildren (kind, rows) {
+    const children = this._childrenOf(kind)
+    if (!children || rows.length === 0) return rows
+    const all = rows.length === 1
+      ? this.db.prepare(`SELECT * FROM ${children.table} WHERE ${children.parent} = ? ORDER BY position`).all(rows[0].id)
+      : this.db.prepare(`SELECT * FROM ${children.table} ORDER BY ${children.parent}, position`).all()
+    const byParent = new Map()
+    for (const r of all) {
+      if (!byParent.has(r[children.parent])) byParent.set(r[children.parent], [])
+      byParent.get(r[children.parent]).push(children.fromRow(r))
+    }
+    return rows.map((row) => ({ ...row, [children.field]: byParent.get(row.id) || [] }))
+  }
+
+  _writeChildren (children, parentId, list) {
+    this.db.prepare(`DELETE FROM ${children.table} WHERE ${children.parent} = ?`).run(parentId)
+    const insert = this.db.prepare(
+      `INSERT INTO ${children.table} (id, ${children.parent}, position, ${children.columns.join(', ')}) ` +
+      `VALUES (?, ?, ?, ${children.columns.map(() => '?').join(', ')})`
+    )
+    list.forEach((item, index) => {
+      insert.run(crypto.randomUUID(), parentId, index, ...children.columns.map((c) => item[children.toKey(c)] ?? null))
+    })
+  }
+
+  // Validates and normalises the conductors of a cable or the terminals of a
+  // device. Returns null when the field was not given at all.
+  _checkChildren (kind, children, value, owner) {
+    if (value === undefined) return null
+    if (!Array.isArray(value)) throw new Error(`${children.field} must be a list`)
+    return value.map((item) => children.check(item || {}, this, owner))
+  }
+
+  _checkWireRunEnds (fields) {
+    for (const key of ['from_device_id', 'to_device_id']) {
+      const id = fields[key]
+      if (id !== null && id !== undefined && id !== '' && !this.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(id)) {
+        throw new Error(`device not found: ${id}`)
+      }
+    }
+  }
+
+  // Circuit records follow the cables (plan 0014): after any change to a
+  // device or cable they are brought in step. Implemented in syncCircuits.
+  _afterWrite (kind) {
+    if (kind === 'device' || kind === 'wireRun') this.syncCircuits()
+  }
+
+  syncCircuits () {
+    // Filled in by the circuit sync step.
   }
 
   update (kind, id, patch) {
@@ -263,14 +511,25 @@ class Store {
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
     if (kind === 'device') patch = this._checkIcon(id, this._checkRole(patch))
 
-    const { table, columns } = TABLES[kind]
-    const cols = columns.filter((c) => c !== 'id' && c in patch)
-    if (cols.length === 0) return existing
+    if (kind === 'wireRun') this._checkWireRunEnds(patch)
 
-    const assignments = cols.map((c) => `${c} = @${c}`).join(', ')
-    this.db
-      .prepare(`UPDATE ${table} SET ${assignments} WHERE id = @id`)
-      .run({ ...patch, id })
+    const { table, columns } = TABLES[kind]
+    const children = this._childrenOf(kind)
+    const list = children ? this._checkChildren(kind, children, patch[children.field], { ...existing, ...patch }) : null
+    const cols = columns.filter((c) => c !== 'id' && c in patch)
+    const childrenChanged = list !== null &&
+      JSON.stringify(list) !== JSON.stringify(existing[children.field].map((i) => children.normalize(i)))
+    if (cols.length === 0 && !childrenChanged) return existing
+
+    this.db.transaction(() => {
+      if (cols.length > 0) {
+        const assignments = cols.map((c) => `${c} = @${c}`).join(', ')
+        this.db
+          .prepare(`UPDATE ${table} SET ${assignments} WHERE id = @id`)
+          .run({ ...patch, id })
+      }
+      if (childrenChanged) this._writeChildren(children, id, list)
+    })()
 
     const updated = this.get(kind, id)
     if (kind === 'zone' && existing.name !== updated.name) this._syncZoneName(id, updated.name)
@@ -278,12 +537,14 @@ class Store {
     for (const c of cols) {
       if (existing[c] !== updated[c]) diff[c] = { before: existing[c], after: updated[c] }
     }
+    if (childrenChanged) diff[children.field] = { before: existing[children.field], after: updated[children.field] }
     if (Object.keys(diff).length > 0) {
       const summary = existing.status !== 'removed' && updated.status === REMOVED_STATUS
         ? 'removed'
         : 'updated'
       this._logChange(kind, id, summary, diff)
     }
+    this._afterWrite(kind)
     return updated
   }
 
@@ -575,4 +836,4 @@ class Store {
   }
 }
 
-module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES }
+module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES }

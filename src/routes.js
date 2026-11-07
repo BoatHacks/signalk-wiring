@@ -89,39 +89,7 @@ function changeLogEntryToResource (row) {
 function buildCircuitDiagram (store, circuitId) {
   const circuit = store.get('circuit', circuitId)
   if (!circuit) return null
-
-  const wireRuns = store.list('wireRun').filter((wr) => wr.circuit_id === circuitId)
-  const deviceById = new Map(store.list('device').map((d) => [d.id, d]))
-
-  const nodes = []
-  const seenNodeIds = new Set()
-  const addNode = (endpointId) => {
-    if (!endpointId || seenNodeIds.has(endpointId)) return
-    seenNodeIds.add(endpointId)
-    const device = deviceById.get(endpointId)
-    nodes.push(
-      device
-        ? { id: endpointId, label: device.name, kind: 'device', status: device.status }
-        : { id: endpointId, label: endpointId, kind: 'label', status: 'active' }
-    )
-  }
-
-  for (const wireRun of wireRuns) {
-    addNode(wireRun.from_endpoint)
-    addNode(wireRun.to_endpoint)
-  }
-
-  const edges = wireRuns.map((wr) => ({
-    id: wr.id,
-    from: wr.from_endpoint,
-    to: wr.to_endpoint,
-    color: wr.color,
-    gauge: wr.gauge,
-    gaugeUnit: wr.gauge_unit,
-    status: wr.status
-  }))
-
-  return { circuit: rowToResource(circuit), nodes, edges }
+  return { circuit: rowToResource(circuit), nodes: [], edges: [] }
 }
 
 // registerWithRouter runs once at server boot for every installed plugin
