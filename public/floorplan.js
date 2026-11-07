@@ -46,6 +46,25 @@ export function lengthDirection (cal) {
   return dy >= 0 ? 'down' : 'up'
 }
 
+// Triangle for the tip of an arrow from `from` to `to`: the tip at `to`,
+// then the two corners of its base, `size` back along the line.
+export function arrowHeadPoints (from, to, size) {
+  const dx = to[0] - from[0]
+  const dy = to[1] - from[1]
+  const len = Math.hypot(dx, dy)
+  if (len === 0) return [[...to], [...to], [...to]]
+  const ux = dx / len
+  const uy = dy / len
+  const baseX = to[0] - ux * size
+  const baseY = to[1] - uy * size
+  const half = size * 0.5
+  return [
+    [to[0], to[1]],
+    [baseX - uy * half, baseY + ux * half],
+    [baseX + uy * half, baseY - ux * half]
+  ]
+}
+
 // Drawing coordinates (SVG user units) to meters on the view's two axes.
 export function pxToMeters (cal, px) {
   const dx = px[0] - cal.originPx[0]

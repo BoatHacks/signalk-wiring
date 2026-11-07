@@ -199,3 +199,23 @@ test('lengthDirection says which way x (toward the bow) points on the drawing', 
   // A slightly tilted drawing still reads by its dominant direction.
   assert.equal(lengthDirection(calibrationFromClicks([0, 0], [-200, 10], 10)), 'left')
 })
+
+import { arrowHeadPoints } from '../public/floorplan.js'
+
+test('arrowHeadPoints puts the tip at the end of the line, pointing along it', () => {
+  const [tip, left, right] = arrowHeadPoints([0, 0], [10, 0], 4)
+  assert.deepEqual(tip, [10, 0])
+  // The base sits back along the line, symmetric about it.
+  assert.ok(left[0] < 10 && right[0] < 10)
+  near(left[0], right[0])
+  near(left[1], -right[1])
+  // The base is `size` back from the tip and `size` wide.
+  near(left[0], 6)
+  near(Math.abs(left[1]), 2)
+})
+
+test('arrowHeadPoints follows a diagonal line and survives a zero-length one', () => {
+  const [tip] = arrowHeadPoints([0, 0], [3, 4], 2)
+  assert.deepEqual(tip, [3, 4])
+  assert.deepEqual(arrowHeadPoints([5, 5], [5, 5], 2).flat(), [5, 5, 5, 5, 5, 5])
+})

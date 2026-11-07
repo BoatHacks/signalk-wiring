@@ -4,7 +4,7 @@ import { deviceIconUrl } from './deviceIcons.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
   moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
-  metersToLengthUnit, lengthDirection, metersToPx
+  metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints
 } from './floorplan.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -436,13 +436,14 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           const o = metersToPx(cal, 0, 0)
           const xEnd = metersToPx(cal, 3, 0)
           const bEnd = metersToPx(cal, 0, 1.5)
+          const head = (from, to) => arrowHeadPoints(from, to, unit * 2.2).map((p) => p.join(',')).join(' ')
           return html`
             <g class="axis-indicator">
               <line x1=${o[0]} y1=${o[1]} x2=${xEnd[0]} y2=${xEnd[1]} stroke-width=${unit * 0.5} />
+              <polygon points=${head(o, xEnd)}><title>Toward the bow</title></polygon>
               <line x1=${o[0]} y1=${o[1]} x2=${bEnd[0]} y2=${bEnd[1]} stroke-width=${unit * 0.5} />
+              <polygon points=${head(o, bEnd)}><title>${plan.view === 'top' ? 'Positive y' : 'Up'}</title></polygon>
               <circle cx=${o[0]} cy=${o[1]} r=${unit * 0.9} />
-              <text x=${xEnd[0] + unit} y=${xEnd[1] - unit} font-size=${unit * 1.8}>to bow</text>
-              <text x=${bEnd[0] + unit} y=${bEnd[1] - unit} font-size=${unit * 1.8}>${plan.view === 'top' ? 'y' : 'up'}</text>
             </g>
           `
         })()}

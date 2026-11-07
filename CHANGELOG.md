@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- The axis indicator on calibrated plans uses arrow tips on its lines
+  instead of the "to bow" and "up" text labels. Hovering an arrow still
+  names its direction.
+
 ## [0.4.1] - 2026-11-07
 
 ### Added

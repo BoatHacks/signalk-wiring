@@ -547,8 +547,8 @@ main:has(.floorplan-pair) { max-width: none; }
 }
 
 .axis-indicator line { stroke: var(--link); stroke-linecap: round; }
-.axis-indicator circle { fill: var(--link); }
-.axis-indicator text { fill: var(--link); paint-order: stroke; stroke: var(--surface); stroke-width: 0.6; pointer-events: none; }
+.axis-indicator circle, .axis-indicator polygon { fill: var(--link); }
+.axis-indicator polygon { stroke: none; }
 
 .list-item-main { display: flex; align-items: center; gap: 10px; }
 .device-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-alt); }
