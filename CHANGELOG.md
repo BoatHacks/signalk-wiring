@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-07
+
 ### Changed
 
 - Zones are now a managed list instead of free text. Each device and wire
