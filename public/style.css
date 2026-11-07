@@ -545,3 +545,7 @@ main:has(.floorplan-pair) { max-width: none; }
 [data-theme="dark"] .floorplan-canvas image {
   filter: invert(1) sepia(1) saturate(4) hue-rotate(-50deg) brightness(0.6);
 }
+
+.axis-indicator line { stroke: var(--link); stroke-linecap: round; }
+.axis-indicator circle { fill: var(--link); }
+.axis-indicator text { fill: var(--link); paint-order: stroke; stroke: var(--surface); stroke-width: 0.6; pointer-events: none; }

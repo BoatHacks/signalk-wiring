@@ -38,6 +38,14 @@ function secondAxisDir (cal) {
   return [sign * uy, -sign * ux]
 }
 
+// Which way x points on the drawing, by its dominant direction: x is the
+// length axis, increasing toward the bow, so this is where the bow is.
+export function lengthDirection (cal) {
+  const [dx, dy] = cal.dir
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left'
+  return dy >= 0 ? 'down' : 'up'
+}
+
 // Drawing coordinates (SVG user units) to meters on the view's two axes.
 export function pxToMeters (cal, px) {
   const dx = px[0] - cal.originPx[0]

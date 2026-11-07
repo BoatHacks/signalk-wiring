@@ -5,6 +5,23 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Plans can be removed from the Floorplan tab. They stay in the record as
+  removed, like other records, and placed devices and routes are kept.
+- A placed device can be removed from the plans: select its marker and use
+  Remove placement, which clears its position in every view.
+- Calibrated plans show which way the bow is and an axis indicator on the
+  drawing, so a plan calibrated the wrong way round is easy to spot.
+
+### Fixed
+
+- Calibration instructions now say to click the stern end first and then a
+  point toward the bow, with the same origin on every plan. A plan
+  calibrated the other way round put the same device at the stern in one
+  view and the bow in another, and moving it in one view moved it the wrong
+  way in the other.
+
 ### Changed
 
 - The webapp now looks like the stowage webapp: a dark header bar with a

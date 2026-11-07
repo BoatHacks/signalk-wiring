@@ -177,3 +177,27 @@ test('a device role round-trips through the provider', async () => {
   assert.equal(device.type, 'shore power')
   store.close()
 })
+
+test('deleting a plan through the provider marks it removed and keeps the record', async () => {
+  const store = new Store(':memory:')
+  const plans = createResourceProvider(store, 'plan', 'wiringPlans')
+  await plans.methods.setResource('p1', { name: 'Deck', view: 'top' })
+
+  await plans.methods.deleteResource('p1')
+
+  assert.equal((await plans.methods.getResource('p1')).status, 'removed')
+  assert.equal(store.changeLog('plan', 'p1').length, 2)
+  store.close()
+})
+
+test('clearing a device position through the provider sets every axis to null', async () => {
+  const store = new Store(':memory:')
+  const devices = createResourceProvider(store, 'device', 'wiringDevices')
+  await devices.methods.setResource('d1', { name: 'Pump', posX: 1, posY: 2, posZ: 3 })
+
+  await devices.methods.setResource('d1', { name: 'Pump', posX: null, posY: null, posZ: null })
+
+  const device = await devices.methods.getResource('d1')
+  assert.deepEqual([device.posX, device.posY, device.posZ], [null, null, null])
+  store.close()
+})

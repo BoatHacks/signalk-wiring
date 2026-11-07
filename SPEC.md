@@ -130,8 +130,9 @@ A wire run or device is either:
     sensor path; free text, not validated against the live data tree,
     so a device can be documented before its SignalK path exists or on
     a server that doesn't currently have a source for it), `posX`,
-    `posY`, `posZ` (optional position in meters: x along the boat,
-    y athwartships with 0 on the centerline, z height; any axis may be
+    `posY`, `posZ` (optional position in meters: x along the boat
+    and increasing toward the bow, with 0 at the transom (the same origin
+    and direction on every plan), y athwartships with 0 on the centerline, z height; any axis may be
     unset so a device can be half-placed), `status`, `notes`.
 - **Plan**
   - `id`, `name`, `view` (`top` | `side`), `filename` (the uploaded

@@ -3,7 +3,7 @@ import { newId } from './ids.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
   moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
-  metersToLengthUnit
+  metersToLengthUnit, lengthDirection, metersToPx
 } from './floorplan.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -31,6 +31,11 @@ async function putResource (type, id, value) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(value)
   })
+  if (!res.ok) throw new Error(failureMessage(res.status))
+}
+
+async function deleteResource (type, id) {
+  const res = await fetch(`${RESOURCE_BASE}/${type}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(failureMessage(res.status))
 }
 
@@ -136,6 +141,10 @@ function NewPlanForm ({ onCreated, onError }) {
       <button type="submit" disabled=${busy || !name.trim() || !file}>${busy ? 'Uploading…' : 'Add plan'}</button>
     </form>
   `
+}
+
+function isPlaced (device) {
+  return device.posX != null || device.posY != null || device.posZ != null
 }
 
 function devicePosition (device) {
@@ -354,19 +363,20 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         ${!calibrating
           ? html`<button onClick=${startCalibrating}>${cal ? 'Recalibrate' : 'Calibrate'}</button>`
           : html`<button onClick=${stopCalibrating}>Cancel calibration</button>`}
+        <button onClick=${() => actions.removePlan(plan)}>Remove plan</button>
       </div>
 
       ${!cal && !calibrating && html`
         <p class="meta">Not calibrated yet. Calibrate to give the drawing a real-world scale.</p>
       `}
       ${cal && !calibrating && html`
-        <p class="meta">Scale: ${cal.pxPerMeter.toFixed(2)} drawing units per meter.</p>
+        <p class="meta">Scale: ${cal.pxPerMeter.toFixed(2)} drawing units per meter. The bow is toward the ${lengthDirection(cal)} of this drawing. If that is wrong, or differs from your other plans, recalibrate.</p>
       `}
 
       ${calibrating && html`
         <div class="calibrate-help">
-          ${clicks.length === 0 && html`<p>1. Click the origin (for example the transom centerline, at your chosen height).</p>`}
-          ${clicks.length === 1 && html`<p>2. Click a second point along the boat's length axis (bow to stern), far from the origin.</p>`}
+          ${clicks.length === 0 && html`<p>1. Click the origin: the stern end of the boat (x = 0), for example the transom centerline, at your chosen height. Use the same origin on every plan.</p>`}
+          ${clicks.length === 1 && html`<p>2. Click a second point toward the bow, far from the origin. Distances along the boat increase toward the bow, on every plan.</p>`}
           ${clicks.length === 2 && html`
             <p>3. Enter the real distance between the two points.</p>
             <label class="form-field"><span>Distance (m)</span>
@@ -416,6 +426,20 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           `
         })}
 
+        ${cal && !calibrating && (() => {
+          const o = metersToPx(cal, 0, 0)
+          const xEnd = metersToPx(cal, 3, 0)
+          const bEnd = metersToPx(cal, 0, 1.5)
+          return html`
+            <g class="axis-indicator">
+              <line x1=${o[0]} y1=${o[1]} x2=${xEnd[0]} y2=${xEnd[1]} stroke-width=${unit * 0.5} />
+              <line x1=${o[0]} y1=${o[1]} x2=${bEnd[0]} y2=${bEnd[1]} stroke-width=${unit * 0.5} />
+              <circle cx=${o[0]} cy=${o[1]} r=${unit * 0.9} />
+              <text x=${xEnd[0] + unit} y=${xEnd[1] - unit} font-size=${unit * 1.8}>to bow</text>
+              <text x=${bEnd[0] + unit} y=${bEnd[1] - unit} font-size=${unit * 1.8}>${plan.view === 'top' ? 'y' : 'up'}</text>
+            </g>
+          `
+        })()}
         ${clicks.length === 2 && html`
           <line x1=${clicks[0][0]} y1=${clicks[0][1]} x2=${clicks[1][0]} y2=${clicks[1][1]}
             class="calibration-line" stroke-width=${unit / 2} />
@@ -497,6 +521,11 @@ export function FloorplanTab () {
     return putResource('wiringDevices', device.id, { ...device, posX: pos.x, posY: pos.y, posZ: pos.z })
   })
 
+  const clearPlacement = (device) => {
+    if (!window.confirm(`Remove "${device.name}" from the plans? Its recorded position is cleared in every view.`)) return
+    guard(() => putResource('wiringDevices', device.id, { ...device, posX: null, posY: null, posZ: null }))
+  }
+
   const saveRoute = (route) => guard(() => putResource('wiringWireRuns', run.id, { ...run, route }))
 
   // The previous point for axis inheritance: the last waypoint, else the
@@ -519,6 +548,10 @@ export function FloorplanTab () {
       setWaypointIndex(null)
     },
     moveWaypoint: (index, view, a, b) => saveRoute(moveWaypoint(run.route || [], index, view, a, b)),
+    removePlan: (plan) => {
+      if (!window.confirm(`Remove the plan "${plan.name}"? Placed devices and routes are kept; the plan stays in the record as removed.`)) return
+      guard(() => deleteResource('wiringPlans', plan.id))
+    },
     selectDevice: (id) => { setDeviceId(id); setError(null) },
     selectWaypoint: (index) => setWaypointIndex(index),
     clearSelection: () => { setDeviceId(null); setWaypointIndex(null) }
@@ -590,6 +623,15 @@ export function FloorplanTab () {
           </div>
           ${tool === 'place' && html`<p class="meta">Choose a device, then click a calibrated plan to place it. A click in one view sets only the two axes it shows. Drag a marker in Select mode to adjust it.</p>`}
           ${tool === 'route' && html`<p class="meta">Choose a wire run, then click to add waypoints. The route starts at the run's from-device, else the circuit's panel device. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
+          ${deviceId && devicesById.get(deviceId) && html`
+            <div class="route-info">
+              <span>Selected: <strong>${devicesById.get(deviceId).name}</strong>${isPlaced(devicesById.get(deviceId)) ? '' : ' (not placed)'}</span>
+              <div class="row-actions">
+                <button disabled=${!isPlaced(devicesById.get(deviceId))} onClick=${() => clearPlacement(devicesById.get(deviceId))}>Remove placement</button>
+                <button onClick=${() => setDeviceId(null)}>Deselect</button>
+              </div>
+            </div>
+          `}
           ${run && html`
             <div class="route-info">
               <span>Measured route: <strong>${measured.length.toFixed(2)} m</strong>${measured.complete ? '' : ' (incomplete, some heights unset)'}</span>

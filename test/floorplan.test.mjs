@@ -188,3 +188,14 @@ test('metersToLengthUnit converts to feet and rounds', () => {
   assert.equal(metersToLengthUnit(3.14159, undefined), 3.14)
   assert.equal(metersToLengthUnit(1, 'ft'), 3.28)
 })
+
+import { lengthDirection } from '../public/floorplan.js'
+
+test('lengthDirection says which way x (toward the bow) points on the drawing', () => {
+  assert.equal(lengthDirection(calibrationFromClicks([0, 100], [200, 100], 10)), 'right')
+  assert.equal(lengthDirection(calibrationFromClicks([200, 100], [0, 100], 10)), 'left')
+  assert.equal(lengthDirection(calibrationFromClicks([50, 200], [50, 0], 10)), 'up')
+  assert.equal(lengthDirection(calibrationFromClicks([50, 0], [50, 200], 10)), 'down')
+  // A slightly tilted drawing still reads by its dominant direction.
+  assert.equal(lengthDirection(calibrationFromClicks([0, 0], [-200, 10], 10)), 'left')
+})

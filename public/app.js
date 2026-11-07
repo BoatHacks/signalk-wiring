@@ -446,7 +446,7 @@ const DEVICE_FIELDS = [
     type: 'signalkPath',
     placeholder: 'e.g. electrical.switches.anchorLight'
   },
-  { key: 'posX', label: 'Position x (m, along the boat)', type: 'number' },
+  { key: 'posX', label: 'Position x (m, from the transom toward the bow)', type: 'number' },
   { key: 'posY', label: 'Position y (m, athwartships)', type: 'number' },
   { key: 'posZ', label: 'Position z (m, height)', type: 'number' },
   { key: 'notes', label: 'Notes', type: 'textarea' }
