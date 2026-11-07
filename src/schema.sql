@@ -1,3 +1,8 @@
+CREATE TABLE IF NOT EXISTS zones (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL COLLATE NOCASE UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS circuits (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -25,6 +30,8 @@ CREATE TABLE IF NOT EXISTS wire_runs (
   cable_label TEXT,
   switch_ref TEXT,
   route TEXT,
+  zone_id TEXT REFERENCES zones(id),
+  tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );
@@ -41,6 +48,8 @@ CREATE TABLE IF NOT EXISTS devices (
   pos_x REAL,
   pos_y REAL,
   pos_z REAL,
+  zone_id TEXT REFERENCES zones(id),
+  tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );

@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Zones are now a managed list instead of free text. Each device and wire
+  run has at most one zone, picked from a dropdown with an "Add new
+  zone..." entry and a hint explaining what a zone is. Existing zone text
+  migrates automatically (spellings differing only in case or padding merge
+  into one zone). A new Zones tab renames, merges and removes zones.
+
+### Added
+
+- Free-text tags on devices and wire runs for groupings that are not
+  physical areas, such as audio zones.
+- Zone and tag filters on the circuit, wire run and device lists.
+- A `wiringZones` resource and a zone merge route.
+
 ## [0.3.1] - 2026-11-07
 
 ### Added

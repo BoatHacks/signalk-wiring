@@ -15,8 +15,10 @@ to someone else doesn't depend on the current owner being present.
   can be fed by more than one circuit, and can record its rated power
   draw and a SignalK path (e.g. `electrical.switches.anchorLight`) it
   corresponds to.
-- Free-text **zones** (e.g. "engine room") on wire runs and devices, and
-  wire gauge/length recorded with explicit units (AWG or mm²; meters or
+- **Zones** (e.g. "engine room") on wire runs and devices, chosen from a
+  managed list you can rename and merge, plus free-text **tags** for other
+  groupings such as an audio zone, with zone and tag filters on the lists.
+  Wire gauge/length recorded with explicit units (AWG or mm²; meters or
   feet) — boats often mix US and EU-sourced equipment.
 - Full CRUD via the admin webapp: inline create/edit forms, no page
   reloads.

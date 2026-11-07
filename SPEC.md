@@ -41,8 +41,11 @@ constraint enforced on the data model.
   through junctions/splices.
 - **Device** — anything a wire run terminates at that isn't another wire
   run: a pump, light, instrument, battery, bus bar, etc.
-- **Zone** — a free-text physical location a wire run passes through or a
-  device sits in (e.g. "engine room", "port lazarette").
+- **Zone**: a named area a wire run or device is in (e.g. "salon", "aft
+  cabin", "port lazarette"), chosen from a managed list. Used to find and
+  filter. Access hints (behind a panel, under a hatch) belong in notes.
+- **Tag**: a free-text label for any other grouping, such as an audio
+  zone, which overlaps physical areas. An item can have several.
 - **Convention** — the labeling/color standard selected for the
   installation (ABYC E-11, DIN EN ISO 13297, or freestyle/none).
 
@@ -58,7 +61,8 @@ constraint enforced on the data model.
   primary and backup supply) — devices are not owned by a single circuit.
 - Wire gauge is recorded with an explicit unit (AWG or mm²) per wire run,
   since a single boat may mix US and EU-sourced equipment and runs.
-- Every wire run and device may optionally carry a **zone** (free text).
+- Every wire run and device may optionally carry one **zone** from the
+  managed list, and any number of free-text **tags**.
   Absence of a zone is valid — not everything needs a location yet.
 
 ## 3. State / Lifecycle Model
@@ -98,8 +102,9 @@ A wire run or device is either:
 - **WireRun**
   - `id`, `circuitId`, `fromEndpoint`, `toEndpoint` (each a device id,
     source, or splice reference), `gauge` + `gaugeUnit` (AWG | mm²),
-    `color`, `length` + `lengthUnit` (m | ft), `zone` (free text,
-    optional), `cableLabel` (the physical tag/number on the cable
+    `color`, `length` + `lengthUnit` (m | ft), `zoneId`
+    (optional, a Zone; the response also carries the zone's name as
+    `zone`), `tags` (optional list of strings), `cableLabel` (the physical tag/number on the cable
     itself, optional — often a more reliable way to trace a wire in
     person than color, especially once colors fade or several runs
     share one), `switchRef` (a panel switch position, optional and
@@ -110,7 +115,8 @@ A wire run or device is either:
     circuit's panel device and is not stored), `status`,
     `attachments` (photo/file ids), `notes`.
 - **Device**
-  - `id`, `name`, `type` (free text, e.g. "bilge pump"), `zone` (optional),
+  - `id`, `name`, `type` (free text, e.g. "bilge pump"), `zoneId` and `tags` (as on
+    a wire run; `zone` carries the name),
     `ratedPowerW` (nameplate/rated power draw, optional), `signalkPath`
     (optional — a SignalK path this device corresponds to, e.g.
     `electrical.switches.anchorLight` or a battery's voltage/current
@@ -128,6 +134,12 @@ A wire run or device is either:
     (origin, scale and axis direction, set by clicking two points and
     entering the real distance), `status`, `notes`. Several plans per
     view are allowed.
+- **Zone**
+  - `id`, `name` (unique ignoring case). Renaming changes it everywhere
+    because items link by id. A zone in use cannot be removed; merging two
+    zones moves the items of one to the other. Writes accept either a
+    `zoneId` or a zone `name`, which finds the zone ignoring case or
+    creates it, which is also how CSV import resolves zones.
 - **Attachment**
   - `id`, `filename`, `mimeType`, owning record type + id, uploaded date.
 - **ChangeLogEntry**
@@ -146,7 +158,7 @@ import is a deferred feature (see 10.2), not an MVP input source.
 
 - `Circuit`, `WireRun`, and `Device` are served as SignalK resource types
   (`/signalk/v2/api/resources/wiringCircuits`, `.../wiringWireRuns`,
-  `.../wiringDevices`, `.../wiringPlans`) via standard `listResources` / `getResource` /
+  `.../wiringDevices`, `.../wiringPlans`, `.../wiringZones`) via standard `listResources` / `getResource` /
   `setResource` / `deleteResource` semantics.
 - The plugin configuration (§9) is served read-only as
   `/signalk/v2/api/resources/wiringSettings/config`, so the anonymously
@@ -155,6 +167,8 @@ import is a deferred feature (see 10.2), not an MVP input source.
   served under the plugin's own admin-gated routes
   (`/plugins/signalk-wiring/...`), since they're only ever used by the
   plugin's own UI.
+- `POST /plugins/signalk-wiring/zones/:id/merge?into=<zone id>` (admin)
+  merges one zone into another.
 - Plan drawings: `POST /plugins/signalk-wiring/plans/:id/image` (admin)
   uploads one, `GET .../plans/:id/image` serves it to any logged-in user
   where the server supports per-route access levels (signalk-server
@@ -172,7 +186,10 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - Browse/search circuits, wire runs, and devices (by name, zone, or
   status).
 - Forms to create/edit circuits, wire runs, and devices, including gauge
-  + unit, color, zone, and notes.
+  + unit, color, zone, tags, and notes. The zone field is a dropdown
+  with an "Add new zone..." entry and a hint saying what a zone is.
+- A zones manager to rename, merge and remove zones, and zone and tag
+  filters on the circuit, wire run and device lists.
 - Photo/file attachment upload and viewing per wire run or device.
 - An auto-generated circuit diagram (source → wire run(s) → device(s))
   rendered from the data, per circuit.
@@ -225,7 +242,7 @@ configuration.
 ### 10.1 MVP Features
 
 - Circuit / wire run / device data model with full CRUD via the UI.
-- Free-text zone on wire runs and devices.
+- Managed zone list plus free-text tags on wire runs and devices.
 - Photo/file attachments on wire runs and devices.
 - Change log (append-only) on edits.
 - Auto-generated per-circuit diagram view.
@@ -236,9 +253,9 @@ configuration.
 
 ### 10.2 Post-MVP / Deferred
 
-- Structured (picklist) zones — starting free-text avoids blocking data
-  entry on defining a zone list up front; can be layered on once real
-  zone names are in use.
+- Zone polygons drawn on top plans, so a device's or route's zone can be
+  computed from its position; zone parents (deck, room), kinds and notes;
+  grouping lists and the load summary by zone.
 - Cross-boat/fleet comparison — out of scope for a single-vessel plugin.
 - Direct DXF/DWG import for plans (a browser cannot draw them without a
   converter; export SVG from the CAD tool instead).
@@ -268,11 +285,12 @@ configuration.
   commonly mix US (AWG) and EU (mm²) sourced equipment/wire during
   refits; normalizing to one unit would lose the as-labeled value people
   actually read off the wire or the spec sheet.
-- **Zones are free text in MVP, not a structured list.** A structured
-  zone picklist is more consistent but requires defining the list before
-  any data entry can happen. Free text lets documentation start
-  immediately; a picklist can be introduced later once real zone names
-  exist to seed it from.
+- **Zones are a managed list, with free-text tags beside them.** The MVP
+  kept zones as free text so documentation could start without defining a
+  list. Real data then showed the same area spelled several ways, so zones
+  became a list seeded from the existing text (spellings differing only in
+  case or padding merged), with tags for groupings that are not physical
+  areas. See plan 0010.
 - **Removed records are kept, not deleted.** The point of change tracking
   is a historical record — deleting a removed wire run would defeat that
   purpose.

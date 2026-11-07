@@ -1,6 +1,7 @@
 import { html, render, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { newId } from './ids.js'
 import { PathCombobox } from './signalkPaths.js'
+import { NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches } from './zones.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
@@ -80,6 +81,59 @@ function confirmRemove (label) {
   return window.confirm(`Mark "${label}" as removed? It stays in the record, but shows as removed.`)
 }
 
+const ADD_ZONE = '__add__'
+
+// Dropdown of the zones with an "Add new zone..." entry that creates the
+// zone on the spot and selects it. An absent zone stays valid.
+function ZoneField ({ value, onChange }) {
+  const [reloadKey, setReloadKey] = useState(0)
+  const { items: zones } = useResourceList('wiringZones', reloadKey)
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [error, setError] = useState(null)
+
+  const addZone = async () => {
+    const name = newName.trim()
+    if (!name) return
+    setError(null)
+    const existing = zones.find((z) => z.name.toLowerCase() === name.toLowerCase())
+    if (existing) { onChange(existing.id); setAdding(false); setNewName(''); return }
+    try {
+      const id = newId()
+      await putResource('wiringZones', id, { name })
+      setReloadKey((k) => k + 1)
+      onChange(id)
+      setAdding(false)
+      setNewName('')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return html`
+    <div>
+      <select value=${adding ? ADD_ZONE : value}
+        onChange=${(e) => {
+          if (e.target.value === ADD_ZONE) setAdding(true)
+          else { setAdding(false); onChange(e.target.value) }
+        }}>
+        <option value="">No zone yet</option>
+        ${zones.map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
+        <option value=${ADD_ZONE}>Add new zone…</option>
+      </select>
+      ${adding && html`
+        <div class="row-actions">
+          <input type="text" value=${newName} placeholder="Zone name" autofocus
+            onInput=${(e) => setNewName(e.target.value)}
+            onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); addZone() } }} />
+          <button type="button" onClick=${addZone}>Add zone</button>
+        </div>
+      `}
+      ${error && html`<small class="hint">${error}</small>`}
+    </div>
+  `
+}
+
 // A generic labeled-field form: circuits, wire runs, and devices are all
 // "a handful of inputs, Save/Cancel, an error banner on failure" with
 // different field lists, so this covers all three rather than
@@ -87,7 +141,10 @@ function confirmRemove (label) {
 function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
   const [values, setValues] = useState(() => {
     const v = {}
-    for (const f of fields) v[f.key] = initial && initial[f.key] != null ? String(initial[f.key]) : ''
+    for (const f of fields) {
+      const raw = initial ? initial[f.key] : null
+      v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : ''
+    }
     return v
   })
   const [saving, setSaving] = useState(false)
@@ -102,6 +159,9 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
     const payload = {}
     for (const f of fields) {
       const raw = values[f.key]
+      // Zone and tags are always sent, so clearing them on an edit takes effect.
+      if (f.type === 'zone') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
+      if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
       if (raw === '' || raw == null) continue
       payload[f.key] = f.type === 'number' ? Number(raw) : raw
     }
@@ -131,6 +191,13 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
               ${f.options.map((o) => html`<option value=${o} key=${o}>${o}</option>`)}
             </select>
           `}
+          ${f.type === 'zone' && html`
+            <${ZoneField} value=${values[f.key]} onChange=${(v) => setField(f.key, v)} />
+          `}
+          ${f.type === 'tags' && html`
+            <input type="text" value=${values[f.key]} placeholder="e.g. audio: main, audio: cockpit"
+              onInput=${(e) => setField(f.key, e.target.value)} />
+          `}
           ${f.type === 'signalkPath' && html`
             <${PathCombobox}
               value=${values[f.key]}
@@ -148,6 +215,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
               onInput=${(e) => setField(f.key, e.target.value)}
             />
           `}
+          ${f.hint && html`<small class="hint">${f.hint}</small>`}
         </label>
       `)}
       <div class="form-actions">
@@ -345,7 +413,18 @@ const CIRCUIT_FIELDS = [
 const DEVICE_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true },
   { key: 'type', label: 'Type', type: 'text' },
-  { key: 'zone', label: 'Zone', type: 'text' },
+  {
+    key: 'zoneId',
+    label: 'Zone',
+    type: 'zone',
+    hint: 'Where it is: an area such as salon or aft cabin. Used for filtering. Put access hints in Notes.'
+  },
+  {
+    key: 'tags',
+    label: 'Tags',
+    type: 'tags',
+    hint: 'Anything else you want to group by, such as an audio zone. Free text, several allowed, separated by commas.'
+  },
   { key: 'ratedPowerW', label: 'Rated power (W)', type: 'number' },
   {
     key: 'signalkPath',
@@ -367,17 +446,152 @@ const WIRE_RUN_FIELDS = [
   { key: 'color', label: 'Color', type: 'text' },
   { key: 'length', label: 'Length', type: 'number' },
   { key: 'lengthUnit', label: 'Length unit', type: 'select', options: ['m', 'ft'] },
-  { key: 'zone', label: 'Zone', type: 'text' },
+  {
+    key: 'zoneId',
+    label: 'Zone',
+    type: 'zone',
+    hint: 'Where it is: an area such as salon or aft cabin. Used for filtering. Put access hints in Notes.'
+  },
+  {
+    key: 'tags',
+    label: 'Tags',
+    type: 'tags',
+    hint: 'Anything else you want to group by, such as an audio zone. Free text, several allowed, separated by commas.'
+  },
   { key: 'cableLabel', label: 'Cable label', type: 'text' },
   { key: 'switchRef', label: 'Switch reference', type: 'text' },
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
+
+// Zone and tag filter for a list. `items` supplies the tags in use.
+function ZoneTagFilter ({ items, filter, onChange }) {
+  const { items: zones } = useResourceList('wiringZones')
+  const tags = collectTags(items)
+  return html`
+    <div class="filter-bar">
+      <label class="form-field compact"><span>Zone</span>
+        <select value=${filter.zoneId || ''} onChange=${(e) => onChange({ ...filter, zoneId: e.target.value || null })}>
+          <option value="">All zones</option>
+          <option value=${NO_ZONE}>No zone</option>
+          ${zones.map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
+        </select>
+      </label>
+      ${tags.length > 0 && html`
+        <label class="form-field compact"><span>Tag</span>
+          <select value=${filter.tag || ''} onChange=${(e) => onChange({ ...filter, tag: e.target.value || null })}>
+            <option value="">All tags</option>
+            ${tags.map((t) => html`<option value=${t} key=${t}>${t}</option>`)}
+          </select>
+        </label>
+      `}
+    </div>
+  `
+}
+
+// Rename, merge and remove zones. A zone in use cannot be removed: merge it
+// into another zone or move its items first.
+function ZonesManager () {
+  const [reloadKey, setReloadKey] = useState(0)
+  const [error, setError] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [newName, setNewName] = useState('')
+  const { loading, items: zones } = useResourceList('wiringZones', reloadKey)
+  const { items: devices } = useResourceList('wiringDevices', reloadKey)
+  const { items: wireRuns } = useResourceList('wiringWireRuns', reloadKey)
+
+  const usage = (zoneId) => ({
+    devices: devices.filter((d) => d.zoneId === zoneId && d.status !== 'removed').length,
+    wireRuns: wireRuns.filter((w) => w.zoneId === zoneId && w.status !== 'removed').length
+  })
+
+  const run = async (fn) => {
+    setError(null)
+    try { await fn(); setReloadKey((k) => k + 1) } catch (err) { setError(err.message) }
+  }
+
+  const clash = (name, ownId) => zones.some((z) => z.id !== ownId && z.name.toLowerCase() === name.trim().toLowerCase())
+
+  const add = () => run(async () => {
+    if (!newName.trim()) return
+    if (clash(newName)) throw new Error('A zone with that name already exists.')
+    await putResource('wiringZones', newId(), { name: newName.trim() })
+    setNewName('')
+  })
+
+  const rename = (zone) => run(async () => {
+    if (!editName.trim()) return
+    if (clash(editName, zone.id)) throw new Error('A zone with that name already exists. Merge them instead.')
+    await putResource('wiringZones', zone.id, { name: editName.trim() })
+    setEditingId(null)
+  })
+
+  const merge = (zone, intoId) => run(async () => {
+    const into = zones.find((z) => z.id === intoId)
+    if (!window.confirm(`Move everything in "${zone.name}" to "${into.name}" and delete "${zone.name}"?`)) return
+    const res = await fetch(`${ROUTES_BASE}/zones/${zone.id}/merge?into=${intoId}`, { method: 'POST' })
+    if (!res.ok) throw new Error(apiErrorMessage(res.status))
+  })
+
+  const remove = (zone) => run(async () => {
+    if (!window.confirm(`Delete the zone "${zone.name}"?`)) return
+    await deleteResource('wiringZones', zone.id)
+  })
+
+  return html`
+    <div>
+      <p class="meta">
+        A zone is the area something is in, such as salon or aft cabin. Each device and wire run has at most one.
+        Renaming a zone renames it everywhere.
+      </p>
+      <${ErrorBanner} message=${error} />
+      ${loading && html`<div class="empty-state">Loading zones&hellip;</div>`}
+      ${!loading && zones.length === 0 && html`<div class="empty-state">No zones yet. Add one below, or from a device form.</div>`}
+      ${zones.map((zone) => {
+        const u = usage(zone.id)
+        const inUse = u.devices + u.wireRuns > 0
+        return html`
+          <div class="list-item" key=${zone.id}>
+            <div>
+              ${editingId === zone.id
+                ? html`<input type="text" value=${editName} onInput=${(e) => setEditName(e.target.value)}
+                    onKeyDown=${(e) => { if (e.key === 'Enter') rename(zone) }} />`
+                : html`<div>${zone.name}</div>`}
+              <div class="meta">${u.devices} devices, ${u.wireRuns} wire runs</div>
+            </div>
+            <div class="row-actions">
+              ${editingId === zone.id
+                ? html`<button onClick=${() => rename(zone)}>Save</button><button onClick=${() => setEditingId(null)}>Cancel</button>`
+                : html`<button onClick=${() => { setEditingId(zone.id); setEditName(zone.name) }}>Rename</button>`}
+              ${zones.length > 1 && html`
+                <select value="" onChange=${(e) => e.target.value && merge(zone, e.target.value)}>
+                  <option value="">Merge into…</option>
+                  ${zones.filter((z) => z.id !== zone.id).map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
+                </select>
+              `}
+              <button disabled=${inUse} title=${inUse ? 'In use: merge it or move its items first' : ''}
+                onClick=${() => remove(zone)}>Remove</button>
+            </div>
+          </div>
+        `
+      })}
+      <div class="row-actions">
+        <input type="text" value=${newName} placeholder="New zone name"
+          onInput=${(e) => setNewName(e.target.value)} onKeyDown=${(e) => { if (e.key === 'Enter') add() }} />
+        <button onClick=${add}>Add zone</button>
+      </div>
+    </div>
+  `
+}
 
 function CircuitsList ({ onSelect }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const { loading, error, items } = useResourceList('wiringCircuits', reloadKey)
+  const { items: allRuns } = useResourceList('wiringWireRuns')
+  const [filter, setFilter] = useState({})
+  const visible = items.filter((c) => circuitMatches(c, allRuns, filter))
 
   const createCircuit = async (payload) => {
     await putResource('wiringCircuits', newId(), payload)
@@ -413,7 +627,8 @@ function CircuitsList ({ onSelect }) {
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No circuits recorded yet.</div>
       `}
-      ${items.map((circuit) => html`
+      <${ZoneTagFilter} items=${allRuns} filter=${filter} onChange=${setFilter} />
+      ${visible.map((circuit) => html`
         <div
           key=${circuit.id}
           class="list-item ${circuit.status === 'removed' ? 'removed' : ''}"
@@ -526,7 +741,9 @@ function CircuitDetail ({ circuitId, onBack }) {
     return () => { cancelled = true }
   }, [circuitId, reloadKey])
 
-  const wireRuns = allWireRuns.filter((wr) => wr.circuitId === circuitId)
+  const [runFilter, setRunFilter] = useState({})
+  const circuitRuns = allWireRuns.filter((wr) => wr.circuitId === circuitId)
+  const wireRuns = circuitRuns.filter((wr) => matchesFilter(wr, runFilter))
 
   const saveCircuit = async (payload) => {
     await putResource('wiringCircuits', circuitId, payload)
@@ -587,15 +804,19 @@ function CircuitDetail ({ circuitId, onBack }) {
       `}
       ${showCircuitHistory && html`<${ChangeLog} kind="circuit" id=${circuitId} />`}
 
-      ${wireRuns.length > 0 && html`
+      ${circuitRuns.length > 0 && html`
         <h3>Diagram</h3>
-        <${DiagramView} wireRuns=${wireRuns} deviceNameById=${deviceNameById} />
+        <${DiagramView} wireRuns=${circuitRuns} deviceNameById=${deviceNameById} />
       `}
 
       <h3>Wire runs</h3>
       ${wireRunsLoading && html`<div class="empty-state">Loading wire runs&hellip;</div>`}
-      ${!wireRunsLoading && wireRuns.length === 0 && html`
+      ${!wireRunsLoading && circuitRuns.length === 0 && html`
         <div class="empty-state">No wire runs recorded for this circuit yet.</div>
+      `}
+      ${circuitRuns.length > 1 && html`<${ZoneTagFilter} items=${circuitRuns} filter=${runFilter} onChange=${setRunFilter} />`}
+      ${!wireRunsLoading && circuitRuns.length > 0 && wireRuns.length === 0 && html`
+        <div class="empty-state">No wire runs match the filter.</div>
       `}
       ${wireRuns.length > 0 && html`
         <table>
@@ -615,7 +836,7 @@ function CircuitDetail ({ circuitId, onBack }) {
                   <td>${wr.gauge ? `${wr.gauge} ${wr.gaugeUnit || ''}` : '—'}</td>
                   <td>${wr.length ? `${wr.length} ${wr.lengthUnit || ''}` : '—'}</td>
                   <td>${wr.color || '—'}</td>
-                  <td>${wr.zone || '—'}</td>
+                  <td>${wr.zone || '—'}${(wr.tags || []).length ? html`<div class="meta">${wr.tags.join(', ')}</div>` : ''}</td>
                   <td><${StatusBadge} status=${wr.status} /></td>
                   <td class="row-actions">
                     <button onClick=${() => setWireRunForm(wr)}>Edit</button>
@@ -676,6 +897,8 @@ function DevicesList ({ onSelect }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const { loading, error, items } = useResourceList('wiringDevices', reloadKey)
+  const [filter, setFilter] = useState({})
+  const visible = items.filter((d) => matchesFilter(d, filter))
 
   const createDevice = async (payload) => {
     await putResource('wiringDevices', newId(), payload)
@@ -701,7 +924,8 @@ function DevicesList ({ onSelect }) {
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No devices recorded yet.</div>
       `}
-      ${items.map((device) => html`
+      <${ZoneTagFilter} items=${items} filter=${filter} onChange=${setFilter} />
+      ${visible.map((device) => html`
         <div
           key=${device.id}
           class="list-item ${device.status === 'removed' ? 'removed' : ''}"
@@ -709,7 +933,7 @@ function DevicesList ({ onSelect }) {
         >
           <div>
             <div>${device.name}</div>
-            <div class="meta">${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}</div>
+            <div class="meta">${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           </div>
           <${StatusBadge} status=${device.status} />
         </div>
@@ -752,7 +976,7 @@ function DeviceDetail ({ deviceId, onBack }) {
       ${device && !editing && html`
         <div class="card">
           <h2>${device.name} <${StatusBadge} status=${device.status} /></h2>
-          <div class="meta">${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}</div>
+          <div class="meta">${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
           ${device.signalkPath && html`
             <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>
@@ -803,6 +1027,7 @@ function App () {
         <button class=${tab === 'circuits' ? 'active' : ''} onClick=${() => switchTab('circuits')}>Circuits</button>
         <button class=${tab === 'devices' ? 'active' : ''} onClick=${() => switchTab('devices')}>Devices</button>
         <button class=${tab === 'load' ? 'active' : ''} onClick=${() => switchTab('load')}>Load Summary</button>
+        <button class=${tab === 'zones' ? 'active' : ''} onClick=${() => switchTab('zones')}>Zones</button>
         <button class=${tab === 'floorplan' ? 'active' : ''} onClick=${() => switchTab('floorplan')}>Floorplan</button>
       </nav>
       ${tab === 'circuits' && !selectedCircuitId && html`<${CircuitsList} onSelect=${setSelectedCircuitId} />`}
@@ -814,6 +1039,7 @@ function App () {
         <${DeviceDetail} deviceId=${selectedDeviceId} onBack=${() => setSelectedDeviceId(null)} />
       `}
       ${tab === 'load' && html`<${LoadSummary} />`}
+      ${tab === 'zones' && html`<${ZonesManager} />`}
       ${tab === 'floorplan' && html`<${FloorplanTab} />`}
     </div>
   `

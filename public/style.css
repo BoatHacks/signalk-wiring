@@ -496,3 +496,7 @@ label.inline {
 }
 .combobox-list li { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; word-break: break-all; }
 .combobox-list li.active, .combobox-list li:hover { background: var(--bg-alt); }
+
+.hint { color: var(--text-muted); font-size: 0.8rem; }
+.filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+.filter-bar .form-field { min-width: 180px; }

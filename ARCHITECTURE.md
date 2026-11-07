@@ -173,7 +173,9 @@ CREATE TABLE wire_runs (
   color TEXT,
   length REAL,
   length_unit TEXT,        -- 'm' | 'ft' -- 0008
-  zone TEXT,
+  zone TEXT,              -- the zone's name, kept in step with zone_id
+  zone_id TEXT REFERENCES zones(id),  -- 0010
+  tags TEXT,              -- JSON array of strings -- 0010
   cable_label TEXT,        -- physical tag/number on the wire -- 0008
   switch_ref TEXT,         -- panel switch position, distinct from the fuse -- 0008
   route TEXT,              -- JSON list of {x,y,z} waypoints in meters -- 0009
@@ -185,7 +187,9 @@ CREATE TABLE devices (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   type TEXT,
-  zone TEXT,
+  zone TEXT,              -- the zone's name, kept in step with zone_id
+  zone_id TEXT REFERENCES zones(id),  -- 0010
+  tags TEXT,              -- JSON array of strings -- 0010
   rated_power_w REAL,     -- nameplate/rated draw, optional -- 0008
   signalk_path TEXT,      -- e.g. electrical.switches.anchorLight -- 0008
   pos_x REAL,             -- meters, any axis may be NULL -- 0009
@@ -193,6 +197,11 @@ CREATE TABLE devices (
   pos_z REAL,
   status TEXT NOT NULL,
   notes TEXT
+);
+
+CREATE TABLE zones (      -- 0010
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL COLLATE NOCASE UNIQUE
 );
 
 CREATE TABLE plans (       -- 0009
@@ -237,12 +246,23 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are two migrations: plan 0008's field
+every subsequent restart. There are three migrations (the third is described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
 is a single `route` entry in the change log, and `resources.js` converts
 them to real arrays and objects at the resource boundary.
+
+Plan 0010's migration adds `zone_id` and `tags` and turns every distinct
+existing `zone` string into a row in `zones` (strings differing only in
+case or padding become one zone, named by the first spelling met) and links
+the items to it. The old `zone` text column stays, now holding the zone's
+name: `store.js` keeps it in step on every write and on rename, so responses
+keep a readable `zone` and an older version can still read the data. Writes
+accept `zone_id` or a zone name; `zone_id` wins when both are given.
+Zones are a plain list rather than removed-but-kept records: an unused zone
+is deleted (and the deletion logged), a zone in use is refused, and a merge
+moves its items, each move logged.
 
 ## 4. Technology Stack
 
@@ -320,6 +340,7 @@ signalk-wiring/
     app.js                   # UI: browse/search, forms, diagram, changelog view
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
+    zones.js                   # tags parsing, zone and tag filters
     floorplan.js               # pure geometry: calibration, projection, routes
     floorplanView.js           # floorplan tab: upload, viewer, placement, routes
     style.css
@@ -331,6 +352,7 @@ signalk-wiring/
     import.test.mjs
     loadSummary.test.mjs
     floorplan.test.mjs
+    zones.test.mjs
     fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md
@@ -358,9 +380,11 @@ No external services or network dependencies at runtime.
   reuse the storage layer's existing write path (`src/store.js`) rather
   than a separate bulk-write path, so change-log behavior stays
   consistent between manual and imported edits.
-- **Structured zone picklist** (SPEC.md §10.2) — the `zone` columns are
-  plain `TEXT` now specifically so a future migration to a `zones` table
-  + foreign key doesn't require a data model rethink, just a backfill.
+- **Zone polygons on plans** (SPEC.md §10.2): zones are a managed list
+  now (plan 0010). Drawing polygons on top plans, with the height range
+  plans already have, would let a zone be computed from position, and a
+  route could list the zones it crosses. The `zones` table can grow a
+  parent, a kind and notes without reworking the links.
 - **Anonymous read access reconsideration** (§6) — if this needs to
   change, it's a resource-provider-level decision (SignalK doesn't offer
   per-resource-type read gating beyond the global `allow_readonly`), so

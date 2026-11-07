@@ -454,3 +454,34 @@ test('the SVG download is registered readonly when the server supports router.ac
   assert.deepEqual(registered, [{ level: 'readonly', method: 'get', routePath: '/plans/:id/image' }])
   store.close()
 })
+
+test('POST /zones/:id/merge repoints items and returns the target zone', () => {
+  const { store, router, cleanup } = setup()
+  const from = store.create('zone', { name: 'Lazarette' })
+  const into = store.create('zone', { name: 'Aft locker' })
+  const device = store.create('device', { name: 'Pump', zone_id: from.id })
+
+  const req = new FakeRequest({ params: { id: from.id }, query: { into: into.id } })
+  const res = new FakeResponse()
+  router.invoke('post', '/zones/:id/merge', req, res)
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.name, 'Aft locker')
+  assert.equal(store.get('device', device.id).zone_id, into.id)
+  assert.equal(store.get('zone', from.id), null)
+  cleanup()
+})
+
+test('POST /zones/:id/merge answers 400 without a target and 404 for an unknown zone', () => {
+  const { store, router, cleanup } = setup()
+  const zone = store.create('zone', { name: 'Salon' })
+
+  const noTarget = new FakeResponse()
+  router.invoke('post', '/zones/:id/merge', new FakeRequest({ params: { id: zone.id } }), noTarget)
+  assert.equal(noTarget.statusCode, 400)
+
+  const unknown = new FakeResponse()
+  router.invoke('post', '/zones/:id/merge', new FakeRequest({ params: { id: 'nope' }, query: { into: zone.id } }), unknown)
+  assert.equal(unknown.statusCode, 404)
+  cleanup()
+})

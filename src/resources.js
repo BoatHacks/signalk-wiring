@@ -9,9 +9,9 @@ function toSnakeKey (key) {
 }
 
 // Columns holding structured data (a wire run's route, a plan's
-// calibration). The database keeps them as JSON text so the change log
+// calibration, an item's tags). The database keeps them as JSON text so the change log
 // records one diff per column; resources expose them as real values.
-const JSON_COLUMNS = new Set(['route', 'calibration'])
+const JSON_COLUMNS = new Set(['route', 'calibration', 'tags'])
 
 function rowToResource (row) {
   if (!row) return row
@@ -66,7 +66,9 @@ function createResourceProvider (store, kind, type) {
       deleteResource: async (id) => {
         const existing = store.get(kind, id)
         if (!existing) throw new Error(`${type} resource not found: ${id}`)
-        store.remove(kind, id)
+        // Zones are a plain list: an unused one is deleted, a used one refused.
+        if (kind === 'zone') store.deleteZone(id)
+        else store.remove(kind, id)
       }
     }
   }

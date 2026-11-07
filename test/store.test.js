@@ -367,3 +367,139 @@ test('plans: view must be top or side', () => {
   store.create('plan', { name: 'Profile', view: 'side' })
   store.close()
 })
+
+// Zones (plan 0010)
+
+test('zones: create, case-insensitive uniqueness, and name resolution on write', () => {
+  const store = freshStore()
+  const salon = store.create('zone', { name: 'Salon' })
+  assert.ok(salon.id)
+  assert.throws(() => store.create('zone', { name: 'salon' }), /already exists/)
+
+  // A zone name on a device finds the existing zone, whatever the case or padding.
+  const a = store.create('device', { name: 'Light', zone: '  SALON ' })
+  assert.equal(a.zone_id, salon.id)
+  assert.equal(a.zone, 'Salon')
+
+  // An unknown name creates the zone.
+  const b = store.create('device', { name: 'Pump', zone: 'Engine room' })
+  assert.equal(store.list('zone').length, 2)
+  assert.equal(store.get('zone', b.zone_id).name, 'Engine room')
+
+  store.close()
+})
+
+test('zones: zone_id wins over a stale zone name, and null clears both', () => {
+  const store = freshStore()
+  const salon = store.create('zone', { name: 'Salon' })
+  const cabin = store.create('zone', { name: 'Aft cabin' })
+  const device = store.create('device', { name: 'Light', zone_id: salon.id })
+
+  const moved = store.update('device', device.id, { zone: 'Salon', zone_id: cabin.id })
+  assert.equal(moved.zone_id, cabin.id)
+  assert.equal(moved.zone, 'Aft cabin')
+
+  const cleared = store.update('device', device.id, { zone_id: null })
+  assert.equal(cleared.zone_id, null)
+  assert.equal(cleared.zone, null)
+
+  store.close()
+})
+
+test('zones: rename updates every item and is logged', () => {
+  const store = freshStore()
+  const zone = store.create('zone', { name: 'Salon' })
+  const device = store.create('device', { name: 'Light', zone_id: zone.id })
+  const circuit = store.create('circuit', { name: 'C' })
+  const run = store.create('wireRun', { circuit_id: circuit.id, zone_id: zone.id })
+
+  store.update('zone', zone.id, { name: 'Main salon' })
+
+  assert.equal(store.get('device', device.id).zone, 'Main salon')
+  assert.equal(store.get('wireRun', run.id).zone, 'Main salon')
+  assert.equal(store.changeLog('zone', zone.id).length, 2)
+
+  const other = store.create('zone', { name: 'Galley' })
+  assert.throws(() => store.update('zone', other.id, { name: 'main SALON' }), /already exists/)
+
+  store.close()
+})
+
+test('zones: merge repoints items, logs them and removes the source zone', () => {
+  const store = freshStore()
+  const from = store.create('zone', { name: 'Lazarette' })
+  const into = store.create('zone', { name: 'Aft locker' })
+  const device = store.create('device', { name: 'Pump', zone_id: from.id })
+  const circuit = store.create('circuit', { name: 'C' })
+  const run = store.create('wireRun', { circuit_id: circuit.id, zone_id: from.id })
+
+  store.mergeZones(from.id, into.id)
+
+  assert.equal(store.get('device', device.id).zone_id, into.id)
+  assert.equal(store.get('wireRun', run.id).zone, 'Aft locker')
+  assert.equal(store.get('zone', from.id), null)
+  assert.equal(store.changeLog('device', device.id).length, 2)
+  assert.throws(() => store.mergeZones(into.id, into.id))
+  assert.throws(() => store.mergeZones('nope', into.id), /not found/)
+
+  store.close()
+})
+
+test('zones: delete is refused while in use and allowed once empty', () => {
+  const store = freshStore()
+  const zone = store.create('zone', { name: 'Salon' })
+  const device = store.create('device', { name: 'Light', zone_id: zone.id })
+
+  assert.throws(() => store.deleteZone(zone.id), /in use/)
+  assert.deepEqual(store.zoneUsage(zone.id), { devices: 1, wireRuns: 0 })
+
+  store.update('device', device.id, { zone_id: null })
+  store.deleteZone(zone.id)
+  assert.equal(store.get('zone', zone.id), null)
+
+  store.close()
+})
+
+test('zones: migration turns padded, mixed-case zone strings into merged zones', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+  const oldDb = new Database(dbPath)
+  oldDb.exec(`
+    CREATE TABLE circuits (id TEXT PRIMARY KEY, name TEXT NOT NULL, source_label TEXT,
+      breaker_rating REAL, voltage REAL, panel_ref TEXT, panel_device_id TEXT, convention TEXT,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    CREATE TABLE wire_runs (id TEXT PRIMARY KEY, circuit_id TEXT NOT NULL, from_endpoint TEXT,
+      to_endpoint TEXT, gauge REAL, gauge_unit TEXT, color TEXT, length REAL, length_unit TEXT,
+      zone TEXT, cable_label TEXT, switch_ref TEXT, route TEXT,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    CREATE TABLE devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, zone TEXT,
+      rated_power_w REAL, signalk_path TEXT, pos_x REAL, pos_y REAL, pos_z REAL,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    INSERT INTO circuits (id, name) VALUES ('c1', 'C');
+    INSERT INTO devices (id, name, zone) VALUES ('d1', 'A', 'Engine room'), ('d2', 'B', ' engine ROOM '),
+      ('d3', 'C', ''), ('d4', 'D', NULL), ('d5', 'E', 'Salon');
+    INSERT INTO wire_runs (id, circuit_id, zone) VALUES ('w1', 'c1', 'ENGINE ROOM'), ('w2', 'c1', 'Salon');
+  `)
+  oldDb.pragma('user_version = 2')
+  oldDb.close()
+
+  const store = new Store(dbPath)
+  const names = store.list('zone').map((z) => z.name).sort()
+  assert.deepEqual(names, ['Engine room', 'Salon'])
+
+  const d1 = store.get('device', 'd1')
+  const d2 = store.get('device', 'd2')
+  assert.equal(d1.zone_id, d2.zone_id)
+  assert.equal(store.get('wireRun', 'w1').zone_id, d1.zone_id)
+  assert.equal(d2.zone, 'Engine room')
+  assert.equal(store.get('device', 'd3').zone_id, null)
+  assert.equal(store.get('device', 'd4').zone_id, null)
+  assert.equal(store.get('device', 'd1').tags, null)
+  store.close()
+
+  // Opening it again (a restart) changes nothing.
+  const again = new Store(dbPath)
+  assert.equal(again.list('zone').length, 2)
+  again.close()
+
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})

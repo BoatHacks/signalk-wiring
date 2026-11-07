@@ -20,15 +20,19 @@ const TABLES = {
     columns: [
       'id', 'circuit_id', 'from_endpoint', 'to_endpoint', 'gauge', 'gauge_unit',
       'color', 'length', 'length_unit', 'zone', 'cable_label', 'switch_ref',
-      'route', 'status', 'notes'
+      'route', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
   device: {
     table: 'devices',
     columns: [
       'id', 'name', 'type', 'zone', 'rated_power_w', 'signalk_path',
-      'pos_x', 'pos_y', 'pos_z', 'status', 'notes'
+      'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
+  },
+  zone: {
+    table: 'zones',
+    columns: ['id', 'name']
   },
   plan: {
     table: 'plans',
@@ -97,6 +101,44 @@ const MIGRATIONS = [
       addColumn('devices', 'pos_y', 'REAL')
       addColumn('devices', 'pos_z', 'REAL')
     }
+  },
+  {
+    version: 3,
+    description: 'wire_runs and devices: + zone_id, tags; every distinct zone string becomes a zone',
+    apply (db) {
+      const hasColumn = (table, column) =>
+        db.prepare('PRAGMA table_info(' + table + ')').all().some((c) => c.name === column)
+      for (const table of ['wire_runs', 'devices']) {
+        if (!hasColumn(table, 'zone_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN zone_id TEXT REFERENCES zones(id)`)
+        if (!hasColumn(table, 'tags')) db.exec(`ALTER TABLE ${table} ADD COLUMN tags TEXT`)
+      }
+
+      // Zone strings differing only in case or padding are one zone; the
+      // first spelling met becomes its name. The old `zone` text column
+      // stays, holding the zone's name, as a rollback aid and so responses
+      // keep a readable zone.
+      const zoneIdByKey = new Map()
+      for (const row of db.prepare('SELECT id, name FROM zones').all()) {
+        zoneIdByKey.set(row.name.toLowerCase(), row.id)
+      }
+      for (const table of ['devices', 'wire_runs']) {
+        const rows = db.prepare(
+          `SELECT id, zone FROM ${table} WHERE zone_id IS NULL AND zone IS NOT NULL AND TRIM(zone) != '' ORDER BY rowid`
+        ).all()
+        for (const row of rows) {
+          const name = row.zone.trim()
+          const key = name.toLowerCase()
+          if (!zoneIdByKey.has(key)) {
+            const id = crypto.randomUUID()
+            db.prepare('INSERT INTO zones (id, name) VALUES (?, ?)').run(id, name)
+            zoneIdByKey.set(key, id)
+          }
+          const zoneId = zoneIdByKey.get(key)
+          const canonical = db.prepare('SELECT name FROM zones WHERE id = ?').get(zoneId).name
+          db.prepare(`UPDATE ${table} SET zone_id = ?, zone = ? WHERE id = ?`).run(zoneId, canonical, row.id)
+        }
+      }
+    }
   }
 ]
 
@@ -129,7 +171,9 @@ class Store {
   create (kind, fields) {
     const { table, columns } = TABLES[kind]
     const id = fields.id || crypto.randomUUID()
-    const row = { ...fields, id, status: fields.status || 'active' }
+    let row = { ...fields, id, status: fields.status || 'active' }
+    if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
+    else if (kind === 'device' || kind === 'wireRun') row = this._resolveZone(row)
     const cols = columns.filter((c) => c in row)
     const placeholders = cols.map((c) => `@${c}`).join(', ')
     this.db
@@ -146,12 +190,16 @@ class Store {
 
   list (kind) {
     const { table } = TABLES[kind]
-    return this.db.prepare(`SELECT * FROM ${table}`).all()
+    const order = kind === 'zone' ? ' ORDER BY name COLLATE NOCASE' : ''
+    return this.db.prepare(`SELECT * FROM ${table}${order}`).all()
   }
 
   update (kind, id, patch) {
     const existing = this.get(kind, id)
     if (!existing) return null
+
+    if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
+    else if (kind === 'device' || kind === 'wireRun') patch = this._resolveZone(patch)
 
     const { table, columns } = TABLES[kind]
     const cols = columns.filter((c) => c !== 'id' && c in patch)
@@ -163,6 +211,7 @@ class Store {
       .run({ ...patch, id })
 
     const updated = this.get(kind, id)
+    if (kind === 'zone' && existing.name !== updated.name) this._syncZoneName(id, updated.name)
     const diff = {}
     for (const c of cols) {
       if (existing[c] !== updated[c]) diff[c] = { before: existing[c], after: updated[c] }
@@ -174,6 +223,98 @@ class Store {
       this._logChange(kind, id, summary, diff)
     }
     return updated
+  }
+
+  // A zone name is trimmed, required, and unique ignoring case.
+  _checkZoneName (name, ownId) {
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    if (!trimmed) throw new Error('a zone needs a name')
+    const clash = this.db
+      .prepare('SELECT id FROM zones WHERE name = ? COLLATE NOCASE AND id != ?')
+      .get(trimmed, ownId || '')
+    if (clash) throw new Error(`zone already exists: ${trimmed}`)
+    return trimmed
+  }
+
+  // The zone a device or wire run belongs to is set by zone_id, or by a zone
+  // name (which finds the zone ignoring case and padding, or creates it).
+  // zone_id wins when both are given. The `zone` text column always holds the
+  // zone's name, so responses keep a readable zone.
+  _resolveZone (fields) {
+    if ('zone_id' in fields) {
+      if (fields.zone_id === null || fields.zone_id === '' || fields.zone_id === undefined) {
+        return { ...fields, zone_id: null, zone: null }
+      }
+      const zone = this.get('zone', fields.zone_id)
+      if (!zone) throw new Error(`zone not found: ${fields.zone_id}`)
+      return { ...fields, zone: zone.name }
+    }
+    if ('zone' in fields) {
+      const name = typeof fields.zone === 'string' ? fields.zone.trim() : ''
+      if (!name) return { ...fields, zone: null, zone_id: null }
+      const zone = this.ensureZone(name)
+      return { ...fields, zone: zone.name, zone_id: zone.id }
+    }
+    return fields
+  }
+
+  ensureZone (name) {
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    if (!trimmed) throw new Error('a zone needs a name')
+    const found = this.db.prepare('SELECT * FROM zones WHERE name = ? COLLATE NOCASE').get(trimmed)
+    return found || this.create('zone', { name: trimmed })
+  }
+
+  _syncZoneName (zoneId, name) {
+    for (const table of ['devices', 'wire_runs']) {
+      this.db.prepare(`UPDATE ${table} SET zone = ? WHERE zone_id = ?`).run(name, zoneId)
+    }
+  }
+
+  zoneUsage (zoneId) {
+    const count = (table) => this.db
+      .prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE zone_id = ? AND status != 'removed'`)
+      .get(zoneId).n
+    return { devices: count('devices'), wireRuns: count('wire_runs') }
+  }
+
+  // Zones are a plain list, not part of the removed-but-kept lifecycle, so
+  // an unused zone is really deleted (and the deletion logged). Removed
+  // devices and wire runs that still point at it are detached.
+  deleteZone (zoneId) {
+    const zone = this.get('zone', zoneId)
+    if (!zone) throw new Error(`zone not found: ${zoneId}`)
+    const usage = this.zoneUsage(zoneId)
+    if (usage.devices + usage.wireRuns > 0) {
+      throw new Error(`zone in use by ${usage.devices} devices and ${usage.wireRuns} wire runs: ${zone.name}`)
+    }
+    for (const table of ['devices', 'wire_runs']) {
+      this.db.prepare(`UPDATE ${table} SET zone_id = NULL, zone = NULL WHERE zone_id = ?`).run(zoneId)
+    }
+    this.db.prepare('DELETE FROM zones WHERE id = ?').run(zoneId)
+    this._logChange('zone', zoneId, 'deleted', { before: zone })
+  }
+
+  // Moves every device and wire run of one zone to another, logging each
+  // move, then removes the emptied zone.
+  mergeZones (fromId, intoId) {
+    const from = this.get('zone', fromId)
+    const into = this.get('zone', intoId)
+    if (!from) throw new Error(`zone not found: ${fromId}`)
+    if (!into) throw new Error(`zone not found: ${intoId}`)
+    if (fromId === intoId) throw new Error('cannot merge a zone into itself')
+
+    const merge = this.db.transaction(() => {
+      for (const kind of ['device', 'wireRun']) {
+        for (const item of this.list(kind).filter((i) => i.zone_id === fromId)) {
+          this.update(kind, item.id, { zone_id: intoId })
+        }
+      }
+      this.db.prepare('DELETE FROM zones WHERE id = ?').run(fromId)
+      this._logChange('zone', fromId, 'merged', { before: from, mergedInto: into.id })
+    })
+    merge()
+    return into
   }
 
   // Marks a record removed rather than deleting the row (SPEC.md §3.1/§3.2).

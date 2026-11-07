@@ -16,7 +16,7 @@ const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024 // 15MB
 
 const MAX_PLAN_IMAGE_BYTES = 15 * 1024 * 1024 // 15MB, same cap as attachments
 
-const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan'])
+const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan', 'zone'])
 
 // Locked down in case someone opens the download URL directly: no scripts,
 // no network, no framing. In the webapp the file only ever loads through an
@@ -249,6 +249,19 @@ function registerRoutes (router, getStore, dataDir) {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Content-Security-Policy', PLAN_IMAGE_CSP)
     fs.createReadStream(filePath).pipe(res)
+  })
+
+  router.post('/zones/:id/merge', requireStore, (req, res) => {
+    const { into } = req.query
+    if (!into) {
+      res.status(400).json({ error: 'the into query param (the zone to merge into) is required' })
+      return
+    }
+    try {
+      res.json(rowToResource(req.wiringStore.mergeZones(req.params.id, into)))
+    } catch (err) {
+      res.status(/not found/.test(err.message) ? 404 : 400).json({ error: err.message })
+    }
   })
 
   router.get('/circuits/:id/diagram', requireStore, (req, res) => {
