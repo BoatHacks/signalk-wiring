@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-07
+
+### Added
+
+- The SignalK path field on devices suggests paths from the vessel's live
+  data tree as you type. Several words match in any order, and any text is
+  still accepted so a path can be documented before it exists.
+
+### Fixed
+
+- Creating a circuit, wire run, device or plan, and importing a CSV,
+  failed with "crypto.randomUUID is not a function" when the webapp was
+  loaded over plain http, which is how most boat LANs serve SignalK. Ids
+  are now generated in a way that works without a secure context.
+
 ## [0.3.0] - 2026-11-07
 
 ### Added
