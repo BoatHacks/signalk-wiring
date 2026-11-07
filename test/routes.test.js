@@ -274,3 +274,183 @@ test('routes 503 instead of crashing when the plugin is disabled', () => {
   assert.equal(res.statusCode, 503)
   cleanup()
 })
+
+const PNG_BYTES = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16)])
+const JPEG_BYTES = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16)])
+const WEBP_BYTES = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(8)])
+const SVG_BYTES = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"></svg>')
+
+async function uploadPlanImage (router, planId, body, contentType = 'image/svg+xml') {
+  const req = new FakeRequest({ params: { id: planId }, headers: { 'content-type': contentType } })
+  const res = new FakeResponse()
+  const done = new Promise((resolve) => res.on('finish', resolve))
+  router.invoke('post', '/plans/:id/image', req, res)
+  if (!res.writableEnded) {
+    req.emit('data', body)
+    req.emit('end')
+    await done
+  }
+  return res
+}
+
+test('POST /plans/:id/image stores the file under the plan id and records the filename', async () => {
+  const { store, dataDir, router, cleanup } = setup()
+  const plan = store.create('plan', { name: 'Main deck', view: 'top' })
+
+  const res = await uploadPlanImage(router, plan.id, SVG_BYTES)
+
+  assert.equal(res.statusCode, 201)
+  assert.equal(store.get('plan', plan.id).filename, `${plan.id}.svg`)
+  assert.deepEqual(fs.readFileSync(path.join(dataDir, 'plans', `${plan.id}.svg`)), SVG_BYTES)
+
+  cleanup()
+})
+
+test('POST /plans/:id/image rejects unsupported content types and bodies that do not match their type', async () => {
+  const { store, router, cleanup } = setup()
+  const plan = store.create('plan', { name: 'Main deck', view: 'top' })
+
+  const wrongType = await uploadPlanImage(router, plan.id, SVG_BYTES, 'application/pdf')
+  assert.equal(wrongType.statusCode, 415)
+
+  const notSvg = await uploadPlanImage(router, plan.id, Buffer.from('just some text'))
+  assert.equal(notSvg.statusCode, 400)
+
+  // Declared as PNG or JPEG but the bytes are something else.
+  assert.equal((await uploadPlanImage(router, plan.id, SVG_BYTES, 'image/png')).statusCode, 400)
+  assert.equal((await uploadPlanImage(router, plan.id, PNG_BYTES, 'image/jpeg')).statusCode, 400)
+
+  assert.equal(store.get('plan', plan.id).filename, null)
+
+  cleanup()
+})
+
+test('POST /plans/:id/image rejects an oversized upload mid-stream', async () => {
+  const { store, router, cleanup } = setup()
+  const plan = store.create('plan', { name: 'Main deck', view: 'top' })
+
+  const req = new FakeRequest({ params: { id: plan.id }, headers: { 'content-type': 'image/svg+xml' } })
+  const res = new FakeResponse()
+  router.invoke('post', '/plans/:id/image', req, res)
+  req.emit('data', Buffer.alloc(16 * 1024 * 1024))
+
+  assert.equal(res.statusCode, 413)
+  assert.equal(req.destroyed, true)
+  assert.equal(store.get('plan', plan.id).filename, null)
+
+  cleanup()
+})
+
+for (const [label, mime, ext, bytes] of [
+  ['PNG', 'image/png', 'png', PNG_BYTES],
+  ['JPEG', 'image/jpeg', 'jpg', JPEG_BYTES],
+  ['WebP', 'image/webp', 'webp', WEBP_BYTES]
+]) {
+  test(`plans accept ${label} drawings and serve them back with the right type`, async () => {
+    const { store, dataDir, router, cleanup } = setup()
+    const plan = store.create('plan', { name: 'Side view', view: 'side' })
+
+    const up = await uploadPlanImage(router, plan.id, bytes, mime)
+    assert.equal(up.statusCode, 201)
+    assert.equal(store.get('plan', plan.id).filename, `${plan.id}.${ext}`)
+    assert.ok(fs.existsSync(path.join(dataDir, 'plans', `${plan.id}.${ext}`)))
+
+    const res = new FakeResponse()
+    const done = new Promise((resolve) => res.on('finish', resolve))
+    router.invoke('get', '/plans/:id/image', new FakeRequest({ params: { id: plan.id } }), res)
+    await done
+    assert.equal(res.headers['Content-Type'], mime)
+    assert.equal(res.headers['X-Content-Type-Options'], 'nosniff')
+    assert.deepEqual(res.body, bytes)
+
+    cleanup()
+  })
+}
+
+test('replacing a drawing with another format removes the old file', async () => {
+  const { store, dataDir, router, cleanup } = setup()
+  const plan = store.create('plan', { name: 'Deck', view: 'top' })
+
+  await uploadPlanImage(router, plan.id, SVG_BYTES)
+  await uploadPlanImage(router, plan.id, PNG_BYTES, 'image/png')
+
+  assert.equal(store.get('plan', plan.id).filename, `${plan.id}.png`)
+  assert.deepEqual(fs.readdirSync(path.join(dataDir, 'plans')), [`${plan.id}.png`])
+
+  cleanup()
+})
+
+test('POST /plans/:id/image returns 404 for an unknown plan', async () => {
+  const { router, cleanup } = setup()
+  const res = await uploadPlanImage(router, 'nope', SVG_BYTES)
+  assert.equal(res.statusCode, 404)
+  cleanup()
+})
+
+test('GET /plans/:id/image serves the file with the safe headers', async () => {
+  const { store, router, cleanup } = setup()
+  const plan = store.create('plan', { name: 'Main deck', view: 'top' })
+  await uploadPlanImage(router, plan.id, SVG_BYTES)
+
+  const res = new FakeResponse()
+  const done = new Promise((resolve) => res.on('finish', resolve))
+  router.invoke('get', '/plans/:id/image', new FakeRequest({ params: { id: plan.id } }), res)
+  await done
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers['Content-Type'], 'image/svg+xml')
+  assert.equal(res.headers['X-Content-Type-Options'], 'nosniff')
+  assert.match(res.headers['Content-Security-Policy'], /default-src 'none'/)
+  assert.match(res.headers['Content-Security-Policy'], /sandbox/)
+  assert.deepEqual(res.body, SVG_BYTES)
+
+  cleanup()
+})
+
+test('GET /plans/:id/image returns 404 when no file has been uploaded', () => {
+  const { store, router, cleanup } = setup()
+  const plan = store.create('plan', { name: 'Main deck', view: 'top' })
+
+  const res = new FakeResponse()
+  router.invoke('get', '/plans/:id/image', new FakeRequest({ params: { id: plan.id } }), res)
+
+  assert.equal(res.statusCode, 404)
+  cleanup()
+})
+
+test('the plan routes return 503 while the plugin is disabled', () => {
+  const { router, disable, cleanup } = setup()
+  disable()
+
+  const get = new FakeResponse()
+  router.invoke('get', '/plans/:id/image', new FakeRequest({ params: { id: 'x' } }), get)
+  assert.equal(get.statusCode, 503)
+
+  const post = new FakeResponse()
+  router.invoke('post', '/plans/:id/image', new FakeRequest({ params: { id: 'x' } }), post)
+  assert.equal(post.statusCode, 503)
+
+  cleanup()
+})
+
+test('the SVG download is registered readonly when the server supports router.access, everything else stays admin-only', () => {
+  const store = new Store(':memory:')
+  const registered = []
+  const router = createFakeRouter()
+  router.access = (level) => {
+    const registrar = {}
+    for (const method of ['get', 'post', 'delete']) {
+      registrar[method] = (routePath, ...handlers) => {
+        registered.push({ level, method, routePath })
+        router[method](routePath, ...handlers)
+        return registrar
+      }
+    }
+    return registrar
+  }
+
+  registerRoutes(router, () => store, os.tmpdir())
+
+  assert.deepEqual(registered, [{ level: 'readonly', method: 'get', routePath: '/plans/:id/image' }])
+  store.close()
+})

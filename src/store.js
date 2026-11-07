@@ -12,7 +12,7 @@ const TABLES = {
     table: 'circuits',
     columns: [
       'id', 'name', 'source_label', 'breaker_rating', 'voltage', 'panel_ref',
-      'convention', 'status', 'notes'
+      'panel_device_id', 'convention', 'status', 'notes'
     ]
   },
   wireRun: {
@@ -20,12 +20,19 @@ const TABLES = {
     columns: [
       'id', 'circuit_id', 'from_endpoint', 'to_endpoint', 'gauge', 'gauge_unit',
       'color', 'length', 'length_unit', 'zone', 'cable_label', 'switch_ref',
-      'status', 'notes'
+      'route', 'status', 'notes'
     ]
   },
   device: {
     table: 'devices',
-    columns: ['id', 'name', 'type', 'zone', 'rated_power_w', 'signalk_path', 'status', 'notes']
+    columns: [
+      'id', 'name', 'type', 'zone', 'rated_power_w', 'signalk_path',
+      'pos_x', 'pos_y', 'pos_z', 'status', 'notes'
+    ]
+  },
+  plan: {
+    table: 'plans',
+    columns: ['id', 'name', 'view', 'filename', 'z_min', 'z_max', 'calibration', 'status', 'notes']
   }
 }
 
@@ -72,6 +79,23 @@ const MIGRATIONS = [
       if (!hasColumn('devices', 'signalk_path')) {
         db.exec('ALTER TABLE devices ADD COLUMN signalk_path TEXT')
       }
+    }
+  },
+  {
+    version: 2,
+    description: 'circuits: + panel_device_id; wire_runs: + route; devices: + pos_x, pos_y, pos_z ' +
+      '(the plans table comes from schema.sql)',
+    apply (db) {
+      const hasColumn = (table, column) =>
+        db.prepare('PRAGMA table_info(' + table + ')').all().some((c) => c.name === column)
+      const addColumn = (table, column, type) => {
+        if (!hasColumn(table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+      }
+      addColumn('circuits', 'panel_device_id', 'TEXT')
+      addColumn('wire_runs', 'route', 'TEXT')
+      addColumn('devices', 'pos_x', 'REAL')
+      addColumn('devices', 'pos_y', 'REAL')
+      addColumn('devices', 'pos_z', 'REAL')
     }
   }
 ]

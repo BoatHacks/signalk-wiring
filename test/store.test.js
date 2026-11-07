@@ -246,3 +246,124 @@ test('migration is a no-op (safe to run twice) on an already-migrated database',
 
   fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
 })
+
+test('migration: a 0.2.0 database gains position, route, panel link and the plans table', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+
+  // Shape of the schema as shipped in 0.2.0, before the floorplan columns.
+  const oldDb = new Database(dbPath)
+  oldDb.exec(`
+    CREATE TABLE circuits (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, source_label TEXT,
+      breaker_rating REAL, voltage REAL, panel_ref TEXT, convention TEXT,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT
+    );
+    CREATE TABLE wire_runs (
+      id TEXT PRIMARY KEY, circuit_id TEXT NOT NULL REFERENCES circuits(id),
+      from_endpoint TEXT, to_endpoint TEXT, gauge REAL, gauge_unit TEXT,
+      color TEXT, length REAL, length_unit TEXT, zone TEXT, cable_label TEXT,
+      switch_ref TEXT, status TEXT NOT NULL DEFAULT 'active', notes TEXT
+    );
+    CREATE TABLE devices (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, zone TEXT,
+      rated_power_w REAL, signalk_path TEXT,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT
+    );
+    INSERT INTO devices (id, name) VALUES ('d1', 'Bilge pump');
+  `)
+  oldDb.pragma('user_version = 1')
+  oldDb.close()
+
+  const store = new Store(dbPath)
+  const device = store.get('device', 'd1')
+  assert.equal(device.name, 'Bilge pump')
+  assert.equal(device.pos_x, null)
+  assert.equal(device.pos_y, null)
+  assert.equal(device.pos_z, null)
+
+  const circuit = store.create('circuit', { name: 'C', panel_device_id: 'd1' })
+  assert.equal(circuit.panel_device_id, 'd1')
+  const run = store.create('wireRun', { circuit_id: circuit.id, route: '[]' })
+  assert.equal(run.route, '[]')
+  assert.equal(store.list('plan').length, 0)
+
+  store.close()
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})
+
+test('migration to the floorplan columns is a no-op when run twice', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+
+  const store1 = new Store(dbPath)
+  store1.create('device', { id: 'd1', name: 'Pump', pos_x: 1.5, pos_y: -0.4, pos_z: 0.2 })
+  store1.close()
+
+  const store2 = new Store(dbPath)
+  const device = store2.get('device', 'd1')
+  assert.equal(device.pos_x, 1.5)
+  assert.equal(device.pos_z, 0.2)
+  store2.close()
+
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})
+
+test('a position change writes one change-log entry and a half-placed device is allowed', () => {
+  const store = freshStore()
+  const device = store.create('device', { name: 'Pump', pos_x: 2 })
+  assert.equal(device.pos_y, null)
+
+  store.update('device', device.id, { pos_x: 3, pos_y: 0.5 })
+
+  const log = store.changeLog('device', device.id)
+  assert.equal(log.length, 2) // created + one update
+  const diff = JSON.parse(log[1].diff_json)
+  assert.deepEqual(diff, {
+    pos_x: { before: 2, after: 3 },
+    pos_y: { before: null, after: 0.5 }
+  })
+
+  store.close()
+})
+
+test('a route edit writes a single route diff, not one entry per point', () => {
+  const store = freshStore()
+  const circuit = store.create('circuit', { name: 'C' })
+  const run = store.create('wireRun', { circuit_id: circuit.id })
+
+  const route = JSON.stringify([{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }])
+  store.update('wireRun', run.id, { route })
+
+  const log = store.changeLog('wireRun', run.id)
+  assert.equal(log.length, 2)
+  assert.deepEqual(Object.keys(JSON.parse(log[1].diff_json)), ['route'])
+
+  store.close()
+})
+
+test('plans: create, update and remove keep history like other records', () => {
+  const store = freshStore()
+  const plan = store.create('plan', {
+    name: 'Main deck',
+    view: 'top',
+    z_min: 0.5,
+    z_max: 2.5,
+    calibration: JSON.stringify({ originPx: [10, 20], pxPerMeter: 42 })
+  })
+  assert.equal(plan.status, 'active')
+  assert.equal(plan.filename, null)
+
+  store.update('plan', plan.id, { filename: `${plan.id}.svg` })
+  store.remove('plan', plan.id)
+
+  assert.equal(store.get('plan', plan.id).status, 'removed')
+  assert.equal(store.changeLog('plan', plan.id).length, 3)
+
+  store.close()
+})
+
+test('plans: view must be top or side', () => {
+  const store = freshStore()
+  assert.throws(() => store.create('plan', { name: 'Bad', view: 'diagonal' }))
+  store.create('plan', { name: 'Profile', view: 'side' })
+  store.close()
+})

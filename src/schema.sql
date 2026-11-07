@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS circuits (
   breaker_rating REAL,
   voltage REAL,
   panel_ref TEXT,
+  panel_device_id TEXT,
   convention TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS wire_runs (
   zone TEXT,
   cable_label TEXT,
   switch_ref TEXT,
+  route TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );
@@ -36,6 +38,21 @@ CREATE TABLE IF NOT EXISTS devices (
   zone TEXT,
   rated_power_w REAL,
   signalk_path TEXT,
+  pos_x REAL,
+  pos_y REAL,
+  pos_z REAL,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  view TEXT NOT NULL CHECK (view IN ('top', 'side')),
+  filename TEXT,
+  z_min REAL,
+  z_max REAL,
+  calibration TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );
