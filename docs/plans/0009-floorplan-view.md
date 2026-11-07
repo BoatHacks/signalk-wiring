@@ -161,7 +161,7 @@ Delivered as separate slices, each its own commit with tests:
 - [x] 4. Device placement in both views, with cross-highlighting.
 - [x] 5. Panel link on circuits, route drawing (click to add, drag to
       adjust, delete a point) and measured length.
-- [ ] 6. Docs: SPEC.md, ARCHITECTURE.md, README, CHANGELOG; CSV import is
+- [x] 6. Docs: SPEC.md, ARCHITECTURE.md, README, CHANGELOG; CSV import is
       unaffected.
 
 ## Files to Create/Modify

@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Floorplan tab: upload top-down and side drawings (SVG, PNG, JPEG or
+  WebP), calibrate each with two clicks and a real distance, place
+  devices by clicking in either view (one 3D position shown in both),
+  and draw wire run routes with a measured 3D length offered next to the
+  recorded length. Circuits can name a panel device that routes start
+  from, and selecting a circuit highlights its devices and routes.
+- Devices gain `posX`, `posY`, `posZ`; wire runs gain `route`; circuits
+  gain `panelDeviceId`; a new `wiringPlans` resource. Existing databases
+  migrate automatically.
+
 ### Fixed
 
 - The plugin configuration had no effect. The default gauge and length

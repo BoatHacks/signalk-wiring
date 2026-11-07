@@ -63,8 +63,16 @@ Registered via `registerWithRouter(router)`. Owns:
   denormalized read (circuit + its wire runs + their devices) shaped for
   the client-side diagram renderer, to avoid N+1 fetches from the webapp.
 - Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`).
+- Plan drawings (`POST` and `GET /plugins/signalk-wiring/plans/:id/image`).
+  Upload accepts SVG, PNG, JPEG and WebP, caps size at 15MB, checks the
+  bytes against the declared type, and stores the file as `<id>.<ext>`
+  under `plans/` in the data directory (a new format replaces the old
+  file). Download sets the type from the extension, `nosniff` and a
+  restrictive Content-Security-Policy. It is registered with
+  `router.access('readonly')` when the router offers it, so any
+  logged-in user can read a plan; everything else stays admin-only.
 
-These are admin-gated by SignalK itself (see §6), which is acceptable
+Except for that download, these are admin-gated by SignalK itself (see §6), which is acceptable
 since they're only ever called by this plugin's own authoring UI. The
 webapp's static assets are *not* served from here — see §2.4.
 
@@ -149,6 +157,7 @@ CREATE TABLE circuits (
   breaker_rating REAL,    -- numeric amps, optional -- 0008
   voltage REAL,           -- optional, per-circuit not installation-wide -- 0008
   panel_ref TEXT,
+  panel_device_id TEXT,    -- panel/battery/bus bar device, optional -- 0009
   convention TEXT,         -- override; NULL = use installation default
   status TEXT NOT NULL,    -- 'active' | 'removed'
   notes TEXT
@@ -167,6 +176,7 @@ CREATE TABLE wire_runs (
   zone TEXT,
   cable_label TEXT,        -- physical tag/number on the wire -- 0008
   switch_ref TEXT,         -- panel switch position, distinct from the fuse -- 0008
+  route TEXT,              -- JSON list of {x,y,z} waypoints in meters -- 0009
   status TEXT NOT NULL,
   notes TEXT
 );
@@ -178,6 +188,21 @@ CREATE TABLE devices (
   zone TEXT,
   rated_power_w REAL,     -- nameplate/rated draw, optional -- 0008
   signalk_path TEXT,      -- e.g. electrical.switches.anchorLight -- 0008
+  pos_x REAL,             -- meters, any axis may be NULL -- 0009
+  pos_y REAL,
+  pos_z REAL,
+  status TEXT NOT NULL,
+  notes TEXT
+);
+
+CREATE TABLE plans (       -- 0009
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  view TEXT NOT NULL,       -- 'top' | 'side'
+  filename TEXT,            -- <id>.<ext> of the uploaded drawing
+  z_min REAL,               -- optional height range for top-view plans
+  z_max REAL,
+  calibration TEXT,         -- JSON: originPx, pxPerMeter, dir, flip
   status TEXT NOT NULL,
   notes TEXT
 );
@@ -212,9 +237,12 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There's exactly one migration today (plan
-0008's field additions/rename); this stays a plain ordered list, not a
-general framework, until there's a second one to generalize from.
+every subsequent restart. There are two migrations: plan 0008's field
+additions and rename, and plan 0009's position, route and panel-link
+columns (the `plans` table itself comes from `schema.sql`). Structured
+columns (`route`, `calibration`) are JSON text in SQLite so a route edit
+is a single `route` entry in the change log, and `resources.js` converts
+them to real arrays and objects at the resource boundary.
 
 ## 4. Technology Stack
 
@@ -269,6 +297,11 @@ general framework, until there's a second one to generalize from.
 - Attachment uploads: validate MIME type and cap file size server-side
   before writing to disk; store files under a UUID-derived filename
   (never the client-supplied name) to avoid path traversal.
+- Plan drawings are never inlined into the page. The webapp draws them
+  through an `<image>` element, where scripts in an SVG do not run, and
+  the download route adds a restrictive Content-Security-Policy and
+  `nosniff` in case the URL is opened directly. Files are named by plan
+  id, checked against their own bytes, and capped at 15MB.
 - No user input is ever interpolated into SQL — all queries go through
   `better-sqlite3`'s parameterized statement API.
 
@@ -287,6 +320,8 @@ signalk-wiring/
     app.js                   # UI: browse/search, forms, diagram, changelog view
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
+    floorplan.js               # pure geometry: calibration, projection, routes
+    floorplanView.js           # floorplan tab: upload, viewer, placement, routes
     style.css
     vendor/                  # preact-standalone.module.js, dagre — vendored, no CDN (§2.4)
   test/
@@ -295,6 +330,7 @@ signalk-wiring/
     routes.test.js
     import.test.mjs
     loadSummary.test.mjs
+    floorplan.test.mjs
     fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md

@@ -32,6 +32,12 @@ to someone else doesn't depend on the current owner being present.
   intact — a refit doesn't erase what used to be there.
 - A **change log** per record: every create/edit/removal is timestamped
   with a before/after diff, viewable from the webapp.
+- A **floorplan view**: upload a top-down or side drawing (SVG, PNG,
+  JPEG or WebP), calibrate it once with two clicks and a real distance,
+  then place devices by clicking (one 3D position shown in both views)
+  and draw wire run routes over it. The route's measured length is
+  offered next to the recorded length. Several deck plans are supported,
+  each with an optional height range.
 - **Photo/file attachments** per wire run or device (JPEG/PNG/WebP/HEIC/
   PDF, 15MB cap).
 - An **auto-generated diagram** per circuit (source → wire run(s) →
@@ -64,7 +70,8 @@ built-in `notes`/`routes` resources — reachable at
 `wiringDevices`), and the webapp shell itself
 (`/signalk-wiring/`) loads without logging in too. **Writes**,
 **attachments**, and the **change log** all require the SignalK admin
-login; a logged-out visitor can browse but not edit, and the webapp
+login (plan drawings need any logged-in user on signalk-server 2.36 or
+later, admin on older servers); a logged-out visitor can browse but not edit, and the webapp
 shows a clear message rather than failing silently. If you expose your
 SignalK instance beyond your own network, this is controlled by
 SignalK's own `allow_readonly` setting. See

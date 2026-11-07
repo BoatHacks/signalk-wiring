@@ -91,8 +91,10 @@ A wire run or device is either:
     optional — a boat can have more than one voltage domain, e.g. a 12V
     DC panel and a 230V AC panel, so this is per-circuit rather than a
     single installation-wide value), `panelRef`, `convention` override
-    (optional, defaults to installation setting), `status`
-    (active/removed), `notes`.
+    (optional, defaults to installation setting), `panelDeviceId`
+    (optional, the device that is this circuit's panel, battery or bus
+    bar, so drawn routes can start there), `status` (active/removed),
+    `notes`.
 - **WireRun**
   - `id`, `circuitId`, `fromEndpoint`, `toEndpoint` (each a device id,
     source, or splice reference), `gauge` + `gaugeUnit` (AWG | mm²),
@@ -102,7 +104,10 @@ A wire run or device is either:
     person than color, especially once colors fade or several runs
     share one), `switchRef` (a panel switch position, optional and
     distinct from the circuit's breaker/fuse — a device can be on a
-    shared fuse but its own individually-switched position), `status`,
+    shared fuse but its own individually-switched position), `route`
+    (optional, a list of `{x, y, z}` waypoints in meters drawn on the
+    floorplan; the start is derived from the from-device or the
+    circuit's panel device and is not stored), `status`,
     `attachments` (photo/file ids), `notes`.
 - **Device**
   - `id`, `name`, `type` (free text, e.g. "bilge pump"), `zone` (optional),
@@ -111,8 +116,18 @@ A wire run or device is either:
     `electrical.switches.anchorLight` or a battery's voltage/current
     sensor path; free text, not validated against the live data tree,
     so a device can be documented before its SignalK path exists or on
-    a server that doesn't currently have a source for it), `status`,
-    `notes`.
+    a server that doesn't currently have a source for it), `posX`,
+    `posY`, `posZ` (optional position in meters: x along the boat,
+    y athwartships with 0 on the centerline, z height; any axis may be
+    unset so a device can be half-placed), `status`, `notes`.
+- **Plan**
+  - `id`, `name`, `view` (`top` | `side`), `filename` (the uploaded
+    drawing: SVG, PNG, JPEG or WebP), `zMin`/`zMax` (optional height
+    range in meters; a top-view plan with a range shows only what lies
+    inside it, so each deck plan shows its own deck), `calibration`
+    (origin, scale and axis direction, set by clicking two points and
+    entering the real distance), `status`, `notes`. Several plans per
+    view are allowed.
 - **Attachment**
   - `id`, `filename`, `mimeType`, owning record type + id, uploaded date.
 - **ChangeLogEntry**
@@ -131,7 +146,7 @@ import is a deferred feature (see 10.2), not an MVP input source.
 
 - `Circuit`, `WireRun`, and `Device` are served as SignalK resource types
   (`/signalk/v2/api/resources/wiringCircuits`, `.../wiringWireRuns`,
-  `.../wiringDevices`) via standard `listResources` / `getResource` /
+  `.../wiringDevices`, `.../wiringPlans`) via standard `listResources` / `getResource` /
   `setResource` / `deleteResource` semantics.
 - The plugin configuration (§9) is served read-only as
   `/signalk/v2/api/resources/wiringSettings/config`, so the anonymously
@@ -140,6 +155,10 @@ import is a deferred feature (see 10.2), not an MVP input source.
   served under the plugin's own admin-gated routes
   (`/plugins/signalk-wiring/...`), since they're only ever used by the
   plugin's own UI.
+- Plan drawings: `POST /plugins/signalk-wiring/plans/:id/image` (admin)
+  uploads one, `GET .../plans/:id/image` serves it to any logged-in user
+  where the server supports per-route access levels (signalk-server
+  2.36 and later), and to admins only otherwise.
 
 ### 6.2 Events / Streaming
 
@@ -165,6 +184,12 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   skip them), preview the resulting circuits/wire runs/devices, then
   import. Column mapping rather than a fixed layout, since a real-world
   export's columns won't match another boat's.
+- A floorplan view: upload a top-down or side drawing, calibrate it
+  once, then place devices by clicking (one 3D position shown in both
+  views), draw wire run routes over it (click to add, drag to adjust),
+  and read the measured cable length, offered as a suggestion next to
+  the recorded length and never applied automatically. Selecting a
+  circuit highlights its devices and routes in both views.
 - A panel load summary: per active circuit, total connected devices'
   rated wattage converted to amps via the circuit's voltage, checked
   against its breaker rating. States its own known limitation in the UI
@@ -207,6 +232,7 @@ configuration.
 - Convention setting (drives labeling hints only).
 - CSV import with column mapping (moved out of deferred — see below).
 - Panel load summary.
+- Floorplan view with device positions and measured wire routes.
 
 ### 10.2 Post-MVP / Deferred
 
@@ -214,6 +240,10 @@ configuration.
   entry on defining a zone list up front; can be layered on once real
   zone names are in use.
 - Cross-boat/fleet comparison — out of scope for a single-vessel plugin.
+- Direct DXF/DWG import for plans (a browser cannot draw them without a
+  converter; export SVG from the CAD tool instead).
+- Correcting warped or skewed drawings: calibration assumes a uniform
+  scale on an axis-aligned plan.
 - PDF/print export of diagrams — deferred until the diagram view itself
   is validated with real data.
 
