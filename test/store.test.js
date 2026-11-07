@@ -649,3 +649,52 @@ test('icons: migration adds the icon column to an existing database', () => {
   new Store(dbPath).close() // a restart is harmless
   fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
 })
+
+// Conduits (plan 0015)
+
+function tableNames (db) {
+  return db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name)
+}
+
+test('migration: a 0.4.1 database gains the conduit tables and keeps its data', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+
+  const first = new Store(dbPath)
+  first.create('device', { id: 'd1', name: 'Pump' })
+  first.close()
+
+  // Put the database back into its pre-conduit shape.
+  const oldDb = new Database(dbPath)
+  oldDb.exec('DROP TABLE wire_run_conduits; DROP TABLE conduits;')
+  oldDb.pragma('user_version = 5')
+  oldDb.close()
+
+  const store = new Store(dbPath)
+  assert.equal(store.get('device', 'd1').name, 'Pump')
+  const names = tableNames(store.db)
+  assert.ok(names.includes('conduits'))
+  assert.ok(names.includes('wire_run_conduits'))
+  const columns = store.db.prepare('PRAGMA table_info(conduits)').all().map((c) => c.name)
+  for (const c of ['id', 'name', 'kind', 'inner_diameter', 'diameter_unit', 'zone', 'zone_id', 'route', 'notes', 'status']) {
+    assert.ok(columns.includes(c), `conduits.${c}`)
+  }
+  const joinColumns = store.db.prepare('PRAGMA table_info(wire_run_conduits)').all().map((c) => c.name)
+  assert.deepEqual(joinColumns.sort(), ['conduit_id', 'position', 'wire_run_id'])
+  assert.equal(store.db.pragma('user_version', { simple: true }) >= 6, true)
+  store.close()
+
+  // Opening again changes nothing.
+  const again = new Store(dbPath)
+  assert.equal(again.get('device', 'd1').name, 'Pump')
+  again.close()
+
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})
+
+test('a fresh database already has the conduit tables', () => {
+  const store = freshStore()
+  const names = tableNames(store.db)
+  assert.ok(names.includes('conduits'))
+  assert.ok(names.includes('wire_run_conduits'))
+  store.close()
+})

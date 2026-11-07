@@ -165,6 +165,29 @@ const MIGRATIONS = [
       const has = db.prepare('PRAGMA table_info(devices)').all().some((c) => c.name === 'icon_attachment_id')
       if (!has) db.exec('ALTER TABLE devices ADD COLUMN icon_attachment_id TEXT')
     }
+  },
+  {
+    version: 6,
+    description: 'conduits and wire_run_conduits (the tables come from schema.sql; this guards the version)',
+    apply (db) {
+      // schema.sql runs on every open with IF NOT EXISTS, so by now the
+      // tables exist for fresh and old databases alike. Create them here
+      // too in case this step is ever run without that file.
+      const exists = (name) =>
+        db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name)
+      if (!exists('conduits')) {
+        db.exec(`CREATE TABLE conduits (
+          id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT, inner_diameter REAL,
+          diameter_unit TEXT, zone TEXT, zone_id TEXT REFERENCES zones(id), route TEXT,
+          status TEXT NOT NULL DEFAULT 'active', notes TEXT)`)
+      }
+      if (!exists('wire_run_conduits')) {
+        db.exec(`CREATE TABLE wire_run_conduits (
+          wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+          conduit_id TEXT NOT NULL REFERENCES conduits(id),
+          position INTEGER NOT NULL, PRIMARY KEY (wire_run_id, conduit_id))`)
+      }
+    }
   }
 ]
 

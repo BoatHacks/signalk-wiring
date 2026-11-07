@@ -89,7 +89,7 @@ cable.
 ## Implementation Steps (draft)
 
 - [x] Settle the open design questions.
-- [ ] Schema and migration: conduits, cable assignments, conduit route.
+- [x] Schema and migration: conduits, cable assignments, conduit route.
 - [ ] Store and resource provider: conduits, assignments, change log.
 - [ ] Conduits tab with cable assignment on the conduit's detail page.
 - [ ] Floorplan: draw a conduit route and show cables along it.

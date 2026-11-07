@@ -89,3 +89,25 @@ CREATE TABLE IF NOT EXISTS change_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_change_log_record ON change_log (record_type, record_id);
+
+CREATE TABLE IF NOT EXISTS conduits (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT,
+  inner_diameter REAL,
+  diameter_unit TEXT,
+  zone TEXT,
+  zone_id TEXT REFERENCES zones(id),
+  route TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS wire_run_conduits (
+  wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+  conduit_id TEXT NOT NULL REFERENCES conduits(id),
+  position INTEGER NOT NULL,
+  PRIMARY KEY (wire_run_id, conduit_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wire_run_conduits_conduit ON wire_run_conduits (conduit_id);
