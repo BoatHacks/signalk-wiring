@@ -187,6 +187,7 @@ CREATE TABLE devices (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   type TEXT,
+  role TEXT NOT NULL DEFAULT 'consumer',  -- consumer | source | storage | distribution | converter -- 0011
   zone TEXT,              -- the zone's name, kept in step with zone_id
   zone_id TEXT REFERENCES zones(id),  -- 0010
   tags TEXT,              -- JSON array of strings -- 0010
@@ -246,7 +247,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are three migrations (the third is described below): plan 0008's field
+every subsequent restart. There are four migrations (the third and fourth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -263,6 +264,11 @@ accept `zone_id` or a zone name; `zone_id` wins when both are given.
 Zones are a plain list rather than removed-but-kept records: an unused zone
 is deleted (and the deletion logged), a zone in use is refused, and a merge
 moves its items, each move logged.
+
+Plan 0011's migration adds `devices.role` with the default `consumer`, so
+every existing device is a consumer. `store.js` validates the role on every
+write (a cleared role returns to the default), and `public/roles.js` holds
+the labels and hints the webapp shows.
 
 ## 4. Technology Stack
 
@@ -340,6 +346,7 @@ signalk-wiring/
     app.js                   # UI: browse/search, forms, diagram, changelog view
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
+    roles.js                   # device roles: labels and hints
     zones.js                   # tags parsing, zone and tag filters
     floorplan.js               # pure geometry: calibration, projection, routes
     floorplanView.js           # floorplan tab: upload, viewer, placement, routes
@@ -353,6 +360,7 @@ signalk-wiring/
     loadSummary.test.mjs
     floorplan.test.mjs
     zones.test.mjs
+    roles.test.mjs
     fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md

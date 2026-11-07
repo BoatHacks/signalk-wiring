@@ -26,7 +26,7 @@ const TABLES = {
   device: {
     table: 'devices',
     columns: [
-      'id', 'name', 'type', 'zone', 'rated_power_w', 'signalk_path',
+      'id', 'name', 'type', 'role', 'zone', 'rated_power_w', 'signalk_path',
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
@@ -39,6 +39,12 @@ const TABLES = {
     columns: ['id', 'name', 'view', 'filename', 'z_min', 'z_max', 'calibration', 'status', 'notes']
   }
 }
+
+// What a device does with power. Consumers are the default, so devices
+// recorded before roles existed stay valid. Distribution covers switches,
+// breakers, fuses, bus bars, panels, isolators and relays; converters are
+// inverters, chargers and DC-DC units.
+const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter']
 
 // Each migration is applied at most once per database, tracked via
 // SQLite's own `PRAGMA user_version` (an integer SQLite reserves
@@ -139,6 +145,14 @@ const MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    version: 4,
+    description: "devices: + role (default 'consumer')",
+    apply (db) {
+      const hasRole = db.prepare('PRAGMA table_info(devices)').all().some((c) => c.name === 'role')
+      if (!hasRole) db.exec("ALTER TABLE devices ADD COLUMN role TEXT NOT NULL DEFAULT 'consumer'")
+    }
   }
 ]
 
@@ -174,6 +188,7 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (kind === 'device' || kind === 'wireRun') row = this._resolveZone(row)
+    if (kind === 'device') row = this._checkRole(row)
     const cols = columns.filter((c) => c in row)
     const placeholders = cols.map((c) => `@${c}`).join(', ')
     this.db
@@ -200,6 +215,7 @@ class Store {
 
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (kind === 'device' || kind === 'wireRun') patch = this._resolveZone(patch)
+    if (kind === 'device') patch = this._checkRole(patch)
 
     const { table, columns } = TABLES[kind]
     const cols = columns.filter((c) => c !== 'id' && c in patch)
@@ -223,6 +239,19 @@ class Store {
       this._logChange(kind, id, summary, diff)
     }
     return updated
+  }
+
+  // An absent role stays absent (the column default applies); a cleared one
+  // goes back to the default; anything else must be a known role.
+  _checkRole (fields) {
+    if (!('role' in fields)) return fields
+    if (fields.role === null || fields.role === '' || fields.role === undefined) {
+      return { ...fields, role: 'consumer' }
+    }
+    if (!DEVICE_ROLES.includes(fields.role)) {
+      throw new Error(`role must be one of: ${DEVICE_ROLES.join(', ')}`)
+    }
+    return fields
   }
 
   // A zone name is trimmed, required, and unique ignoring case.
@@ -367,4 +396,4 @@ class Store {
   }
 }
 
-module.exports = { Store, REMOVED_STATUS }
+module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES }

@@ -15,6 +15,10 @@ to someone else doesn't depend on the current owner being present.
   can be fed by more than one circuit, and can record its rated power
   draw and a SignalK path (e.g. `electrical.switches.anchorLight`) it
   corresponds to.
+- A **role** on every device (consumer, source, storage, distribution or
+  converter) so power sources such as solar, shore power or a generator,
+  batteries, switches and inverters are told apart from the things that
+  use power. Only consumers count towards a circuit's load.
 - **Zones** (e.g. "engine room") on wire runs and devices, chosen from a
   managed list you can rename and merge, plus free-text **tags** for other
   groupings such as an audio zone, with zone and tag filters on the lists.

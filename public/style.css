@@ -500,3 +500,9 @@ label.inline {
 .hint { color: var(--text-muted); font-size: 0.8rem; }
 .filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
 .filter-bar .form-field { min-width: 180px; }
+
+.device-marker.role-source circle { fill: #16a34a; stroke: #14532d; }
+.device-marker.role-storage circle { fill: #7c3aed; stroke: #4c1d95; }
+.device-marker.role-distribution circle { fill: #64748b; stroke: #1e293b; }
+.device-marker.role-converter circle { fill: #0891b2; stroke: #164e63; }
+.device-marker.highlighted circle { stroke: var(--accent); stroke-width: 1.2; fill-opacity: 0.9; }

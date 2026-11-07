@@ -1,6 +1,7 @@
 import { html, render, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { newId } from './ids.js'
 import { PathCombobox } from './signalkPaths.js'
+import { ROLES, roleLabel } from './roles.js'
 import { NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches } from './zones.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
@@ -143,7 +144,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
     const v = {}
     for (const f of fields) {
       const raw = initial ? initial[f.key] : null
-      v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : ''
+      v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : (f.defaultValue ?? '')
     }
     return v
   })
@@ -187,8 +188,11 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
           `}
           ${f.type === 'select' && html`
             <select value=${values[f.key]} onChange=${(e) => setField(f.key, e.target.value)}>
-              <option value="">—</option>
-              ${f.options.map((o) => html`<option value=${o} key=${o}>${o}</option>`)}
+              ${!f.noBlank && html`<option value="">—</option>`}
+              ${f.options.map((o) => {
+                const option = typeof o === 'string' ? { value: o, label: o } : o
+                return html`<option value=${option.value} key=${option.value}>${option.label}</option>`
+              })}
             </select>
           `}
           ${f.type === 'zone' && html`
@@ -412,6 +416,15 @@ const CIRCUIT_FIELDS = [
 
 const DEVICE_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true },
+  {
+    key: 'role',
+    label: 'Role',
+    type: 'select',
+    options: ROLES.map((r) => ({ value: r.value, label: r.label })),
+    defaultValue: 'consumer',
+    noBlank: true,
+    hint: 'Consumer uses power. Source supplies it (solar, shore power, generator, hydro, wind, alternator). Storage is batteries. Distribution is switches, breakers, bus bars and panels. Converter is inverters, chargers and DC-DC. Put the specific kind in Type.'
+  },
   { key: 'type', label: 'Type', type: 'text' },
   {
     key: 'zoneId',
@@ -464,7 +477,7 @@ const WIRE_RUN_FIELDS = [
 ]
 
 // Zone and tag filter for a list. `items` supplies the tags in use.
-function ZoneTagFilter ({ items, filter, onChange }) {
+function ZoneTagFilter ({ items, filter, onChange, withRole = false }) {
   const { items: zones } = useResourceList('wiringZones')
   const tags = collectTags(items)
   return html`
@@ -476,6 +489,14 @@ function ZoneTagFilter ({ items, filter, onChange }) {
           ${zones.map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
         </select>
       </label>
+      ${withRole && html`
+        <label class="form-field compact"><span>Role</span>
+          <select value=${filter.role || ''} onChange=${(e) => onChange({ ...filter, role: e.target.value || null })}>
+            <option value="">All roles</option>
+            ${ROLES.map((r) => html`<option value=${r.value} key=${r.value}>${r.label}</option>`)}
+          </select>
+        </label>
+      `}
       ${tags.length > 0 && html`
         <label class="form-field compact"><span>Tag</span>
           <select value=${filter.tag || ''} onChange=${(e) => onChange({ ...filter, tag: e.target.value || null })}>
@@ -898,7 +919,8 @@ function DevicesList ({ onSelect }) {
   const [showForm, setShowForm] = useState(false)
   const { loading, error, items } = useResourceList('wiringDevices', reloadKey)
   const [filter, setFilter] = useState({})
-  const visible = items.filter((d) => matchesFilter(d, filter))
+  const visible = items.filter((d) =>
+    matchesFilter(d, filter) && (!filter.role || (d.role || 'consumer') === filter.role))
 
   const createDevice = async (payload) => {
     await putResource('wiringDevices', newId(), payload)
@@ -924,7 +946,7 @@ function DevicesList ({ onSelect }) {
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No devices recorded yet.</div>
       `}
-      <${ZoneTagFilter} items=${items} filter=${filter} onChange=${setFilter} />
+      <${ZoneTagFilter} items=${items} filter=${filter} onChange=${setFilter} withRole=${true} />
       ${visible.map((device) => html`
         <div
           key=${device.id}
@@ -933,7 +955,7 @@ function DevicesList ({ onSelect }) {
         >
           <div>
             <div>${device.name}</div>
-            <div class="meta">${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
+            <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           </div>
           <${StatusBadge} status=${device.status} />
         </div>
@@ -976,7 +998,7 @@ function DeviceDetail ({ deviceId, onBack }) {
       ${device && !editing && html`
         <div class="card">
           <h2>${device.name} <${StatusBadge} status=${device.status} /></h2>
-          <div class="meta">${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
+          <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
           ${device.signalkPath && html`
             <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>

@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS devices (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   type TEXT,
+  role TEXT NOT NULL DEFAULT 'consumer',
   zone TEXT,
   rated_power_w REAL,
   signalk_path TEXT,

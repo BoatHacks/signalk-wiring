@@ -167,3 +167,13 @@ test('a zone name written through the provider reuses a zone that differs only i
 
   store.close()
 })
+
+test('a device role round-trips through the provider', async () => {
+  const store = new Store(':memory:')
+  const devices = createResourceProvider(store, 'device', 'wiringDevices')
+  await devices.methods.setResource('d1', { name: 'Shore power inlet', role: 'source', type: 'shore power' })
+  const device = await devices.methods.getResource('d1')
+  assert.equal(device.role, 'source')
+  assert.equal(device.type, 'shore power')
+  store.close()
+})

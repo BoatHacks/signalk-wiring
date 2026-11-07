@@ -44,6 +44,10 @@ constraint enforced on the data model.
 - **Zone**: a named area a wire run or device is in (e.g. "salon", "aft
   cabin", "port lazarette"), chosen from a managed list. Used to find and
   filter. Access hints (behind a panel, under a hatch) belong in notes.
+- **Role**: what a device does with power: consumer (uses it), source
+  (supplies it: solar, shore power, generator, hydro, wind, alternator),
+  storage (batteries), distribution (switches, breakers, fuses, bus bars,
+  panels, isolators, relays) or converter (inverters, chargers, DC-DC).
 - **Tag**: a free-text label for any other grouping, such as an audio
   zone, which overlaps physical areas. An item can have several.
 - **Convention** — the labeling/color standard selected for the
@@ -115,7 +119,10 @@ A wire run or device is either:
     circuit's panel device and is not stored), `status`,
     `attachments` (photo/file ids), `notes`.
 - **Device**
-  - `id`, `name`, `type` (free text, e.g. "bilge pump"), `zoneId` and `tags` (as on
+  - `id`, `name`, `type` (free text, e.g. "bilge pump", "solar"), `role`
+    (consumer | source | storage | distribution | converter; consumer by
+    default, so devices recorded before roles existed stay valid),
+    `zoneId` and `tags` (as on
     a wire run; `zone` carries the name),
     `ratedPowerW` (nameplate/rated power draw, optional), `signalkPath`
     (optional — a SignalK path this device corresponds to, e.g.
@@ -188,6 +195,9 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - Forms to create/edit circuits, wire runs, and devices, including gauge
   + unit, color, zone, tags, and notes. The zone field is a dropdown
   with an "Add new zone..." entry and a hint saying what a zone is.
+- A role on every device (a dropdown with a hint on each choice), shown
+  in the device list and details, with a role filter on the device list,
+  and a colour per role on floorplan markers.
 - A zones manager to rename, merge and remove zones, and zone and tag
   filters on the circuit, wire run and device lists.
 - Photo/file attachment upload and viewing per wire run or device.
@@ -285,6 +295,14 @@ configuration.
   commonly mix US (AWG) and EU (mm²) sourced equipment/wire during
   refits; normalizing to one unit would lose the as-labeled value people
   actually read off the wire or the spec sheet.
+- **Devices have a role, not separate record types.** Sources, storage,
+  distribution and converters are devices like any other, so circuits,
+  wire runs, positions, routes and the floorplan work unchanged for them.
+  The role defaults to consumer. Only consumers add to the panel load
+  summary; the specific kind (solar, generator, a battery chemistry) stays
+  in the free-text type. Distribution and converters are separate roles
+  because a switch or an inverter neither produces, stores nor uses power
+  in the plain sense. See plan 0011.
 - **Zones are a managed list, with free-text tags beside them.** The MVP
   kept zones as free text so documentation could start without defining a
   list. Real data then showed the same area spelled several ways, so zones

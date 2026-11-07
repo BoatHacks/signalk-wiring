@@ -15,6 +15,11 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Device roles: consumer, source, storage, distribution (switches,
+  breakers, bus bars, panels) and converter (inverters, chargers, DC-DC).
+  Existing devices become consumers. The device form explains each role,
+  the list has a role filter, floorplan markers are coloured by role, and
+  the panel load summary counts only consumers.
 - Free-text tags on devices and wire runs for groupings that are not
   physical areas, such as audio zones.
 - Zone and tag filters on the circuit, wire run and device lists.

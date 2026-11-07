@@ -106,3 +106,30 @@ test('a wire run to an endpoint that is not a known device is ignored (e.g. a sp
   assert.equal(load.totalWatts, 20)
   assert.equal(load.deviceCount, 1)
 })
+
+test('only consumers add to a circuit load', () => {
+  const circuit = { id: 'c1', voltage: 12, breakerRating: 10 }
+  const wireRuns = ['light', 'solar', 'battery', 'panel', 'inverter'].map((id) => (
+    { circuitId: 'c1', status: 'active', toEndpoint: id }
+  ))
+  const deviceById = new Map([
+    ['light', { id: 'light', status: 'active', role: 'consumer', ratedPowerW: 24 }],
+    ['solar', { id: 'solar', status: 'active', role: 'source', ratedPowerW: 400 }],
+    ['battery', { id: 'battery', status: 'active', role: 'storage', ratedPowerW: 100 }],
+    ['panel', { id: 'panel', status: 'active', role: 'distribution' }],
+    ['inverter', { id: 'inverter', status: 'active', role: 'converter', ratedPowerW: 1500 }]
+  ])
+  const load = calculateCircuitLoad(circuit, wireRuns, deviceById)
+  assert.equal(load.totalWatts, 24)
+  assert.equal(load.deviceCount, 1)
+})
+
+test('a device with no role recorded counts as a consumer', () => {
+  const circuit = { id: 'c1', voltage: 12, breakerRating: 10 }
+  const load = calculateCircuitLoad(
+    circuit,
+    [{ circuitId: 'c1', status: 'active', toEndpoint: 'old' }],
+    new Map([['old', { id: 'old', status: 'active', ratedPowerW: 60 }]])
+  )
+  assert.equal(load.totalWatts, 60)
+})

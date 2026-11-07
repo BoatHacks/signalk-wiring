@@ -503,3 +503,57 @@ test('zones: migration turns padded, mixed-case zone strings into merged zones',
 
   fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
 })
+
+// Device roles (plan 0011)
+
+test('roles: a device is a consumer unless told otherwise, and only known roles are accepted', () => {
+  const store = freshStore()
+  const light = store.create('device', { name: 'Anchor light' })
+  assert.equal(light.role, 'consumer')
+
+  for (const role of ['source', 'storage', 'distribution', 'converter']) {
+    assert.equal(store.create('device', { name: role, role }).role, role)
+  }
+  assert.throws(() => store.create('device', { name: 'X', role: 'battery' }), /role must be one of/)
+  assert.throws(() => store.update('device', light.id, { role: 'nonsense' }), /role must be one of/)
+
+  // Clearing the role puts it back to the default instead of failing.
+  const solar = store.create('device', { name: 'Solar', role: 'source' })
+  assert.equal(store.update('device', solar.id, { role: null }).role, 'consumer')
+  assert.equal(store.update('device', solar.id, { role: '' }).role, 'consumer')
+
+  store.close()
+})
+
+test('roles: a role change is one change-log entry', () => {
+  const store = freshStore()
+  const device = store.create('device', { name: 'Victron', role: 'consumer' })
+  store.update('device', device.id, { role: 'converter' })
+  const log = store.changeLog('device', device.id)
+  assert.equal(log.length, 2)
+  assert.deepEqual(JSON.parse(log[1].diff_json), { role: { before: 'consumer', after: 'converter' } })
+  store.close()
+})
+
+test('roles: migration gives every existing device the consumer role', () => {
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-migration-')), 'wiring.db')
+  const oldDb = new Database(dbPath)
+  oldDb.exec(`
+    CREATE TABLE circuits (id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active');
+    CREATE TABLE wire_runs (id TEXT PRIMARY KEY, circuit_id TEXT NOT NULL, zone TEXT, zone_id TEXT, tags TEXT,
+      status TEXT NOT NULL DEFAULT 'active');
+    CREATE TABLE devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, zone TEXT, zone_id TEXT, tags TEXT,
+      status TEXT NOT NULL DEFAULT 'active', notes TEXT);
+    INSERT INTO devices (id, name) VALUES ('d1', 'Old pump');
+  `)
+  oldDb.pragma('user_version = 3')
+  oldDb.close()
+
+  const store = new Store(dbPath)
+  assert.equal(store.get('device', 'd1').role, 'consumer')
+  store.close()
+  const again = new Store(dbPath)
+  assert.equal(again.get('device', 'd1').role, 'consumer')
+  again.close()
+  fs.rmSync(path.dirname(dbPath), { recursive: true, force: true })
+})

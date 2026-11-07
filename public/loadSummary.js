@@ -57,6 +57,9 @@ export function calculateCircuitLoad (circuit, wireRuns, deviceById) {
   for (const wr of activeWireRuns) {
     const device = deviceById.get(wr.toEndpoint)
     if (!device || device.status !== 'active' || seenDeviceIds.has(device.id)) continue
+    // Only consumers draw from the circuit; sources, storage, switches and
+    // converters sit on it without adding load of their own.
+    if (device.role && device.role !== 'consumer') continue
     seenDeviceIds.add(device.id)
     knownDeviceCount++
     if (device.ratedPowerW == null) {
