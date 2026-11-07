@@ -14,6 +14,7 @@ import { FloorplanTab } from './floorplanView.js'
 import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
 import { typeOptions } from './deviceTypes.js'
+import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
 
@@ -240,15 +241,42 @@ function ZoneField ({ value, onChange }) {
   `
 }
 
+// The terminals of a device: a name, what conductor lands there, an optional
+// voltage and, on a converter, the port (a side of it, for example DC in).
+function TerminalsEditor ({ value, role, onChange }) {
+  const update = (index, patch) => onChange(value.map((t, i) => (i === index ? { ...t, ...patch } : t)))
+  const remove = (index) => onChange(value.filter((_, i) => i !== index))
+  const add = () => onChange([...value, { name: '', conductor: 'positive', voltage: '', port: '' }])
+  return html`
+    <div class="terminals-editor">
+      ${value.map((t, i) => html`
+        <div class="row-actions" key=${i}>
+          <input type="text" value=${t.name} placeholder="Name, e.g. DC +" onInput=${(e) => update(i, { name: e.target.value })} />
+          <select value=${t.conductor} onChange=${(e) => update(i, { conductor: e.target.value })}>
+            ${Object.entries(CONDUCTOR_LABELS).map(([k, label]) => html`<option value=${k} key=${k}>${label}</option>`)}
+          </select>
+          <input type="number" step="any" value=${t.voltage ?? ''} placeholder="Volts" onInput=${(e) => update(i, { voltage: e.target.value })} />
+          ${role === 'converter' && html`
+            <input type="text" value=${t.port || ''} placeholder="Port, e.g. DC in" onInput=${(e) => update(i, { port: e.target.value })} />
+          `}
+          <button type="button" onClick=${() => remove(i)}>Remove</button>
+        </div>
+      `)}
+      <button type="button" onClick=${add}>+ Add terminal</button>
+    </div>
+  `
+}
+
 // A generic labeled-field form: circuits, wire runs, and devices are all
 // "a handful of inputs, Save/Cancel, an error banner on failure" with
 // different field lists, so this covers all three rather than
 // duplicating the submit/error/loading handling three times.
-function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
+function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', context }) {
   const [values, setValues] = useState(() => {
     const v = {}
     for (const f of fields) {
       const raw = initial ? initial[f.key] : null
+      if (f.type === 'terminals') { v[f.key] = Array.isArray(raw) ? raw.map((t) => ({ ...t })) : []; continue }
       v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : (f.defaultValue ?? '')
     }
     return v
@@ -264,7 +292,9 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
     setError(null)
     const payload = {}
     for (const f of fields) {
+      if (f.showWhen && !f.showWhen(values, context)) continue
       const raw = values[f.key]
+      if (f.type === 'terminals') { payload[f.key] = cleanTerminals(raw); continue }
       // Zone and tags are always sent, so clearing them on an edit takes effect.
       if (f.type === 'zone' || f.type === 'deviceType' || f.type === 'conduitKind') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
@@ -283,9 +313,12 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
   return html`
     <form class="inline-form" onSubmit=${submit}>
       <${ErrorBanner} message=${error} />
-      ${fields.map((f) => html`
+      ${fields.filter((f) => !f.showWhen || f.showWhen(values, context)).map((f) => html`
         <label class="form-field" key=${f.key}>
           <span>${f.label}${f.required ? ' *' : ''}</span>
+          ${f.type === 'terminals' && html`
+            <${TerminalsEditor} value=${values[f.key]} role=${values.role} onChange=${(v) => setField(f.key, v)} />
+          `}
           ${f.type === 'textarea' && html`
             <textarea
               value=${values[f.key]}
@@ -558,6 +591,37 @@ const DEVICE_FIELDS = [
     hint: 'Anything else you want to group by, such as an audio zone. Free text, several allowed, separated by commas.'
   },
   { key: 'ratedPowerW', label: 'Rated power (W)', type: 'number' },
+  {
+    key: 'tripRatingA',
+    label: 'Trip rating (A)',
+    type: 'number',
+    clearable: true,
+    showWhen: (values, ctx) => deviceFieldVisible('tripRatingA', values, ctx),
+    hint: 'Read it off the fuse or breaker. A device with a rating protects the circuit it feeds; a switch or bus bar has none and only passes it through.'
+  },
+  {
+    key: 'nominalVoltage',
+    label: 'Nominal voltage (V)',
+    type: 'number',
+    clearable: true,
+    showWhen: (values, ctx) => deviceFieldVisible('nominalVoltage', values, ctx),
+    hint: 'The voltage this battery or source supplies. Circuits fed from it take this voltage.'
+  },
+  {
+    key: 'powerFactor',
+    label: 'Power factor',
+    type: 'number',
+    clearable: true,
+    showWhen: (values, ctx) => deviceFieldVisible('powerFactor', values, ctx),
+    hint: 'Between 0 and 1. Applied to the load check on AC circuits; left blank it counts as 1.'
+  },
+  {
+    key: 'terminals',
+    label: 'Terminals',
+    type: 'terminals',
+    showWhen: (values, ctx) => deviceFieldVisible('terminals', values, ctx),
+    hint: 'Only needed where they remove ambiguity: a converter (give each terminal the port it belongs to, for example DC in or AC out), a battery with several posts, a fuse block.'
+  },
   {
     key: 'signalkPath',
     label: 'SignalK path',
@@ -1373,6 +1437,7 @@ function DeviceDetail ({ deviceId, onBack }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [editing, setEditing] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const { items: circuits } = useResourceList('wiringCircuits')
 
   useEffect(() => {
     let cancelled = false
@@ -1416,6 +1481,14 @@ function DeviceDetail ({ deviceId, onBack }) {
           </h2>
           <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
+          ${device.tripRatingA && html`<div class="meta">Trip rating: ${device.tripRatingA} A</div>`}
+          ${device.nominalVoltage && html`<div class="meta">Nominal voltage: ${device.nominalVoltage} V</div>`}
+          ${device.powerFactor && html`<div class="meta">Power factor: ${device.powerFactor}</div>`}
+          ${(device.terminals || []).length > 0 && html`
+            <div class="meta">Terminals:
+              <ul>${device.terminals.map((t, i) => html`<li key=${i}>${describeTerminal(t)}</li>`)}</ul>
+            </div>
+          `}
           ${device.signalkPath && html`
             <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>
           `}
@@ -1434,6 +1507,7 @@ function DeviceDetail ({ deviceId, onBack }) {
           <${Form}
             fields=${DEVICE_FIELDS}
             initial=${device}
+            context=${{ deviceId, acDeviceIds: acConsumerIds(circuits) }}
             onSubmit=${saveDevice}
             onCancel=${() => setEditing(false)}
           />

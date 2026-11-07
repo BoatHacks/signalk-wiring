@@ -572,3 +572,5 @@ main:has(.floorplan-pair) { max-width: none; }
 .link-btn { background: none; border: none; color: var(--link); cursor: pointer; padding: 4px; font-size: 13px; }
 .notice { padding: 8px 12px; margin: 8px 0; border: 1px solid var(--ok-border); background: var(--ok-bg); border-radius: 6px; font-size: 14px; }
 .derived-circuit { padding: 8px 12px; margin: 8px 0; border: 1px dashed var(--border-strong); border-radius: 6px; background: var(--surface-alt); }
+.terminals-editor { display: flex; flex-direction: column; gap: 6px; }
+.terminals-editor .row-actions input[type="text"] { min-width: 8em; }
