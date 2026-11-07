@@ -42,9 +42,10 @@ export function matchesFilter (item, filter) {
 }
 
 // Circuits carry no zone of their own: one matches when any of its live
-// wire runs does.
-export function circuitMatches (circuit, wireRuns, filter) {
+// cables (the feed cables the derivation lists for it) does.
+export function circuitMatches (circuit, cables, filter) {
   if (!filter.zoneId && !filter.tag) return true
-  return wireRuns.some((run) =>
-    run.circuitId === circuit.id && run.status !== 'removed' && matchesFilter(run, filter))
+  const ids = new Set(circuit.derived ? circuit.derived.cableIds : [])
+  return cables.some((cable) =>
+    ids.has(cable.id) && cable.status !== 'removed' && matchesFilter(cable, filter))
 }

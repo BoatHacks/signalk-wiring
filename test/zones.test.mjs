@@ -35,14 +35,15 @@ test('a special zone value finds items with no zone', () => {
   assert.equal(matchesFilter({ zoneId: 'z1' }, { zoneId: '__none__' }), false)
 })
 
-test('a circuit matches when any live wire run of it matches', () => {
-  const runs = [
-    { circuitId: 'c1', zoneId: 'z1', status: 'removed' },
-    { circuitId: 'c1', zoneId: 'z2', status: 'active' },
-    { circuitId: 'c2', zoneId: 'z1', status: 'active' }
+test('a circuit matches when any live cable of it matches', () => {
+  const cables = [
+    { id: 'w1', zoneId: 'z1', status: 'removed' },
+    { id: 'w2', zoneId: 'z2', status: 'active' },
+    { id: 'w3', zoneId: 'z1', status: 'active' }
   ]
-  assert.equal(circuitMatches({ id: 'c1' }, runs, { zoneId: 'z2' }), true)
-  assert.equal(circuitMatches({ id: 'c1' }, runs, { zoneId: 'z1' }), false)
-  assert.equal(circuitMatches({ id: 'c3' }, runs, {}), true)
-  assert.equal(circuitMatches({ id: 'c3' }, runs, { zoneId: 'z1' }), false)
+  const c1 = { derived: { cableIds: ['w1', 'w2'] } }
+  assert.equal(circuitMatches(c1, cables, { zoneId: 'z2' }), true)
+  assert.equal(circuitMatches(c1, cables, { zoneId: 'z1' }), false)
+  assert.equal(circuitMatches({ derived: null }, cables, {}), true)
+  assert.equal(circuitMatches({ derived: null }, cables, { zoneId: 'z1' }), false)
 })

@@ -22,12 +22,12 @@ export function kindOptions (usedKinds, current) {
 }
 
 // How a cable (a wire run) is named in a list: its label, else its two ends.
-// `deviceNameById` turns an endpoint that is a device id into the device name.
+// `deviceNameById` turns the device id of each end into the device name.
 export function cableName (run, deviceNameById) {
   if (run.cableLabel) return run.cableLabel
-  if (!run.fromEndpoint && !run.toEndpoint) return 'Unnamed cable'
-  const end = (e) => (e ? (deviceNameById && deviceNameById.get(e)) || e : '?')
-  return `${end(run.fromEndpoint)} to ${end(run.toEndpoint)}`
+  if (!run.fromDeviceId && !run.toDeviceId) return 'Unnamed cable'
+  const end = (e) => (e ? (deviceNameById && deviceNameById.get(e)) || '?' : '?')
+  return `${end(run.fromDeviceId)} to ${end(run.toDeviceId)}`
 }
 
 export function conduitSummary (conduit) {

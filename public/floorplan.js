@@ -133,13 +133,13 @@ function positionOf (device) {
 }
 
 // Where a wire run's drawn route begins: its from-device if that is placed,
-// else the circuit's panel device, else nothing (the first clicked waypoint
-// starts the route). Removed or unplaced devices are skipped.
-export function resolveRouteStart (wireRun, circuit, devicesById) {
-  const fromDevice = devicesById.get(wireRun.fromEndpoint)
+// else nothing (the first clicked waypoint starts the route). Removed or
+// unplaced devices are skipped. The second argument used to be the circuit,
+// whose panel device was the fallback; circuits no longer have one, and it
+// is kept (ignored) so callers do not change.
+export function resolveRouteStart (wireRun, _circuit, devicesById) {
+  const fromDevice = devicesById.get(wireRun.fromDeviceId)
   if (isPlaced(fromDevice)) return positionOf(fromDevice)
-  const panel = circuit ? devicesById.get(circuit.panelDeviceId) : null
-  if (isPlaced(panel)) return positionOf(panel)
   return null
 }
 
@@ -207,18 +207,22 @@ export function routePoints (wireRun, circuit, devicesById) {
   return start ? [start, ...waypoints] : waypoints
 }
 
-// Device ids and wire run ids that belong to a circuit, for highlighting.
-// Removed runs are left out; the panel device counts as a member.
+// Device ids and wire run ids that belong to a circuit, for highlighting,
+// from what the derivation says about it (its feed cables, the negative
+// cables that serve it, and the devices on them). Removed runs are left out.
 export function circuitMembers (circuit, wireRuns) {
+  const derived = circuit.derived
   const runIds = new Set()
   const deviceIds = new Set()
+  if (!derived) return { runIds, deviceIds }
+  const wanted = new Set([...derived.cableIds, ...derived.returnCableIds])
   for (const run of wireRuns) {
-    if (run.circuitId !== circuit.id || run.status === 'removed') continue
+    if (!wanted.has(run.id) || run.status === 'removed') continue
     runIds.add(run.id)
-    if (run.fromEndpoint) deviceIds.add(run.fromEndpoint)
-    if (run.toEndpoint) deviceIds.add(run.toEndpoint)
+    if (run.fromDeviceId) deviceIds.add(run.fromDeviceId)
+    if (run.toDeviceId) deviceIds.add(run.toDeviceId)
   }
-  if (circuit.panelDeviceId) deviceIds.add(circuit.panelDeviceId)
+  for (const id of derived.deviceIds) deviceIds.add(id)
   return { runIds, deviceIds }
 }
 
@@ -260,8 +264,8 @@ export function conduitMembers (conduit, wireRuns) {
   for (const run of wireRuns) {
     if (!wanted.has(run.id) || run.status === 'removed') continue
     runIds.add(run.id)
-    if (run.fromEndpoint) deviceIds.add(run.fromEndpoint)
-    if (run.toEndpoint) deviceIds.add(run.toEndpoint)
+    if (run.fromDeviceId) deviceIds.add(run.fromDeviceId)
+    if (run.toDeviceId) deviceIds.add(run.toDeviceId)
   }
   return { runIds, deviceIds }
 }

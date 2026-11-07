@@ -560,3 +560,15 @@ main:has(.floorplan-pair) { max-width: none; }
 [data-theme="dark"] .device-icon, [data-theme="dark"] .floorplan-canvas .device-marker image, [data-theme="dark"] .diagram-wrap image {
   filter: sepia(1) saturate(3) hue-rotate(-40deg) brightness(0.8);
 }
+
+/* Cable form (plan 0014) */
+.kind-choice { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.radio-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+  border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface);
+  color: var(--text); cursor: pointer; font-size: 14px;
+}
+.radio-chip input { width: auto; margin: 0; }
+.link-btn { background: none; border: none; color: var(--link); cursor: pointer; padding: 4px; font-size: 13px; }
+.notice { padding: 8px 12px; margin: 8px 0; border: 1px solid var(--ok-border); background: var(--ok-bg); border-radius: 6px; font-size: 14px; }
+.derived-circuit { padding: 8px 12px; margin: 8px 0; border: 1px dashed var(--border-strong); border-radius: 6px; background: var(--surface-alt); }

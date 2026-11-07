@@ -17,9 +17,9 @@ test('kindOptions lists used kinds after the suggestions, without case repeats, 
 
 test('cableName prefers the label, then names the ends, resolving device ids', () => {
   const names = new Map([['d1', 'Bilge pump']])
-  assert.equal(cableName({ cableLabel: 'W12', fromEndpoint: 'a', toEndpoint: 'b' }, names), 'W12')
-  assert.equal(cableName({ fromEndpoint: 'Breaker 4', toEndpoint: 'd1' }, names), 'Breaker 4 to Bilge pump')
-  assert.equal(cableName({ fromEndpoint: 'Breaker 4' }, names), 'Breaker 4 to ?')
+  assert.equal(cableName({ cableLabel: 'W12', fromDeviceId: 'a', toDeviceId: 'b' }, names), 'W12')
+  assert.equal(cableName({ fromDeviceId: 'd2', toDeviceId: 'd1' }, new Map([...names, ['d2', 'Breaker 4']])), 'Breaker 4 to Bilge pump')
+  assert.equal(cableName({ fromDeviceId: 'd1' }, names), 'Bilge pump to ?')
   assert.equal(cableName({ id: 'x' }, names), 'Unnamed cable')
 })
 

@@ -3,11 +3,15 @@ import { newId } from './ids.js'
 import { PathCombobox } from './signalkPaths.js'
 import { ROLES, roleLabel } from './roles.js'
 import { NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches } from './zones.js'
+import {
+  CABLE_KINDS, CONDUCTOR_LABELS, kindByValue, defaultNegativeLanding, negativeLandingCandidates, needsTerminal,
+  terminalOptions, buildCablePayload, cableToValues, validateCable, circuitsOfCable, cableTitle
+} from './cableForm.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
-import { useSettings, wireRunInitialValues, colorPlaceholder } from './settings.js'
+import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
 import { typeOptions } from './deviceTypes.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
@@ -264,6 +268,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
       // Zone and tags are always sent, so clearing them on an edit takes effect.
       if (f.type === 'zone' || f.type === 'deviceType' || f.type === 'conduitKind') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
+      if (f.clearable && (raw === '' || raw == null)) { payload[f.key] = null; continue }
       if (raw === '' || raw == null) continue
       payload[f.key] = f.type === 'number' ? Number(raw) : raw
     }
@@ -523,15 +528,6 @@ function ChangeLog ({ kind, id }) {
   `
 }
 
-const CIRCUIT_FIELDS = [
-  { key: 'name', label: 'Name', type: 'text', required: true },
-  { key: 'sourceLabel', label: 'Source (breaker/fuse)', type: 'text' },
-  { key: 'breakerRating', label: 'Breaker rating (A)', type: 'number' },
-  { key: 'voltage', label: 'Voltage', type: 'number' },
-  { key: 'panelRef', label: 'Panel reference', type: 'text' },
-  { key: 'notes', label: 'Notes', type: 'textarea' }
-]
-
 const DEVICE_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true },
   {
@@ -571,31 +567,6 @@ const DEVICE_FIELDS = [
   { key: 'posX', label: 'Position x (m, from the transom toward the bow)', type: 'number' },
   { key: 'posY', label: 'Position y (m, athwartships)', type: 'number' },
   { key: 'posZ', label: 'Position z (m, height)', type: 'number' },
-  { key: 'notes', label: 'Notes', type: 'textarea' }
-]
-
-const WIRE_RUN_FIELDS = [
-  { key: 'fromEndpoint', label: 'From', type: 'text', required: true },
-  { key: 'toEndpoint', label: 'To', type: 'text', required: true },
-  { key: 'gauge', label: 'Gauge', type: 'number' },
-  { key: 'gaugeUnit', label: 'Gauge unit', type: 'select', options: ['AWG', 'mm2'] },
-  { key: 'color', label: 'Color', type: 'text' },
-  { key: 'length', label: 'Length', type: 'number' },
-  { key: 'lengthUnit', label: 'Length unit', type: 'select', options: ['m', 'ft'] },
-  {
-    key: 'zoneId',
-    label: 'Zone',
-    type: 'zone',
-    hint: 'Where it is: an area such as salon or aft cabin. Used for filtering. Put access hints in Notes.'
-  },
-  {
-    key: 'tags',
-    label: 'Tags',
-    type: 'tags',
-    hint: 'Anything else you want to group by, such as an audio zone. Free text, several allowed, separated by commas.'
-  },
-  { key: 'cableLabel', label: 'Cable label', type: 'text' },
-  { key: 'switchRef', label: 'Switch reference', type: 'text' },
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
 
@@ -750,25 +721,286 @@ function ZonesManager () {
   `
 }
 
-function CircuitsList ({ onSelect }) {
-  const [reloadKey, setReloadKey] = useState(0)
-  const [showForm, setShowForm] = useState(false)
-  const [showImport, setShowImport] = useState(false)
-  const { loading, error, items } = useResourceList('wiringCircuits', reloadKey)
-  const { items: allRuns } = useResourceList('wiringWireRuns')
-  const [filter, setFilter] = useState({})
-  const visible = items.filter((c) => circuitMatches(c, allRuns, filter))
+// A device chooser for the ends of a cable: the existing devices, and
+// "New device..." to create one on the spot (name and role only; the rest
+// can be filled in on the Devices tab).
+const NEW_DEVICE = '__new_device__'
 
-  const createCircuit = async (payload) => {
-    await putResource('wiringCircuits', newId(), payload)
-    setShowForm(false)
+function DevicePicker ({ label, hint, value, onChange, devices, onCreated, defaultRole, only, required }) {
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [role, setRole] = useState(defaultRole || 'consumer')
+  const [created, setCreated] = useState([])
+  const [error, setError] = useState(null)
+
+  const known = new Map([...created, ...devices].map((d) => [d.id, d]))
+  const options = [...known.values()]
+    .filter((d) => d.status !== 'removed' && (!only || only(d) || d.id === value))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const create = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setError(null)
+    const clash = options.find((d) => d.name.toLowerCase() === trimmed.toLowerCase())
+    if (clash) { onChange(clash.id); setAdding(false); setName(''); return }
+    try {
+      const id = newId()
+      await putResource('wiringDevices', id, { name: trimmed, role })
+      setCreated((list) => [...list, { id, name: trimmed, role, status: 'active' }])
+      if (onCreated) onCreated()
+      onChange(id)
+      setAdding(false)
+      setName('')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return html`
+    <label class="form-field">
+      <span>${label}${required ? ' *' : ''}</span>
+      <select value=${adding ? NEW_DEVICE : value || ''}
+        onChange=${(e) => {
+          if (e.target.value === NEW_DEVICE) setAdding(true)
+          else { setAdding(false); onChange(e.target.value) }
+        }}>
+        <option value="">Choose a device…</option>
+        ${options.map((d) => html`<option value=${d.id} key=${d.id}>${d.name} (${roleLabel(d.role)})</option>`)}
+        <option value=${NEW_DEVICE}>New device…</option>
+      </select>
+      ${adding && html`
+        <div class="row-actions">
+          <input type="text" value=${name} placeholder="Device name" autofocus
+            onInput=${(e) => setName(e.target.value)}
+            onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); create() } }} />
+          <select value=${role} onChange=${(e) => setRole(e.target.value)}>
+            ${ROLES.map((r) => html`<option value=${r.value} key=${r.value}>${r.label}</option>`)}
+          </select>
+          <button type="button" onClick=${create}>Create device</button>
+        </div>
+      `}
+      ${error && html`<small class="hint">${error}</small>`}
+      ${hint && html`<small class="hint">${hint}</small>`}
+    </label>
+  `
+}
+
+// The cable form (a wire run): DC first, two devices, and the circuit it
+// belongs to is worked out from the cables, never entered.
+function CableForm ({ cable, devices, cables, circuits, onDevicesChanged, onSaved, onCancel }) {
+  const settings = useSettings()
+  const [values, setValues] = useState(() => cable
+    ? cableToValues(cable)
+    : {
+        fromDeviceId: '',
+        toDeviceId: '',
+        kind: 'both',
+        colors: {},
+        terminals: {},
+        negativeLandingId: defaultNegativeLanding(cables) || '',
+        existingConductors: [],
+        gauge: '',
+        gaugeUnit: settings.defaultGaugeUnit,
+        length: '',
+        lengthUnit: settings.defaultLengthUnit,
+        cableLabel: '',
+        zoneId: '',
+        tags: [],
+        notes: ''
+      })
+  const [tagsText, setTagsText] = useState(() => tagsToText(cable ? cable.tags : []))
+  const [more, setMore] = useState(() => cable ? kindByValue(values.kind).more : false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const set = (key, value) => setValues((v) => ({ ...v, [key]: value }))
+  const setColor = (conductor, value) => setValues((v) => ({ ...v, colors: { ...v.colors, [conductor]: value } }))
+  const setTerminal = (conductor, end, value) => setValues((v) => ({
+    ...v,
+    terminals: { ...v.terminals, [conductor]: { ...(v.terminals[conductor] || {}), [end]: value } }
+  }))
+
+  const deviceById = new Map(devices.map((d) => [d.id, d]))
+  const fromDevice = deviceById.get(values.fromDeviceId)
+  const toDevice = deviceById.get(values.toDeviceId)
+  const conductors = values.kind === 'custom'
+    ? values.existingConductors.map((c) => c.conductor)
+    : kindByValue(values.kind).conductors
+  const askTerminals = needsTerminal(fromDevice) || needsTerminal(toDevice)
+  const kinds = CABLE_KINDS.filter((k) => !k.more || more || k.value === values.kind)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    const message = validateCable(values) ||
+      (values.kind === 'both' && !values.negativeLandingId ? 'Choose where the negative lands at the supply end.' : null)
+    if (message) { setError(message); return }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSaved(buildCablePayload({ ...values, tags: parseTags(tagsText) }), cable ? cable.id : newId())
+    } catch (err) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  const here = cable ? circuitsOfCable(cable.id, circuits) : []
+
+  return html`
+    <form class="inline-form cable-form" onSubmit=${submit}>
+      <${ErrorBanner} message=${error} />
+      <${DevicePicker} label="From (supply side)" required=${true} value=${values.fromDeviceId}
+        onChange=${(v) => set('fromDeviceId', v)} devices=${devices} onCreated=${onDevicesChanged}
+        defaultRole="distribution"
+        hint="The side the power comes from: a fuse, breaker, bus bar, battery or source." />
+      <${DevicePicker} label="To (load side)" required=${true} value=${values.toDeviceId}
+        onChange=${(v) => set('toDeviceId', v)} devices=${devices} onCreated=${onDevicesChanged}
+        defaultRole="consumer" />
+
+      <div class="form-field">
+        <span>Conductors</span>
+        <div class="kind-choice">
+          ${kinds.map((k) => html`
+            <label key=${k.value} class="radio-chip">
+              <input type="radio" name="cable-kind" value=${k.value} checked=${values.kind === k.value}
+                onChange=${() => set('kind', k.value)} />
+              ${k.label}
+            </label>
+          `)}
+          ${values.kind === 'custom' && html`<span class="meta">Custom: ${conductors.join(', ')}</span>`}
+          ${!more && html`<button type="button" class="link-btn" onClick=${() => setMore(true)}>More (AC, earth)…</button>`}
+        </div>
+      </div>
+
+      ${values.kind === 'both' && html`
+        <${DevicePicker} label="Negative lands on at the supply end" required=${true}
+          value=${values.negativeLandingId} onChange=${(v) => set('negativeLandingId', v)}
+          devices=${devices} onCreated=${onDevicesChanged} defaultRole="distribution"
+          only=${(d) => negativeLandingCandidates([d]).length > 0}
+          hint="A negative bus bar or a battery post. It starts as the last one you used." />
+      `}
+
+      ${conductors.map((conductor) => html`
+        <label class="form-field" key=${conductor}>
+          <span>Colour: ${CONDUCTOR_LABELS[conductor]}</span>
+          <input type="text" value=${values.colors[conductor] || ''}
+            placeholder=${colorPlaceholder(settings.convention)}
+            onInput=${(e) => setColor(conductor, e.target.value)} />
+        </label>
+      `)}
+
+      ${askTerminals && conductors.map((conductor) => html`
+        <div class="form-field" key=${'t-' + conductor}>
+          <span>Terminals: ${CONDUCTOR_LABELS[conductor]}</span>
+          <div class="row-actions">
+            ${needsTerminal(fromDevice) && html`
+              <select value=${(values.terminals[conductor] || {}).from || ''}
+                onChange=${(e) => setTerminal(conductor, 'from', e.target.value)}>
+                <option value="">${fromDevice.name}: terminal…</option>
+                ${terminalOptions(fromDevice, conductor).map((t) => html`<option value=${t.name} key=${t.name}>${t.name}${t.port ? ` (${t.port})` : ''}</option>`)}
+              </select>
+            `}
+            ${needsTerminal(toDevice) && html`
+              <select value=${(values.terminals[conductor] || {}).to || ''}
+                onChange=${(e) => setTerminal(conductor, 'to', e.target.value)}>
+                <option value="">${toDevice.name}: terminal…</option>
+                ${terminalOptions(toDevice, conductor).map((t) => html`<option value=${t.name} key=${t.name}>${t.name}${t.port ? ` (${t.port})` : ''}</option>`)}
+              </select>
+            `}
+          </div>
+          <small class="hint">Needed on a converter, so the circuit on each side is known, and on a device with several terminals.</small>
+        </div>
+      `)}
+
+      <div class="form-field">
+        <span>Gauge</span>
+        <div class="row-actions">
+          <input type="number" step="any" value=${values.gauge} onInput=${(e) => set('gauge', e.target.value)} />
+          <select value=${values.gaugeUnit} onChange=${(e) => set('gaugeUnit', e.target.value)}>
+            <option value="">—</option><option value="AWG">AWG</option><option value="mm2">mm²</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-field">
+        <span>Length</span>
+        <div class="row-actions">
+          <input type="number" step="any" value=${values.length} onInput=${(e) => set('length', e.target.value)} />
+          <select value=${values.lengthUnit} onChange=${(e) => set('lengthUnit', e.target.value)}>
+            <option value="">—</option><option value="m">m</option><option value="ft">ft</option>
+          </select>
+        </div>
+      </div>
+      <label class="form-field"><span>Cable label</span>
+        <input type="text" value=${values.cableLabel} onInput=${(e) => set('cableLabel', e.target.value)} />
+      </label>
+      <label class="form-field"><span>Zone</span>
+        <${ZoneField} value=${values.zoneId} onChange=${(v) => set('zoneId', v)} />
+        <small class="hint">Where it is: an area such as salon or aft cabin. Used for filtering.</small>
+      </label>
+      <label class="form-field"><span>Tags</span>
+        <input type="text" value=${tagsText} placeholder="e.g. audio: main, audio: cockpit"
+          onInput=${(e) => setTagsText(e.target.value)} />
+      </label>
+      <label class="form-field"><span>Notes</span>
+        <textarea value=${values.notes} onInput=${(e) => set('notes', e.target.value)}></textarea>
+      </label>
+
+      <div class="derived-circuit">
+        <strong>Circuit</strong>
+        ${!cable && html`<div class="meta">Worked out from the cables when you save. It needs no setup.</div>`}
+        ${cable && here.length === 0 && html`<div class="meta">This cable is not part of a circuit yet (check both ends are set).</div>`}
+        ${here.map(({ circuit, via }) => html`
+          <div key=${circuit.id} class="meta">
+            ${circuitSummaryLine(circuit)}${via === 'return' ? ' (this cable is its negative return)' : ''}
+          </div>
+        `)}
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" disabled=${saving}>${saving ? 'Saving…' : cable ? 'Save' : 'Add cable'}</button>
+        <button type="button" onClick=${onCancel} disabled=${saving}>Cancel</button>
+      </div>
+    </form>
+  `
+}
+
+function CablesList () {
+  const settings = useSettings()
+  const [reloadKey, setReloadKey] = useState(0)
+  const [devKey, setDevKey] = useState(0)
+  const [form, setForm] = useState(null) // null | 'create' | cable being edited
+  const [showImport, setShowImport] = useState(false)
+  const [notice, setNotice] = useState(null)
+  const [attachmentsId, setAttachmentsId] = useState(null)
+  const [historyId, setHistoryId] = useState(null)
+  const [filter, setFilter] = useState({})
+  const { loading, error, items: cables } = useResourceList('wiringWireRuns', reloadKey)
+  const { items: devices } = useResourceList('wiringDevices', devKey)
+  const { items: circuits } = useResourceList('wiringCircuits', reloadKey)
+  const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
+  const visible = cables.filter((c) => matchesFilter(c, filter))
+
+  const save = async (payload, id) => {
+    await putResource('wiringWireRuns', id, payload)
+    const fresh = await fetchResourceMap('wiringCircuits')
+    const mine = circuitsOfCable(id, Object.values(fresh))
+    setNotice(mine.length === 0
+      ? 'Saved. The cable is not part of a circuit yet.'
+      : `Saved. ${mine.map(({ circuit }) => circuitSummaryLine(circuit)).join('; ')}`)
+    setForm(null)
+    setReloadKey((k) => k + 1)
+  }
+
+  const removeCable = async (cable) => {
+    if (!confirmRemove(cableTitle(cable, deviceNameById))) return
+    await deleteResource('wiringWireRuns', cable.id)
     setReloadKey((k) => k + 1)
   }
 
   if (showImport) {
     return html`
       <${CsvImport}
-        onDone=${() => { setShowImport(false); setReloadKey((k) => k + 1) }}
+        onDone=${() => { setShowImport(false); setReloadKey((k) => k + 1); setDevKey((k) => k + 1) }}
         onCancel=${() => setShowImport(false)}
       />
     `
@@ -776,49 +1008,159 @@ function CircuitsList ({ onSelect }) {
 
   return html`
     <div>
+      <p class="meta">
+        A cable runs from the supply side to the load side. Circuits are worked out from the cables
+        and listed on the Circuits tab.
+      </p>
       <div class="list-header">
-        <button onClick=${() => setShowForm((v) => !v)}>${showForm ? 'Cancel' : '+ New circuit'}</button>
+        <button onClick=${() => { setNotice(null); setForm(form ? null : 'create') }}>${form ? 'Cancel' : '+ New cable'}</button>
         <button onClick=${() => setShowImport(true)}>Import CSV</button>
       </div>
-      ${showForm && html`
-        <${Form}
-          fields=${CIRCUIT_FIELDS}
-          onSubmit=${createCircuit}
-          onCancel=${() => setShowForm(false)}
-          submitLabel="Create circuit"
+      ${notice && html`<div class="notice">${notice}</div>`}
+      ${form && html`
+        <${CableForm}
+          key=${`${settings.defaultGaugeUnit}/${settings.defaultLengthUnit}/${form === 'create' ? 'new' : form.id}`}
+          cable=${form === 'create' ? null : form}
+          devices=${devices}
+          cables=${cables}
+          circuits=${circuits}
+          onDevicesChanged=${() => setDevKey((k) => k + 1)}
+          onSaved=${save}
+          onCancel=${() => setForm(null)}
         />
       `}
-      ${loading && html`<div class="empty-state">Loading circuits&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading cables&hellip;</div>`}
       <${ErrorBanner} message=${error} />
-      ${!loading && !error && items.length === 0 && html`
-        <div class="empty-state">No circuits recorded yet.</div>
+      ${!loading && !error && cables.length === 0 && html`<div class="empty-state">No cables recorded yet.</div>`}
+      ${cables.length > 0 && html`<${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter} />`}
+      ${visible.length > 0 && html`
+        <table>
+          <thead>
+            <tr><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${visible.flatMap((cable) => {
+              const here = circuitsOfCable(cable.id, circuits)
+              const rows = [html`
+                <tr key=${cable.id}>
+                  <td>${deviceNameById.get(cable.fromDeviceId) || '?'}</td>
+                  <td>${deviceNameById.get(cable.toDeviceId) || '?'}</td>
+                  <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}</td>
+                  <td>${cable.cableLabel || '—'}</td>
+                  <td>${cable.gauge ? `${cable.gauge} ${cable.gaugeUnit || ''}` : '—'}</td>
+                  <td>${cable.length ? `${cable.length} ${cable.lengthUnit || ''}` : '—'}</td>
+                  <td>${cable.zone || '—'}${(cable.tags || []).length ? html`<div class="meta">${cable.tags.join(', ')}</div>` : ''}</td>
+                  <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '—'}</td>
+                  <td><${StatusBadge} status=${cable.status} /></td>
+                  <td class="row-actions">
+                    <button onClick=${() => { setNotice(null); setForm(cable) }}>Edit</button>
+                    ${cable.status !== 'removed' && html`<button onClick=${() => removeCable(cable)}>Remove</button>`}
+                    <button onClick=${() => setAttachmentsId(attachmentsId === cable.id ? null : cable.id)}>
+                      ${attachmentsId === cable.id ? 'Hide attachments' : 'Attachments'}
+                    </button>
+                    <button onClick=${() => setHistoryId(historyId === cable.id ? null : cable.id)}>
+                      ${historyId === cable.id ? 'Hide history' : 'History'}
+                    </button>
+                  </td>
+                </tr>
+              `]
+              if (attachmentsId === cable.id) {
+                rows.push(html`<tr key="${cable.id}-attachments"><td colspan="10"><${AttachmentList} ownerType="wireRun" ownerId=${cable.id} /></td></tr>`)
+              }
+              if (historyId === cable.id) {
+                rows.push(html`<tr key="${cable.id}-history"><td colspan="10"><${ChangeLog} kind="wireRun" id=${cable.id} /></td></tr>`)
+              }
+              return rows
+            })}
+          </tbody>
+        </table>
       `}
-      <${ZoneTagFilter} items=${allRuns} filter=${filter} onChange=${setFilter} />
-      ${visible.map((circuit) => html`
-        <div
-          key=${circuit.id}
-          class="list-item ${circuit.status === 'removed' ? 'removed' : ''}"
-          onClick=${() => onSelect(circuit.id)}
-        >
-          <div>
-            <div>${circuit.name}</div>
-            <div class="meta">${circuit.sourceLabel || 'no source recorded'}</div>
-          </div>
-          <${StatusBadge} status=${circuit.status} />
-        </div>
-      `)}
     </div>
   `
 }
 
-// Built from data CircuitDetail already fetches through the anonymous
-// resource API, rather than calling the admin-gated
-// GET .../circuits/:id/diagram route from plan 0002 — this is the same
-// data as the wire-run table, just laid out as a graph, and gating one
-// view of it but not the other has no real security rationale (see
-// docs/plans/0005-diagram-view.md).
-function DiagramView ({ wireRuns, deviceNameById, deviceIconById }) {
-  if (wireRuns.length === 0) return null
+// "Lamp fuse: 10 A, 12 V DC" for a circuit resource.
+function circuitSummaryLine (circuit) {
+  return `${circuit.name}: ${circuitFacts(circuit)}`
+}
+
+function circuitFacts (circuit) {
+  const d = circuit.derived
+  if (!d) return 'no longer exists'
+  const parts = [
+    d.ratingA ? `${d.ratingA} A` : null,
+    d.voltage ? `${d.voltage} V` : null,
+    d.ac ? 'AC' : 'DC',
+    d.unprotected ? 'no protection' : null
+  ].filter(Boolean)
+  return parts.join(', ')
+}
+
+const CIRCUIT_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true },
+  {
+    key: 'voltage',
+    label: 'Voltage override (V)',
+    type: 'number',
+    clearable: true,
+    hint: 'Leave empty to use the voltage of the supply: the battery or source that feeds the circuit.'
+  },
+  { key: 'notes', label: 'Notes', type: 'textarea', clearable: true }
+]
+
+// Circuits are worked out from the cables (plan 0014), so this is an
+// overview: you can name a circuit and add notes, nothing else.
+function CircuitsList ({ onSelect }) {
+  const { loading, error, items } = useResourceList('wiringCircuits')
+  const { items: cables } = useResourceList('wiringWireRuns')
+  const { items: devices } = useResourceList('wiringDevices')
+  const [filter, setFilter] = useState({})
+  const nameById = new Map(devices.map((d) => [d.id, d.name]))
+  const visible = items
+    .filter((c) => circuitMatches(c, cables, filter))
+    .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'removed' ? 1 : -1))
+
+  return html`
+    <div>
+      <p class="meta">
+        Circuits are worked out from the cables: what one fuse or breaker protects, from the supply
+        to the loads. Add or change cables on the Cables tab. Here you can name a circuit and add notes.
+      </p>
+      ${loading && html`<div class="empty-state">Loading circuits&hellip;</div>`}
+      <${ErrorBanner} message=${error} />
+      ${!loading && !error && items.length === 0 && html`
+        <div class="empty-state">No circuits yet. Add cables between devices and they appear here.</div>
+      `}
+      ${items.length > 0 && html`<${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter} />`}
+      ${visible.map((circuit) => {
+        const d = circuit.derived
+        return html`
+          <div
+            key=${circuit.id}
+            class="list-item ${circuit.status === 'removed' ? 'removed' : ''}"
+            onClick=${() => onSelect(circuit.id)}
+          >
+            <div>
+              <div>${circuit.name}</div>
+              <div class="meta">${circuitFacts(circuit)}${d && d.supplyDeviceIds.length ? ` – from ${d.supplyDeviceIds.map((id) => nameById.get(id) || '?').join(', ')}` : ''}${d && d.endDeviceIds.length ? ` – to ${d.endDeviceIds.map((id) => nameById.get(id) || '?').join(', ')}` : ''}</div>
+            </div>
+            <div>
+              ${d && d.unprotected && html`<span class="badge over-rating">no protection</span> `}
+              ${d && d.warnings.length > 0 && html`<span class="badge">${d.warnings.length} warning${d.warnings.length === 1 ? '' : 's'}</span> `}
+              <${StatusBadge} status=${circuit.status} />
+            </div>
+          </div>
+        `
+      })}
+    </div>
+  `
+}
+
+// Built from data already fetched through the resource API: the derived
+// circuit says which cables belong to it, and the cables say which devices
+// they join. Return (negative) cables are drawn dotted.
+function DiagramView ({ cables, deviceNameById, deviceIconById }) {
+  if (cables.length === 0) return null
 
   const nodes = []
   const seenNodeIds = new Set()
@@ -826,21 +1168,21 @@ function DiagramView ({ wireRuns, deviceNameById, deviceIconById }) {
     if (!id || seenNodeIds.has(id)) return
     seenNodeIds.add(id)
     const deviceName = deviceNameById.get(id)
-    nodes.push({ id, label: deviceName || id, kind: deviceName ? 'device' : 'label', icon: deviceIconById.get(id) || null })
+    nodes.push({ id, label: deviceName || '?', kind: deviceName ? 'device' : 'label', icon: deviceIconById.get(id) || null })
   }
-  for (const wr of wireRuns) {
-    addNode(wr.fromEndpoint)
-    addNode(wr.toEndpoint)
+  for (const wr of cables) {
+    addNode(wr.fromDeviceId)
+    addNode(wr.toDeviceId)
   }
 
-  const g = new dagre.graphlib.Graph()
+  const g = new dagre.graphlib.Graph({ multigraph: true })
   g.setGraph({ rankdir: 'LR', nodesep: 24, ranksep: 56, marginx: 16, marginy: 16 })
   g.setDefaultEdgeLabel(() => ({}))
   for (const n of nodes) {
     g.setNode(n.id, { width: Math.max(90, n.label.length * 7 + 28) + (n.icon ? 36 : 0), height: n.icon ? 48 : 40 })
   }
-  for (const wr of wireRuns) {
-    g.setEdge(wr.fromEndpoint, wr.toEndpoint, { wireRun: wr })
+  for (const wr of cables) {
+    if (wr.fromDeviceId && wr.toDeviceId) g.setEdge(wr.fromDeviceId, wr.toDeviceId, { wireRun: wr }, wr.id)
   }
   dagre.layout(g)
 
@@ -854,13 +1196,15 @@ function DiagramView ({ wireRuns, deviceNameById, deviceIconById }) {
           const wr = edgeData.wireRun
           const removed = wr.status === 'removed'
           const points = edgeData.points.map((p) => `${p.x},${p.y}`).join(' ')
+          const feed = (wr.conductors || []).find((c) => c.conductor !== 'negative')
+          const ret = wr.isReturn
           return html`
             <polyline
               key=${wr.id}
               points=${points}
               class="diagram-edge"
-              stroke=${wr.color || '#94a3b8'}
-              stroke-dasharray=${removed ? '4 3' : undefined}
+              stroke=${(ret ? (wr.conductors || []).find((c) => c.conductor === 'negative')?.color : feed && feed.color) || '#94a3b8'}
+              stroke-dasharray=${removed ? '4 3' : ret ? '2 4' : undefined}
               opacity=${removed ? 0.45 : 1}
             />
           `
@@ -886,21 +1230,12 @@ function CircuitDetail ({ circuitId, onBack }) {
   const [circuit, setCircuit] = useState(null)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [editingCircuit, setEditingCircuit] = useState(false)
-  const [wireRunForm, setWireRunForm] = useState(null) // null | 'create' | wireRun object being edited
-  const [attachmentsWireRunId, setAttachmentsWireRunId] = useState(null)
-  const [historyWireRunId, setHistoryWireRunId] = useState(null)
-  const [showCircuitHistory, setShowCircuitHistory] = useState(false)
-  const { items: allWireRuns, loading: wireRunsLoading } = useResourceList('wiringWireRuns', reloadKey)
-  const { items: allConduits } = useResourceList('wiringConduits', reloadKey)
+  const [editing, setEditing] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const { items: cables } = useResourceList('wiringWireRuns')
   const { items: devices } = useResourceList('wiringDevices')
-  const settings = useSettings()
-  const wireRunFields = WIRE_RUN_FIELDS.map((f) =>
-    f.key === 'color' ? { ...f, placeholder: colorPlaceholder(settings.convention) } : f
-  )
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
   const deviceIconById = new Map(devices.filter((d) => deviceIconUrl(d)).map((d) => [d.id, deviceIconUrl(d)]))
-  const endpointLabel = (endpoint) => deviceNameById.get(endpoint) || endpoint
 
   useEffect(() => {
     let cancelled = false
@@ -910,153 +1245,70 @@ function CircuitDetail ({ circuitId, onBack }) {
     return () => { cancelled = true }
   }, [circuitId, reloadKey])
 
-  const [runFilter, setRunFilter] = useState({})
-  const circuitRuns = allWireRuns.filter((wr) => wr.circuitId === circuitId)
-  const wireRuns = circuitRuns.filter((wr) => matchesFilter(wr, runFilter))
-
-  const saveCircuit = async (payload) => {
+  const save = async (payload) => {
     await putResource('wiringCircuits', circuitId, payload)
-    setEditingCircuit(false)
+    setEditing(false)
     setReloadKey((k) => k + 1)
   }
 
-  const removeCircuit = async () => {
-    if (!circuit || !confirmRemove(circuit.name)) return
-    await deleteResource('wiringCircuits', circuitId)
-    onBack()
-  }
-
-  const saveWireRun = async (payload) => {
-    const id = (wireRunForm && wireRunForm.id) || newId()
-    await putResource('wiringWireRuns', id, { ...payload, circuitId })
-    setWireRunForm(null)
-    setReloadKey((k) => k + 1)
-  }
-
-  const removeWireRun = async (wireRun) => {
-    if (!confirmRemove(`${endpointLabel(wireRun.fromEndpoint)} → ${endpointLabel(wireRun.toEndpoint)}`)) return
-    await deleteResource('wiringWireRuns', wireRun.id)
-    setReloadKey((k) => k + 1)
-  }
+  const d = circuit && circuit.derived
+  const cableById = new Map(cables.map((c) => [c.id, c]))
+  const feedCables = d ? d.cableIds.map((id) => cableById.get(id)).filter(Boolean) : []
+  const returnCables = d ? d.returnCableIds.map((id) => ({ ...cableById.get(id), isReturn: true })).filter((c) => c.id) : []
+  const names = (ids) => ids.map((id) => deviceNameById.get(id) || '?').join(', ') || '—'
 
   return html`
     <div>
       <${BackLink} onClick=${onBack}>Back to circuits<//>
       <${ErrorBanner} message=${error} />
-      ${circuit && !editingCircuit && html`
+      ${circuit && !editing && html`
         <div class="card">
           <h2>${circuit.name} <${StatusBadge} status=${circuit.status} /></h2>
-          <div class="meta">
-            Source: ${circuit.sourceLabel || 'not recorded'}
-            ${circuit.breakerRating ? ` — ${circuit.breakerRating}A breaker` : ''}
-            ${circuit.voltage ? ` — ${circuit.voltage}V` : ''}
-          </div>
+          <div class="meta">${circuitFacts(circuit)}</div>
+          ${d && html`
+            <div class="meta">Protected by: ${d.protectorId ? deviceNameById.get(d.protectorId) || '?' : 'nothing (no fuse or breaker)'}</div>
+            <div class="meta">Supply: ${names(d.supplyDeviceIds)}</div>
+            <div class="meta">Ends at: ${names(d.endDeviceIds)}</div>
+            ${d.implicitReturnDeviceIds.length > 0 && html`<div class="meta">Negative assumed alongside the feed for: ${names(d.implicitReturnDeviceIds)}</div>`}
+          `}
+          ${d && d.warnings.map((w, i) => html`<div key=${i} class="error-banner">${w.message}</div>`)}
           ${circuit.notes && html`<p>${circuit.notes}</p>`}
           <div class="row-actions">
-            <button onClick=${() => setEditingCircuit(true)}>Edit</button>
-            ${circuit.status !== 'removed' && html`<button onClick=${removeCircuit}>Remove</button>`}
-            <button onClick=${() => setShowCircuitHistory((v) => !v)}>
-              ${showCircuitHistory ? 'Hide history' : 'History'}
-            </button>
+            <button onClick=${() => setEditing(true)}>Edit name and notes</button>
+            <button onClick=${() => setShowHistory((v) => !v)}>${showHistory ? 'Hide history' : 'History'}</button>
           </div>
         </div>
       `}
-      ${circuit && editingCircuit && html`
+      ${circuit && editing && html`
         <div class="card">
-          <${Form}
-            fields=${CIRCUIT_FIELDS}
-            initial=${circuit}
-            onSubmit=${saveCircuit}
-            onCancel=${() => setEditingCircuit(false)}
-          />
+          <${Form} fields=${CIRCUIT_FIELDS} initial=${circuit} onSubmit=${save} onCancel=${() => setEditing(false)} />
         </div>
       `}
-      ${showCircuitHistory && html`<${ChangeLog} kind="circuit" id=${circuitId} />`}
+      ${showHistory && html`<${ChangeLog} kind="circuit" id=${circuitId} />`}
 
-      ${circuitRuns.length > 0 && html`
+      ${feedCables.length > 0 && html`
         <h3>Diagram</h3>
-        <${DiagramView} wireRuns=${circuitRuns} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById} />
+        <${DiagramView} cables=${[...feedCables, ...returnCables]} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById} />
       `}
 
-      <h3>Wire runs</h3>
-      ${wireRunsLoading && html`<div class="empty-state">Loading wire runs&hellip;</div>`}
-      ${!wireRunsLoading && circuitRuns.length === 0 && html`
-        <div class="empty-state">No wire runs recorded for this circuit yet.</div>
-      `}
-      ${circuitRuns.length > 1 && html`<${ZoneTagFilter} items=${circuitRuns} filter=${runFilter} onChange=${setRunFilter} />`}
-      ${!wireRunsLoading && circuitRuns.length > 0 && wireRuns.length === 0 && html`
-        <div class="empty-state">No wire runs match the filter.</div>
-      `}
-      ${wireRuns.length > 0 && html`
+      <h3>Cables</h3>
+      ${d && feedCables.length + returnCables.length === 0 && html`<div class="empty-state">No cables.</div>`}
+      ${feedCables.length + returnCables.length > 0 && html`
         <table>
-          <thead>
-            <tr>
-              <th>From</th><th>To</th><th>Cable</th><th>Gauge</th><th>Length</th>
-              <th>Color</th><th>Zone</th><th>Status</th><th></th>
-            </tr>
-          </thead>
+          <thead><tr><th>From</th><th>To</th><th>Role</th><th>Cable</th><th>Gauge</th><th>Length</th></tr></thead>
           <tbody>
-            ${wireRuns.flatMap((wr) => {
-              const rows = [html`
-                <tr key=${wr.id}>
-                  <td>${endpointLabel(wr.fromEndpoint)}</td>
-                  <td>${endpointLabel(wr.toEndpoint)}</td>
-                  <td>${wr.cableLabel || '—'}${conduitsOfRun(wr, allConduits).length ? html`<div class="meta">In ${conduitsOfRun(wr, allConduits).map((c) => c.name).join(', then ')}</div>` : ''}</td>
-                  <td>${wr.gauge ? `${wr.gauge} ${wr.gaugeUnit || ''}` : '—'}</td>
-                  <td>${wr.length ? `${wr.length} ${wr.lengthUnit || ''}` : '—'}</td>
-                  <td>${wr.color || '—'}</td>
-                  <td>${wr.zone || '—'}${(wr.tags || []).length ? html`<div class="meta">${wr.tags.join(', ')}</div>` : ''}</td>
-                  <td><${StatusBadge} status=${wr.status} /></td>
-                  <td class="row-actions">
-                    <button onClick=${() => setWireRunForm(wr)}>Edit</button>
-                    ${wr.status !== 'removed' && html`
-                      <button onClick=${() => removeWireRun(wr)}>Remove</button>
-                    `}
-                    <button onClick=${() => setAttachmentsWireRunId(attachmentsWireRunId === wr.id ? null : wr.id)}>
-                      ${attachmentsWireRunId === wr.id ? 'Hide attachments' : 'Attachments'}
-                    </button>
-                    <button onClick=${() => setHistoryWireRunId(historyWireRunId === wr.id ? null : wr.id)}>
-                      ${historyWireRunId === wr.id ? 'Hide history' : 'History'}
-                    </button>
-                  </td>
-                </tr>
-              `]
-              if (attachmentsWireRunId === wr.id) {
-                rows.push(html`
-                  <tr key="${wr.id}-attachments">
-                    <td colspan="9">
-                      <${AttachmentList} ownerType="wireRun" ownerId=${wr.id} />
-                    </td>
-                  </tr>
-                `)
-              }
-              if (historyWireRunId === wr.id) {
-                rows.push(html`
-                  <tr key="${wr.id}-history">
-                    <td colspan="9">
-                      <${ChangeLog} kind="wireRun" id=${wr.id} />
-                    </td>
-                  </tr>
-                `)
-              }
-              return rows
-            })}
+            ${[...feedCables, ...returnCables].map((c) => html`
+              <tr key=${(c.isReturn ? 'r-' : 'f-') + c.id}>
+                <td>${deviceNameById.get(c.fromDeviceId) || '?'}</td>
+                <td>${deviceNameById.get(c.toDeviceId) || '?'}</td>
+                <td>${c.isReturn ? 'Negative return' : 'Feed'}</td>
+                <td>${c.cableLabel || '—'}</td>
+                <td>${c.gauge ? `${c.gauge} ${c.gaugeUnit || ''}` : '—'}</td>
+                <td>${c.length ? `${c.length} ${c.lengthUnit || ''}` : '—'}</td>
+              </tr>
+            `)}
           </tbody>
         </table>
-      `}
-
-      ${wireRunForm === null && html`
-        <button onClick=${() => setWireRunForm('create')}>+ Add wire run</button>
-      `}
-      ${wireRunForm !== null && html`
-        <${Form}
-          key=${`${settings.defaultGaugeUnit}/${settings.defaultLengthUnit}/${wireRunForm === 'create' ? 'new' : wireRunForm.id}`}
-          fields=${wireRunFields}
-          initial=${wireRunForm === 'create' ? wireRunInitialValues(settings) : wireRunForm}
-          onSubmit=${saveWireRun}
-          onCancel=${() => setWireRunForm(null)}
-          submitLabel=${wireRunForm === 'create' ? 'Add wire run' : 'Save'}
-        />
       `}
     </div>
   `
@@ -1424,6 +1676,7 @@ function App () {
       </header>
       <nav class="tabs">
         <button class=${tab === 'circuits' ? 'active' : ''} onClick=${() => switchTab('circuits')}>Circuits</button>
+        <button class=${tab === 'cables' ? 'active' : ''} onClick=${() => switchTab('cables')}>Cables</button>
         <button class=${tab === 'devices' ? 'active' : ''} onClick=${() => switchTab('devices')}>Devices</button>
         <button class=${tab === 'conduits' ? 'active' : ''} onClick=${() => switchTab('conduits')}>Conduits</button>
         <button class=${tab === 'load' ? 'active' : ''} onClick=${() => switchTab('load')}>Load Summary</button>
@@ -1435,6 +1688,7 @@ function App () {
       ${tab === 'circuits' && selectedCircuitId && html`
         <${CircuitDetail} circuitId=${selectedCircuitId} onBack=${() => setSelectedCircuitId(null)} />
       `}
+      ${tab === 'cables' && html`<${CablesList} />`}
       ${tab === 'devices' && !selectedDeviceId && html`<${DevicesList} onSelect=${setSelectedDeviceId} />`}
       ${tab === 'devices' && selectedDeviceId && html`
         <${DeviceDetail} deviceId=${selectedDeviceId} onBack=${() => setSelectedDeviceId(null)} />

@@ -183,9 +183,9 @@ are worked out from them. A circuit is what a fuse or breaker protects.
 - [x] Schema and migration: wire run ends as devices, conductors and
       terminals, trip rating and nominal voltage on devices.
 - [x] Keep circuit records in step with wire runs (store write path).
-- [ ] Cable form with device pickers, inline new device, conductors and
+- [x] Cable form with device pickers, inline new device, conductors and
       optional terminals.
-- [ ] Circuits overview (name, notes), diagram and load summary on derived
+- [x] Circuits overview (name, notes), diagram and load summary on derived
       circuits, floorplan panel link removed.
 - [ ] CSV import updated for device-based ends.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.

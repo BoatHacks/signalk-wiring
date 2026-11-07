@@ -100,20 +100,15 @@ const devices = new Map([
   ['panel', { id: 'panel', status: 'active', posX: 5, posY: 0, posZ: 1 }]
 ])
 
-test('route start: from-device first, then the circuit panel, then nothing', () => {
-  const circuit = { panelDeviceId: 'panel' }
-  assert.deepEqual(resolveRouteStart({ fromEndpoint: 'pump' }, circuit, devices), { x: 1, y: 2, z: 0.5 })
-  assert.deepEqual(resolveRouteStart({ fromEndpoint: 'F12' }, circuit, devices), { x: 5, y: 0, z: 1 })
-  assert.equal(resolveRouteStart({ fromEndpoint: 'F12' }, { panelDeviceId: null }, devices), null)
+test('route start: the from-device when placed, else nothing', () => {
+  assert.deepEqual(resolveRouteStart({ fromDeviceId: 'pump' }, null, devices), { x: 1, y: 2, z: 0.5 })
+  assert.equal(resolveRouteStart({ fromDeviceId: 'F12' }, null, devices), null)
 })
 
-test('route start: a removed or unplaced device falls back cleanly', () => {
-  const circuit = { panelDeviceId: 'panel' }
-  assert.deepEqual(resolveRouteStart({ fromEndpoint: 'gone' }, circuit, devices), { x: 5, y: 0, z: 1 })
-  assert.deepEqual(resolveRouteStart({ fromEndpoint: 'loose' }, circuit, devices), { x: 5, y: 0, z: 1 })
-  assert.equal(resolveRouteStart({ fromEndpoint: 'loose' }, { panelDeviceId: 'gone' }, devices), null)
-  assert.equal(resolveRouteStart({ fromEndpoint: 'loose' }, { panelDeviceId: 'missing' }, devices), null)
-  assert.equal(resolveRouteStart({ fromEndpoint: 'loose' }, null, devices), null)
+test('route start: a removed or unplaced device gives nothing', () => {
+  assert.equal(resolveRouteStart({ fromDeviceId: 'gone' }, null, devices), null)
+  assert.equal(resolveRouteStart({ fromDeviceId: 'loose' }, null, devices), null)
+  assert.equal(resolveRouteStart({}, null, devices), null)
 })
 
 test('deck plans show only their height range', () => {
@@ -165,23 +160,24 @@ test('removeWaypoint drops one point and tolerates the last index', () => {
 })
 
 test('routePoints prepends the resolved start and copes with no route', () => {
-  const circuit = { panelDeviceId: 'panel' }
-  const run = { fromEndpoint: 'pump', route: [{ x: 2, y: 2, z: 0.5 }] }
-  assert.deepEqual(routePoints(run, circuit, devices), [{ x: 1, y: 2, z: 0.5 }, { x: 2, y: 2, z: 0.5 }])
-  assert.deepEqual(routePoints({ fromEndpoint: 'F12' }, { panelDeviceId: null }, devices), [])
-  assert.deepEqual(routePoints({ fromEndpoint: 'F12', route: [{ x: 1 }] }, { panelDeviceId: null }, devices), [{ x: 1, y: null, z: null }])
+  const run = { fromDeviceId: 'pump', route: [{ x: 2, y: 2, z: 0.5 }] }
+  assert.deepEqual(routePoints(run, null, devices), [{ x: 1, y: 2, z: 0.5 }, { x: 2, y: 2, z: 0.5 }])
+  assert.deepEqual(routePoints({ fromDeviceId: 'F12' }, null, devices), [])
+  assert.deepEqual(routePoints({ fromDeviceId: 'F12', route: [{ x: 1 }] }, null, devices), [{ x: 1, y: null, z: null }])
 })
 
-test('circuitMembers collects devices and runs, skipping removed runs, adding the panel', () => {
-  const circuit = { id: 'c1', panelDeviceId: 'panel' }
+test('circuitMembers takes the derived cables and devices, skipping removed runs', () => {
+  const circuit = { id: 'c1', derived: { cableIds: ['r1', 'r2'], returnCableIds: ['r4'], deviceIds: ['F12', 'pump', 'panel'] } }
   const runs = [
-    { id: 'r1', circuitId: 'c1', fromEndpoint: 'F12', toEndpoint: 'pump', status: 'active' },
-    { id: 'r2', circuitId: 'c1', fromEndpoint: 'pump', toEndpoint: 'old', status: 'removed' },
-    { id: 'r3', circuitId: 'c2', fromEndpoint: 'x', toEndpoint: 'y', status: 'active' }
+    { id: 'r1', fromDeviceId: 'F12', toDeviceId: 'pump', status: 'active' },
+    { id: 'r2', fromDeviceId: 'pump', toDeviceId: 'old', status: 'removed' },
+    { id: 'r3', fromDeviceId: 'x', toDeviceId: 'y', status: 'active' },
+    { id: 'r4', fromDeviceId: 'bus', toDeviceId: 'pump', status: 'active' }
   ]
   const m = circuitMembers(circuit, runs)
-  assert.deepEqual([...m.runIds], ['r1'])
-  assert.deepEqual([...m.deviceIds].sort(), ['F12', 'panel', 'pump'])
+  assert.deepEqual([...m.runIds].sort(), ['r1', 'r4'])
+  assert.deepEqual([...m.deviceIds].sort(), ['F12', 'bus', 'panel', 'pump'])
+  assert.equal(circuitMembers({ derived: null }, runs).runIds.size, 0)
 })
 
 test('metersToLengthUnit converts to feet and rounds', () => {
@@ -249,9 +245,9 @@ test('unrouted cables: no own route and no drawn conduit', () => {
 test('conduit members are its live cables and their ends, for highlighting', () => {
   const conduit = { id: 'k1', cableIds: ['a', 'b', 'c'] }
   const runs = [
-    { id: 'a', status: 'active', fromEndpoint: 'd1', toEndpoint: 'd2' },
-    { id: 'b', status: 'removed', fromEndpoint: 'd3', toEndpoint: 'd4' },
-    { id: 'z', status: 'active', fromEndpoint: 'd9', toEndpoint: 'd8' }
+    { id: 'a', status: 'active', fromDeviceId: 'd1', toDeviceId: 'd2' },
+    { id: 'b', status: 'removed', fromDeviceId: 'd3', toDeviceId: 'd4' },
+    { id: 'z', status: 'active', fromDeviceId: 'd9', toDeviceId: 'd8' }
   ]
   const { runIds, deviceIds } = conduitMembers(conduit, runs)
   assert.deepEqual([...runIds], ['a'])
@@ -285,7 +281,7 @@ test('effective route: two conduits in sequence are chained, the second turned t
 test('effective route: the first conduit is turned toward the cable start device or the second conduit', () => {
   const k1 = straight('k1', 4, 0) // drawn away from the start
   const devices = new Map([['d1', { id: 'd1', status: 'active', posX: 0, posY: 0, posZ: 0 }]])
-  const byDevice = effectiveCableRoute({ id: 'w', fromEndpoint: 'd1', conduitIds: ['k1'] }, null, devices, conduitMap(k1))
+  const byDevice = effectiveCableRoute({ id: 'w', fromDeviceId: 'd1', conduitIds: ['k1'] }, null, devices, conduitMap(k1))
   assert.deepEqual(byDevice.points.map((p) => p.x), [0, 4])
 
   const k2 = straight('k2', 10, 20)
