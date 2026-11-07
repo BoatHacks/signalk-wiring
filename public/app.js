@@ -10,6 +10,7 @@ import { FloorplanTab } from './floorplanView.js'
 import { useSettings, wireRunInitialValues, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
 import { typeOptions } from './deviceTypes.js'
+import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -137,6 +138,53 @@ function TypeField ({ role, value, onChange }) {
   `
 }
 
+// Dropdown of conduit kinds: the suggestions, kinds already used, and an
+// "Add kind..." entry. The kind is free text underneath.
+function KindField ({ value, onChange }) {
+  const { items: conduits } = useResourceList('wiringConduits')
+  const [adding, setAdding] = useState(false)
+  const [newKind, setNewKind] = useState('')
+  const { suggested, used } = kindOptions(conduits.map((c) => c.kind), value)
+
+  const addKind = () => {
+    const name = newKind.trim()
+    if (!name) return
+    const existing = [...suggested, ...used].find((k) => k.toLowerCase() === name.toLowerCase())
+    onChange(existing || name)
+    setAdding(false)
+    setNewKind('')
+  }
+
+  return html`
+    <div>
+      <select value=${adding ? ADD_OPTION : value}
+        onChange=${(e) => {
+          if (e.target.value === ADD_OPTION) setAdding(true)
+          else { setAdding(false); onChange(e.target.value) }
+        }}>
+        <option value="">No kind recorded</option>
+        <optgroup label="Suggested">
+          ${suggested.map((k) => html`<option value=${k} key=${k}>${k}</option>`)}
+        </optgroup>
+        ${used.length > 0 && html`
+          <optgroup label="Already used">
+            ${used.map((k) => html`<option value=${k} key=${k}>${k}</option>`)}
+          </optgroup>
+        `}
+        <option value=${ADD_OPTION}>Add kind…</option>
+      </select>
+      ${adding && html`
+        <div class="row-actions">
+          <input type="text" value=${newKind} placeholder="Kind, e.g. Flexible duct" autofocus
+            onInput=${(e) => setNewKind(e.target.value)}
+            onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); addKind() } }} />
+          <button type="button" onClick=${addKind}>Add kind</button>
+        </div>
+      `}
+    </div>
+  `
+}
+
 // Dropdown of the zones with an "Add new zone..." entry that creates the
 // zone on the spot and selects it. An absent zone stays valid.
 function ZoneField ({ value, onChange }) {
@@ -214,7 +262,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
     for (const f of fields) {
       const raw = values[f.key]
       // Zone and tags are always sent, so clearing them on an edit takes effect.
-      if (f.type === 'zone' || f.type === 'deviceType') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
+      if (f.type === 'zone' || f.type === 'deviceType' || f.type === 'conduitKind') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
       if (raw === '' || raw == null) continue
       payload[f.key] = f.type === 'number' ? Number(raw) : raw
@@ -253,6 +301,9 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
           `}
           ${f.type === 'deviceType' && html`
             <${TypeField} role=${values.role} value=${values[f.key]} onChange=${(v) => setField(f.key, v)} />
+          `}
+          ${f.type === 'conduitKind' && html`
+            <${KindField} value=${values[f.key]} onChange=${(v) => setField(f.key, v)} />
           `}
           ${f.type === 'tags' && html`
             <input type="text" value=${values[f.key]} placeholder="e.g. audio: main, audio: cockpit"
@@ -548,8 +599,27 @@ const WIRE_RUN_FIELDS = [
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
 
+const CONDUIT_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Galley conduit' },
+  {
+    key: 'kind',
+    label: 'Kind',
+    type: 'conduitKind',
+    hint: 'What it is: conduit, hose, loom, trunking or cable tray. Pick one, or choose Add kind for anything not listed.'
+  },
+  { key: 'innerDiameter', label: 'Inner diameter', type: 'number', hint: 'Optional, as a note for now.' },
+  { key: 'diameterUnit', label: 'Diameter unit', type: 'select', options: ['mm', 'in'] },
+  {
+    key: 'zoneId',
+    label: 'Zone',
+    type: 'zone',
+    hint: 'Where it is: an area such as salon or aft cabin. Used for filtering.'
+  },
+  { key: 'notes', label: 'Notes', type: 'textarea' }
+]
+
 // Zone and tag filter for a list. `items` supplies the tags in use.
-function ZoneTagFilter ({ items, filter, onChange, withRole = false }) {
+function ZoneTagFilter ({ items, filter, onChange, withRole = false, children }) {
   const { items: zones } = useResourceList('wiringZones')
   const tags = collectTags(items)
   return html`
@@ -577,6 +647,7 @@ function ZoneTagFilter ({ items, filter, onChange, withRole = false }) {
           </select>
         </label>
       `}
+      ${children}
     </div>
   `
 }
@@ -592,8 +663,10 @@ function ZonesManager () {
   const { loading, items: zones } = useResourceList('wiringZones', reloadKey)
   const { items: devices } = useResourceList('wiringDevices', reloadKey)
   const { items: wireRuns } = useResourceList('wiringWireRuns', reloadKey)
+  const { items: conduits } = useResourceList('wiringConduits', reloadKey)
 
   const usage = (zoneId) => ({
+    conduits: conduits.filter((c) => c.zoneId === zoneId && c.status !== 'removed').length,
     devices: devices.filter((d) => d.zoneId === zoneId && d.status !== 'removed').length,
     wireRuns: wireRuns.filter((w) => w.zoneId === zoneId && w.status !== 'removed').length
   })
@@ -634,7 +707,7 @@ function ZonesManager () {
   return html`
     <div>
       <p class="meta">
-        A zone is the area something is in, such as salon or aft cabin. Each device and wire run has at most one.
+        A zone is the area something is in, such as salon or aft cabin. Each device, wire run and conduit has at most one.
         Renaming a zone renames it everywhere.
       </p>
       <${ErrorBanner} message=${error} />
@@ -642,7 +715,7 @@ function ZonesManager () {
       ${!loading && zones.length === 0 && html`<div class="empty-state">No zones yet. Add one below, or from a device form.</div>`}
       ${zones.map((zone) => {
         const u = usage(zone.id)
-        const inUse = u.devices + u.wireRuns > 0
+        const inUse = u.devices + u.wireRuns + u.conduits > 0
         return html`
           <div class="list-item" key=${zone.id}>
             <div>
@@ -650,7 +723,7 @@ function ZonesManager () {
                 ? html`<input type="text" value=${editName} onInput=${(e) => setEditName(e.target.value)}
                     onKeyDown=${(e) => { if (e.key === 'Enter') rename(zone) }} />`
                 : html`<div>${zone.name}</div>`}
-              <div class="meta">${u.devices} devices, ${u.wireRuns} wire runs</div>
+              <div class="meta">${u.devices} devices, ${u.wireRuns} wire runs, ${u.conduits} conduits</div>
             </div>
             <div class="row-actions">
               ${editingId === zone.id
@@ -819,6 +892,7 @@ function CircuitDetail ({ circuitId, onBack }) {
   const [historyWireRunId, setHistoryWireRunId] = useState(null)
   const [showCircuitHistory, setShowCircuitHistory] = useState(false)
   const { items: allWireRuns, loading: wireRunsLoading } = useResourceList('wiringWireRuns', reloadKey)
+  const { items: allConduits } = useResourceList('wiringConduits', reloadKey)
   const { items: devices } = useResourceList('wiringDevices')
   const settings = useSettings()
   const wireRunFields = WIRE_RUN_FIELDS.map((f) =>
@@ -927,7 +1001,7 @@ function CircuitDetail ({ circuitId, onBack }) {
                 <tr key=${wr.id}>
                   <td>${endpointLabel(wr.fromEndpoint)}</td>
                   <td>${endpointLabel(wr.toEndpoint)}</td>
-                  <td>${wr.cableLabel || '—'}</td>
+                  <td>${wr.cableLabel || '—'}${conduitsOfRun(wr, allConduits).length ? html`<div class="meta">In ${conduitsOfRun(wr, allConduits).map((c) => c.name).join(', then ')}</div>` : ''}</td>
                   <td>${wr.gauge ? `${wr.gauge} ${wr.gaugeUnit || ''}` : '—'}</td>
                   <td>${wr.length ? `${wr.length} ${wr.lengthUnit || ''}` : '—'}</td>
                   <td>${wr.color || '—'}</td>
@@ -1123,6 +1197,197 @@ function DeviceDetail ({ deviceId, onBack }) {
   `
 }
 
+function ConduitsList ({ onSelect }) {
+  const [reloadKey, setReloadKey] = useState(0)
+  const [showForm, setShowForm] = useState(false)
+  const { loading, error, items } = useResourceList('wiringConduits', reloadKey)
+  const [filter, setFilter] = useState({})
+  const { suggested, used } = kindOptions(items.map((c) => c.kind), '')
+  const visible = filterConduits(items, filter)
+
+  const createConduit = async (payload) => {
+    await putResource('wiringConduits', newId(), payload)
+    setShowForm(false)
+    setReloadKey((k) => k + 1)
+  }
+
+  return html`
+    <div>
+      <p class="meta">
+        A conduit is a conduit, hose, loom, trunking or cable tray that several cables run through.
+        Add the cables on its page; draw its route on the Floorplan tab.
+      </p>
+      <div class="list-header">
+        <button onClick=${() => setShowForm((v) => !v)}>${showForm ? 'Cancel' : '+ New conduit'}</button>
+      </div>
+      ${showForm && html`
+        <${Form}
+          fields=${CONDUIT_FIELDS}
+          onSubmit=${createConduit}
+          onCancel=${() => setShowForm(false)}
+          submitLabel="Create conduit"
+        />
+      `}
+      ${loading && html`<div class="empty-state">Loading conduits&hellip;</div>`}
+      <${ErrorBanner} message=${error} />
+      ${!loading && !error && items.length === 0 && html`
+        <div class="empty-state">No conduits recorded yet.</div>
+      `}
+      ${items.length > 0 && html`
+        <${ZoneTagFilter} items=${[]} filter=${filter} onChange=${setFilter}>
+          <label class="form-field compact"><span>Kind</span>
+            <select value=${filter.kind || ''} onChange=${(e) => setFilter({ ...filter, kind: e.target.value || null })}>
+              <option value="">All kinds</option>
+              ${[...suggested, ...used].map((k) => html`<option value=${k} key=${k}>${k}</option>`)}
+            </select>
+          </label>
+        <//>
+      `}
+      ${visible.map((conduit) => html`
+        <div
+          key=${conduit.id}
+          class="list-item ${conduit.status === 'removed' ? 'removed' : ''}"
+          onClick=${() => onSelect(conduit.id)}
+        >
+          <div>
+            <div>${conduit.name}</div>
+            <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` – ${conduit.zone}` : ''} – ${(conduit.cableIds || []).length === 1 ? '1 cable' : `${(conduit.cableIds || []).length} cables`}</div>
+          </div>
+          <${StatusBadge} status=${conduit.status} />
+        </div>
+      `)}
+    </div>
+  `
+}
+
+function ConduitDetail ({ conduitId, onBack }) {
+  const [conduit, setConduit] = useState(null)
+  const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [toAdd, setToAdd] = useState('')
+  const { items: runs } = useResourceList('wiringWireRuns', reloadKey)
+  const { items: devices } = useResourceList('wiringDevices')
+  const { items: conduits } = useResourceList('wiringConduits', reloadKey)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchResource('wiringConduits', conduitId)
+      .then((data) => { if (!cancelled) setConduit(data) })
+      .catch((err) => { if (!cancelled) setError(err.message) })
+    return () => { cancelled = true }
+  }, [conduitId, reloadKey])
+
+  const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
+  const runById = new Map(runs.map((r) => [r.id, r]))
+  const reload = () => setReloadKey((k) => k + 1)
+  const guard = async (fn) => {
+    setError(null)
+    try { await fn(); reload() } catch (err) { setError(err.message) }
+  }
+
+  const saveConduit = async (payload) => {
+    await putResource('wiringConduits', conduitId, payload)
+    setEditing(false)
+    reload()
+  }
+  const removeConduit = async () => {
+    if (!conduit || !confirmRemove(conduit.name)) return
+    await deleteResource('wiringConduits', conduitId)
+    onBack()
+  }
+  const setCables = (cableIds) => guard(() => putResource('wiringConduits', conduitId, { cableIds }))
+  const addCable = () => {
+    if (!toAdd) return
+    const id = toAdd
+    setToAdd('')
+    return setCables([...(conduit.cableIds || []), id])
+  }
+  // Moves this conduit one place earlier or later in the cable's own list.
+  const moveForCable = (run, delta) =>
+    guard(() => putResource('wiringWireRuns', run.id, { conduitIds: moveInList(run.conduitIds || [], conduitId, delta) }))
+
+  const cables = conduit ? (conduit.cableIds || []).map((id) => runById.get(id)).filter(Boolean) : []
+  const candidates = conduit ? addableCables(runs, conduit) : []
+
+  return html`
+    <div>
+      <${BackLink} onClick=${onBack}>Back to conduits<//>
+      <${ErrorBanner} message=${error} />
+      ${conduit && !editing && html`
+        <div class="card">
+          <h2>${conduit.name} <${StatusBadge} status=${conduit.status} /></h2>
+          <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` – ${conduit.zone}` : ''}</div>
+          <div class="meta">${Array.isArray(conduit.route) && conduit.route.length > 1
+            ? `Route drawn: ${conduit.route.length} points`
+            : 'No route drawn yet. Draw it on the Floorplan tab.'}</div>
+          ${conduit.notes && html`<p>${conduit.notes}</p>`}
+          <div class="row-actions">
+            <button onClick=${() => setEditing(true)}>Edit</button>
+            ${conduit.status !== 'removed' && html`<button onClick=${removeConduit}>Remove</button>`}
+            <button onClick=${() => setShowHistory((v) => !v)}>
+              ${showHistory ? 'Hide history' : 'History'}
+            </button>
+          </div>
+        </div>
+      `}
+      ${conduit && editing && html`
+        <div class="card">
+          <${Form}
+            fields=${CONDUIT_FIELDS}
+            initial=${conduit}
+            onSubmit=${saveConduit}
+            onCancel=${() => setEditing(false)}
+          />
+        </div>
+      `}
+      ${showHistory && html`<${ChangeLog} kind="conduit" id=${conduitId} />`}
+      ${conduit && html`
+        <h3>Cables in this conduit (${cables.length})</h3>
+        ${cables.length === 0 && html`<div class="empty-state">No cables assigned yet.</div>`}
+        ${cables.map((run) => {
+          const others = conduitsOfRun(run, conduits)
+          const position = (run.conduitIds || []).indexOf(conduitId)
+          return html`
+            <div class="list-item ${run.status === 'removed' ? 'removed' : ''}" key=${run.id}>
+              <div>
+                <div>${cableName(run, deviceNameById)}</div>
+                <div class="meta">
+                  ${others.length > 1
+                    ? `Passes through ${others.map((c) => c.name).join(', then ')}`
+                    : 'Only in this conduit'}
+                  ${run.status === 'removed' ? ' – removed' : ''}
+                </div>
+              </div>
+              <div class="row-actions">
+                ${others.length > 1 && html`
+                  <button title="Pass through this conduit earlier" disabled=${position <= 0}
+                    onClick=${() => moveForCable(run, -1)}>Earlier</button>
+                  <button title="Pass through this conduit later" disabled=${position >= others.length - 1}
+                    onClick=${() => moveForCable(run, 1)}>Later</button>
+                `}
+                <button onClick=${() => setCables((conduit.cableIds || []).filter((id) => id !== run.id))}>Take out</button>
+              </div>
+            </div>
+          `
+        })}
+        ${conduit.status !== 'removed' && html`
+          <div class="row-actions">
+            <select value=${toAdd} onChange=${(e) => setToAdd(e.target.value)} aria-label="Cable to add">
+              <option value="">Add a cable…</option>
+              ${candidates.map((r) => html`<option value=${r.id} key=${r.id}>${cableName(r, deviceNameById)}</option>`)}
+            </select>
+            <button disabled=${!toAdd} onClick=${addCable}>Add cable</button>
+          </div>
+        `}
+        <h3>Attachments</h3>
+        <${AttachmentList} ownerType="conduit" ownerId=${conduitId} />
+      `}
+    </div>
+  `
+}
+
 const ICON_MOON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
 const ICON_SUN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
 
@@ -1142,11 +1407,13 @@ function App () {
   const [tab, setTab] = useState('circuits')
   const [selectedCircuitId, setSelectedCircuitId] = useState(null)
   const [selectedDeviceId, setSelectedDeviceId] = useState(null)
+  const [selectedConduitId, setSelectedConduitId] = useState(null)
 
   const switchTab = (nextTab) => {
     setTab(nextTab)
     setSelectedCircuitId(null)
     setSelectedDeviceId(null)
+    setSelectedConduitId(null)
   }
 
   return html`
@@ -1158,6 +1425,7 @@ function App () {
       <nav class="tabs">
         <button class=${tab === 'circuits' ? 'active' : ''} onClick=${() => switchTab('circuits')}>Circuits</button>
         <button class=${tab === 'devices' ? 'active' : ''} onClick=${() => switchTab('devices')}>Devices</button>
+        <button class=${tab === 'conduits' ? 'active' : ''} onClick=${() => switchTab('conduits')}>Conduits</button>
         <button class=${tab === 'load' ? 'active' : ''} onClick=${() => switchTab('load')}>Load Summary</button>
         <button class=${tab === 'zones' ? 'active' : ''} onClick=${() => switchTab('zones')}>Zones</button>
         <button class=${tab === 'floorplan' ? 'active' : ''} onClick=${() => switchTab('floorplan')}>Floorplan</button>
@@ -1170,6 +1438,10 @@ function App () {
       ${tab === 'devices' && !selectedDeviceId && html`<${DevicesList} onSelect=${setSelectedDeviceId} />`}
       ${tab === 'devices' && selectedDeviceId && html`
         <${DeviceDetail} deviceId=${selectedDeviceId} onBack=${() => setSelectedDeviceId(null)} />
+      `}
+      ${tab === 'conduits' && !selectedConduitId && html`<${ConduitsList} onSelect=${setSelectedConduitId} />`}
+      ${tab === 'conduits' && selectedConduitId && html`
+        <${ConduitDetail} conduitId=${selectedConduitId} onBack=${() => setSelectedConduitId(null)} />
       `}
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
