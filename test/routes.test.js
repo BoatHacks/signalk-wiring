@@ -201,14 +201,38 @@ test('DELETE /attachments/:id removes the row and the file', async () => {
   cleanup()
 })
 
-test('GET /circuits/:id/diagram returns nodes and edges', () => {
+test('GET /circuits/:id/diagram returns the devices and cables of the derived circuit', () => {
   const { store, router, cleanup } = setup()
-  const circuit = store.create('circuit', { name: 'Nav lights' })
+  const battery = store.create('device', { name: 'Battery', role: 'storage' })
+  const fuse = store.create('device', { name: 'Fuse', role: 'distribution', trip_rating_a: 10 })
+  const light = store.create('device', { name: 'Port light' })
+  store.create('wireRun', { from_device_id: battery.id, to_device_id: fuse.id, conductors: [{ conductor: 'positive', color: 'red' }] })
+  store.create('wireRun', { from_device_id: fuse.id, to_device_id: light.id, conductors: [{ conductor: 'positive', color: 'green' }] })
+  const [circuit] = store.list('circuit')
+
   const req = new FakeRequest({ params: { id: circuit.id } })
   const res = new FakeResponse()
   router.invoke('get', '/circuits/:id/diagram', req, res)
+
   assert.equal(res.statusCode, 200)
-  assert.deepEqual(res.body.nodes, [])
+  assert.equal(res.body.nodes.length, 3)
+  assert.equal(res.body.nodes.find((n) => n.id === light.id).label, 'Port light')
+  assert.equal(res.body.edges.length, 2)
+  assert.ok(res.body.edges.some((e) => e.color === 'green' && e.kind === 'feed'))
+  cleanup()
+})
+
+test('GET /derived returns the banks and warnings of the whole boat', () => {
+  const { store, router, cleanup } = setup()
+  const a = store.create('device', { name: 'A', role: 'storage' })
+  const b = store.create('device', { name: 'B', role: 'storage' })
+  store.create('wireRun', { from_device_id: a.id, to_device_id: b.id })
+  store.create('wireRun', { from_device_id: a.id })
+  const res = new FakeResponse()
+  router.invoke('get', '/derived', new FakeRequest({}), res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.banks.length, 1)
+  assert.equal(res.body.warnings[0].code, 'missing-device')
   cleanup()
 })
 
@@ -437,7 +461,8 @@ test('the SVG download is registered readonly when the server supports router.ac
 
   assert.deepEqual(registered, [
     { level: 'readonly', method: 'get', routePath: '/plans/:id/image' },
-    { level: 'readonly', method: 'get', routePath: '/devices/:id/icon' }
+    { level: 'readonly', method: 'get', routePath: '/devices/:id/icon' },
+    { level: 'readonly', method: 'get', routePath: '/derived' }
   ])
   store.close()
 })

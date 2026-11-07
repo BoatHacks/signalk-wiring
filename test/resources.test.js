@@ -68,12 +68,12 @@ test('getResource on an unknown id throws', async () => {
 })
 
 test('deleteResource soft-deletes: record stays readable with status removed', async () => {
-  const { store, provider } = freshProvider('circuit', 'wiringCircuits')
-  await provider.methods.setResource('c1', { name: 'Bilge pump circuit' })
+  const { store, provider } = freshProvider('device', 'wiringDevices')
+  await provider.methods.setResource('d1', { name: 'Bilge pump' })
 
-  await provider.methods.deleteResource('c1')
+  await provider.methods.deleteResource('d1')
 
-  const resource = await provider.methods.getResource('c1')
+  const resource = await provider.methods.getResource('d1')
   assert.equal(resource.status, 'removed')
 
   store.close()
@@ -216,8 +216,6 @@ test('wiringConduits: a conduit resource carries its cable ids and a cable its c
   const store = new Store(':memory:')
   const conduits = createResourceProvider(store, 'conduit', 'wiringConduits')
   const runs = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
-  const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
-  await circuits.methods.setResource('c1', { name: 'C' })
   await runs.methods.setResource('w1', {})
   await runs.methods.setResource('w2', {})
   await conduits.methods.setResource('k1', { name: 'Galley', kind: 'conduit', innerDiameter: 25, diameterUnit: 'mm', cableIds: ['w1', 'w2'] })
@@ -247,14 +245,43 @@ test('wiringWireRuns: a new wire run written with conduitIds is assigned in orde
   const store = new Store(':memory:')
   const conduits = createResourceProvider(store, 'conduit', 'wiringConduits')
   const runs = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
-  const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
-  await circuits.methods.setResource('c1', { name: 'C' })
   await conduits.methods.setResource('k1', { name: 'One' })
   await conduits.methods.setResource('k2', { name: 'Two' })
 
-  await runs.methods.setResource('w1', { circuitId: 'c1', conduitIds: ['k2', 'k1'] })
+  await runs.methods.setResource('w1', { conduitIds: ['k2', 'k1'] })
 
   assert.deepEqual((await runs.methods.getResource('w1')).conduitIds, ['k2', 'k1'])
   assert.deepEqual((await conduits.methods.getResource('k1')).cableIds, ['w1'])
+  store.close()
+})
+
+test('circuits: the resource carries what the cables imply, and cannot be made or removed by hand', async () => {
+  const store = new Store(':memory:')
+  const devices = createResourceProvider(store, 'device', 'wiringDevices')
+  const runs = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
+  const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
+  await devices.methods.setResource('bat', { name: 'Battery', role: 'storage', nominalVoltage: 12 })
+  await devices.methods.setResource('fuse', { name: 'Fuse', role: 'distribution', tripRatingA: 15 })
+  await devices.methods.setResource('pump', { name: 'Pump', ratedPowerW: 60 })
+  await runs.methods.setResource('w1', { fromDeviceId: 'bat', toDeviceId: 'fuse' })
+  await runs.methods.setResource('w2', { fromDeviceId: 'fuse', toDeviceId: 'pump' })
+
+  const all = await circuits.methods.listResources()
+  const [circuit] = Object.values(all)
+  assert.equal(circuit.name, 'Fuse')
+  assert.equal(circuit.derived.ratingA, 15)
+  assert.equal(circuit.derived.voltage, 12)
+  assert.equal(circuit.derived.ac, false)
+  assert.deepEqual(circuit.derived.endDeviceIds, ['pump'])
+
+  await circuits.methods.setResource(circuit.id, { name: 'Bilge pump', notes: 'n', voltage: 24, status: 'removed', cableIds: [] })
+  const renamed = await circuits.methods.getResource(circuit.id)
+  assert.equal(renamed.name, 'Bilge pump')
+  assert.equal(renamed.status, 'active') // not settable
+  assert.equal(renamed.derived.voltage, 24) // the override wins
+  assert.equal(renamed.derived.derivedVoltage, 12)
+
+  await assert.rejects(() => circuits.methods.setResource('new', { name: 'By hand' }), /cannot be created by hand/)
+  await assert.rejects(() => circuits.methods.deleteResource(circuit.id), /follow the cables/)
   store.close()
 })

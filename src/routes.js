@@ -86,10 +86,46 @@ function changeLogEntryToResource (row) {
   return resource
 }
 
+// The devices and cables of one circuit as a graph: nodes are devices, edges
+// are the cables (kind "feed") and the negative cables that serve it (kind
+// "return"). Built from the derivation, never from stored links.
 function buildCircuitDiagram (store, circuitId) {
   const circuit = store.get('circuit', circuitId)
   if (!circuit) return null
-  return { circuit: rowToResource(circuit), nodes: [], edges: [] }
+  const derived = store.deriveAll().circuits.find((c) => c.key === circuit.key)
+  if (!derived) return { circuit: rowToResource(circuit), nodes: [], edges: [] }
+
+  const deviceById = new Map(store.list('device').map((d) => [d.id, d]))
+  const cableById = new Map(store.list('wireRun').map((w) => [w.id, w]))
+  const edges = []
+  const deviceIds = new Set(derived.deviceIds)
+  const addEdge = (id, kind) => {
+    const wr = cableById.get(id)
+    if (!wr) return
+    deviceIds.add(wr.from_device_id)
+    deviceIds.add(wr.to_device_id)
+    const conductor = wr.conductors.find((c) => (kind === 'return' ? c.conductor === 'negative' : c.conductor !== 'negative'))
+    edges.push({
+      id: wr.id,
+      from: wr.from_device_id,
+      to: wr.to_device_id,
+      kind,
+      color: conductor ? conductor.color : null,
+      gauge: wr.gauge,
+      gaugeUnit: wr.gauge_unit,
+      status: wr.status
+    })
+  }
+  for (const id of derived.cableIds) addEdge(id, 'feed')
+  for (const id of derived.returnCableIds) addEdge(id, 'return')
+
+  const nodes = [...deviceIds].filter(Boolean).sort().map((id) => {
+    const device = deviceById.get(id)
+    return device
+      ? { id, label: device.name, kind: 'device', status: device.status }
+      : { id, label: id, kind: 'label', status: 'active' }
+  })
+  return { circuit: rowToResource(circuit), nodes, edges }
 }
 
 // registerWithRouter runs once at server boot for every installed plugin
@@ -250,6 +286,12 @@ function registerRoutes (router, getStore, dataDir) {
     res.setHeader('Content-Security-Policy', PLAN_IMAGE_CSP)
     res.setHeader('Cache-Control', 'private, max-age=300')
     fs.createReadStream(filePath).pipe(res)
+  })
+
+  // Banks and warnings of the derivation that belong to no single circuit.
+  readOnlyRoutes.get('/derived', requireStore, (req, res) => {
+    const { banks, warnings } = req.wiringStore.deriveAll()
+    res.json({ banks, warnings })
   })
 
   router.get('/circuits/:id/diagram', requireStore, (req, res) => {

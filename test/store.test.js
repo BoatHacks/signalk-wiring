@@ -946,3 +946,114 @@ test('a fresh database has the new shape', () => {
   assert.equal(store.db.pragma('user_version', { simple: true }), 7)
   store.close()
 })
+
+// ---- Plan 0014: circuit records follow the cables ----
+
+function boat (store) {
+  const battery = store.create('device', { name: 'House battery', role: 'storage', nominal_voltage: 12 })
+  const fuse = store.create('device', { name: 'Lamp fuse', role: 'distribution', trip_rating_a: 10 })
+  const lamp = store.create('device', { name: 'Cabin lamp' })
+  const cable = (from, to) => store.create('wireRun', { from_device_id: from.id, to_device_id: to.id })
+  return { battery, fuse, lamp, cable }
+}
+
+test('circuits: a circuit record appears when cables connect, keyed to the fuse, and is logged', () => {
+  const store = freshStore()
+  const { battery, fuse, lamp, cable } = boat(store)
+  assert.equal(store.list('circuit').length, 0)
+  cable(battery, fuse)
+  cable(fuse, lamp)
+
+  const circuits = store.list('circuit')
+  assert.equal(circuits.length, 1)
+  assert.equal(circuits[0].key, `protector:${fuse.id}`)
+  assert.equal(circuits[0].name, 'Lamp fuse')
+  assert.equal(circuits[0].status, 'active')
+  assert.equal(JSON.parse(circuits[0].cable_ids).length, 2)
+  const log = store.changeLog('circuit', circuits[0].id)
+  assert.equal(log[0].summary, 'created')
+  store.close()
+})
+
+test('circuits: name and notes survive cable edits, and a lone battery-to-lamp cable is unprotected', () => {
+  const store = freshStore()
+  const { battery, lamp, cable } = boat(store)
+  const run = cable(battery, lamp)
+  const [circuit] = store.list('circuit')
+  assert.equal(circuit.key, `cable:${run.id}`)
+  assert.match(circuit.name, /^Unprotected: Cabin lamp/)
+
+  store.update('circuit', circuit.id, { name: 'Reading light', notes: 'port side' })
+  store.update('wireRun', run.id, { gauge: 2.5 })
+  const after = store.get('circuit', circuit.id)
+  assert.equal(after.name, 'Reading light')
+  assert.equal(after.notes, 'port side')
+  assert.equal(store.list('circuit').length, 1)
+  store.close()
+})
+
+test('circuits: adding a fuse later moves the record onto it and keeps name and notes', () => {
+  const store = freshStore()
+  const { battery, fuse, lamp, cable } = boat(store)
+  const direct = cable(battery, lamp)
+  const [circuit] = store.list('circuit')
+  store.update('circuit', circuit.id, { name: 'Reading light', notes: 'keep' })
+
+  store.update('wireRun', direct.id, { to_device_id: fuse.id })
+  cable(fuse, lamp)
+
+  const circuits = store.list('circuit')
+  assert.equal(circuits.length, 1)
+  assert.equal(circuits[0].id, circuit.id)
+  assert.equal(circuits[0].key, `protector:${fuse.id}`)
+  assert.equal(circuits[0].name, 'Reading light')
+  assert.equal(circuits[0].notes, 'keep')
+  store.close()
+})
+
+test('circuits: a circuit that disappears is kept as removed, and comes back with its notes', () => {
+  const store = freshStore()
+  const { battery, fuse, lamp, cable } = boat(store)
+  const a = cable(battery, fuse)
+  const b = cable(fuse, lamp)
+  const [circuit] = store.list('circuit')
+  store.update('circuit', circuit.id, { notes: 'hello' })
+
+  store.remove('wireRun', a.id)
+  assert.equal(store.get('circuit', circuit.id).status, 'active') // the fuse still feeds the lamp
+  store.remove('wireRun', b.id)
+  assert.equal(store.get('circuit', circuit.id).status, 'removed')
+  assert.equal(store.list('circuit').length, 1)
+
+  store.update('wireRun', b.id, { status: 'active' })
+  const back = store.get('circuit', circuit.id)
+  assert.equal(back.status, 'active')
+  assert.equal(back.notes, 'hello')
+  const summaries = store.changeLog('circuit', circuit.id).map((l) => l.summary)
+  assert.ok(summaries.includes('removed'))
+  store.close()
+})
+
+test('circuits: unrelated writes add no change-log entries and no duplicate records', () => {
+  const store = freshStore()
+  const { battery, fuse, lamp, cable } = boat(store)
+  cable(battery, fuse)
+  cable(fuse, lamp)
+  const [circuit] = store.list('circuit')
+  const before = store.changeLog('circuit', circuit.id).length
+  store.update('device', lamp.id, { notes: 'x' })
+  store.create('device', { name: 'Other' })
+  assert.equal(store.changeLog('circuit', circuit.id).length, before)
+  assert.equal(store.list('circuit').length, 1)
+  store.close()
+})
+
+test('circuits: records left by hand (no key) are kept as removed at the next sync', () => {
+  const store = freshStore()
+  const old = store.create('circuit', { name: 'Old bilge', notes: 'from 0.4' })
+  store.create('device', { name: 'Anything' })
+  const kept = store.get('circuit', old.id)
+  assert.equal(kept.status, 'removed')
+  assert.equal(kept.notes, 'from 0.4')
+  store.close()
+})

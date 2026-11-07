@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 const Database = require('better-sqlite3')
+const { deriveCircuits } = require('./circuits')
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 
@@ -499,8 +500,77 @@ class Store {
     if (kind === 'device' || kind === 'wireRun') this.syncCircuits()
   }
 
+  // What the cables and devices imply right now (src/circuits.js).
+  deriveAll () {
+    const devices = this.list('device').map((d) => ({
+      id: d.id,
+      name: d.name,
+      role: d.role,
+      status: d.status,
+      tripRatingA: d.trip_rating_a,
+      nominalVoltage: d.nominal_voltage,
+      terminals: d.terminals
+    }))
+    const cables = this.list('wireRun').map((w) => ({
+      id: w.id,
+      fromDeviceId: w.from_device_id,
+      toDeviceId: w.to_device_id,
+      status: w.status,
+      conductors: w.conductors
+    }))
+    return deriveCircuits({ devices, cables })
+  }
+
+  // Brings the circuit records in step with the derived circuits. Records
+  // are never created or deleted by hand: a new derived circuit gets one, a
+  // circuit whose key changed (a fuse added or taken out) keeps its record,
+  // name and notes, and a circuit that disappears is marked removed and
+  // comes back to life if it reappears. Each change is logged.
   syncCircuits () {
-    // Filled in by the circuit sync step.
+    const derived = this.deriveAll()
+    const deviceName = new Map(this.list('device').map((d) => [d.id, d.name]))
+    const records = this.list('circuit')
+    const byKey = new Map(records.filter((r) => r.key).map((r) => [r.key, r]))
+    const derivedKeys = new Set(derived.circuits.map((c) => c.key))
+    const spare = records
+      .filter((r) => r.status !== REMOVED_STATUS && !derivedKeys.has(r.key))
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+    const claimed = new Set()
+
+    this.db.transaction(() => {
+      for (const circuit of derived.circuits) {
+        const cableIds = JSON.stringify(circuit.cableIds)
+        let record = byKey.get(circuit.key)
+        if (record) {
+          const patch = {}
+          if (record.status === REMOVED_STATUS) patch.status = 'active'
+          if (record.cable_ids !== cableIds) patch.cable_ids = cableIds
+          if (Object.keys(patch).length) this.update('circuit', record.id, patch)
+          continue
+        }
+        // Same cables under a new key: carry the record over.
+        const wanted = new Set(circuit.cableIds)
+        let best = null
+        let bestOverlap = 0
+        for (const candidate of spare) {
+          if (claimed.has(candidate.id)) continue
+          const overlap = JSON.parse(candidate.cable_ids || '[]').filter((id) => wanted.has(id)).length
+          if (overlap > bestOverlap) { best = candidate; bestOverlap = overlap }
+        }
+        if (best) {
+          claimed.add(best.id)
+          this.update('circuit', best.id, { key: circuit.key, cable_ids: cableIds })
+          continue
+        }
+        const name = circuit.protectorId
+          ? deviceName.get(circuit.protectorId)
+          : `Unprotected: ${circuit.endDeviceIds.map((id) => deviceName.get(id)).filter(Boolean).join(', ') || circuit.cableIds[0]}`
+        this.create('circuit', { name, key: circuit.key, cable_ids: cableIds })
+      }
+      for (const record of spare) {
+        if (!claimed.has(record.id)) this.update('circuit', record.id, { status: REMOVED_STATUS })
+      }
+    })()
   }
 
   update (kind, id, patch) {

@@ -42,6 +42,40 @@ function withAssignments (kind, resource, maps) {
   return resource
 }
 
+// A circuit resource is its record plus what the cables imply (plan 0014):
+// rating, voltage, AC or DC, whether anything protects it, and the devices
+// and cables it spans. `derived` is null for a circuit that no longer exists.
+function withDerived (resource, derived) {
+  const found = derived.circuits.find((c) => c.key === resource.key)
+  if (!found) return { ...resource, derived: null }
+  const cableIds = new Set([...found.cableIds, ...found.returnCableIds])
+  const deviceIds = new Set(found.deviceIds)
+  const warnings = derived.warnings.filter((w) =>
+    (w.cableId && cableIds.has(w.cableId)) || (w.deviceId && (deviceIds.has(w.deviceId) || found.endDeviceIds.includes(w.deviceId))))
+  return {
+    ...resource,
+    cableIds: found.cableIds,
+    derived: {
+      protectorId: found.protectorId,
+      unprotected: found.unprotected,
+      ratingA: found.ratingA,
+      voltage: resource.voltage != null ? resource.voltage : found.voltage,
+      derivedVoltage: found.voltage,
+      ac: found.ac,
+      cableIds: found.cableIds,
+      returnCableIds: found.returnCableIds,
+      implicitReturnDeviceIds: found.implicitReturnDeviceIds,
+      deviceIds: found.deviceIds,
+      supplyDeviceIds: found.supplyDeviceIds,
+      endDeviceIds: found.endDeviceIds,
+      warnings
+    }
+  }
+}
+
+// Only these fields of a circuit record are set from outside.
+const CIRCUIT_EDITABLE = ['name', 'notes', 'voltage', 'convention']
+
 function applyAssignments (store, kind, id, value) {
   if (kind === 'conduit' && Array.isArray(value.cableIds)) {
     const wanted = value.cableIds
@@ -64,8 +98,10 @@ function createResourceProvider (store, kind, type) {
       listResources: async () => {
         const out = {}
         const maps = kind === 'conduit' || kind === 'wireRun' ? store.conduitAssignmentMaps() : null
+        const derived = kind === 'circuit' ? store.deriveAll() : null
         for (const row of store.list(kind)) {
-          out[row.id] = maps ? withAssignments(kind, rowToResource(row), maps) : rowToResource(row)
+          const resource = rowToResource(row)
+          out[row.id] = maps ? withAssignments(kind, resource, maps) : derived ? withDerived(resource, derived) : resource
         }
         return out
       },
@@ -73,6 +109,7 @@ function createResourceProvider (store, kind, type) {
         const row = store.get(kind, id)
         if (!row) throw new Error(`${type} resource not found: ${id}`)
         const resource = rowToResource(row)
+        if (kind === 'circuit') return withDerived(resource, store.deriveAll())
         return kind === 'conduit' || kind === 'wireRun'
           ? withAssignments(kind, resource, store.conduitAssignmentMaps())
           : resource
@@ -81,7 +118,12 @@ function createResourceProvider (store, kind, type) {
       // resource by id whether or not it already exists.
       setResource: async (id, value) => {
         const existing = store.get(kind, id)
-        const row = resourceToRow(value)
+        let row = resourceToRow(value)
+        if (kind === 'circuit') {
+          // Circuits follow the cables: they are named and annotated, never made by hand.
+          if (!existing) throw new Error('circuits are worked out from the cables and cannot be created by hand')
+          row = Object.fromEntries(Object.entries(row).filter(([k]) => CIRCUIT_EDITABLE.includes(k)))
+        }
         delete row.cable_ids
         delete row.conduit_ids
         if (existing) {
@@ -97,6 +139,7 @@ function createResourceProvider (store, kind, type) {
       deleteResource: async (id) => {
         const existing = store.get(kind, id)
         if (!existing) throw new Error(`${type} resource not found: ${id}`)
+        if (kind === 'circuit') throw new Error('circuits follow the cables: remove or change the cables instead')
         // Zones are a plain list: an unused one is deleted, a used one refused.
         if (kind === 'zone') store.deleteZone(id)
         else store.remove(kind, id)
