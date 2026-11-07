@@ -187,7 +187,7 @@ are worked out from them. A circuit is what a fuse or breaker protects.
       optional terminals.
 - [x] Circuits overview (name, notes), diagram and load summary on derived
       circuits, floorplan panel link removed.
-- [ ] CSV import updated for device-based ends.
+- [x] CSV import updated for device-based ends.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 - [ ] Follow-up: draw wires between devices on a diagram.
 

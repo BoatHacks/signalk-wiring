@@ -133,28 +133,42 @@ export function parseConduitNames (text) {
 
 export const MAPPING_TARGETS = [
   { value: 'skip', label: '(skip this column)' },
-  { value: 'circuitGroupKey', label: 'Circuit: grouping key' },
-  { value: 'circuitSourceLabel', label: 'Circuit: source label' },
-  { value: 'circuitBreakerRating', label: 'Circuit: breaker rating (A)' },
-  { value: 'circuitVoltage', label: 'Circuit: voltage' },
-  { value: 'deviceName', label: 'Device: name' },
+  { value: 'circuitGroupKey', label: 'Circuit: grouping key (a fuse per key; names the derived circuit)' },
+  { value: 'circuitSourceLabel', label: 'Cable: supply device (fuse or breaker name)' },
+  { value: 'circuitBreakerRating', label: 'Supply device: trip rating (A)' },
+  { value: 'circuitVoltage', label: 'Circuit: voltage (overrides the supply voltage)' },
+  { value: 'deviceName', label: 'Device: name (the load the cable goes to)' },
   { value: 'deviceType', label: 'Device: type' },
   { value: 'deviceZone', label: 'Device: zone' },
   { value: 'deviceRatedPowerW', label: 'Device: rated power (W)' },
   { value: 'notes', label: 'Notes (device)' },
-  { value: 'wireFromEndpoint', label: 'Wire run: from' },
-  { value: 'wireToEndpoint', label: 'Wire run: to' },
-  { value: 'wireGauge', label: 'Wire run: gauge (number only)' },
-  { value: 'wireGaugeUnit', label: 'Wire run: gauge unit' },
-  { value: 'wireGaugeCombined', label: 'Wire run: gauge (combined, e.g. "2,5 mm²")' },
-  { value: 'wireColor', label: 'Wire run: color' },
-  { value: 'wireLength', label: 'Wire run: length' },
-  { value: 'wireLengthUnit', label: 'Wire run: length unit' },
-  { value: 'wireZone', label: 'Wire run: zone' },
-  { value: 'wireCableLabel', label: 'Wire run: cable label' },
-  { value: 'wireSwitchRef', label: 'Wire run: switch reference' },
-  { value: 'wireConduit', label: 'Wire run: conduit (several in order: separate with ; or >)' }
+  { value: 'wireFromDevice', label: 'Cable: from device (supply side)' },
+  { value: 'wireToDevice', label: 'Cable: to device (load side)' },
+  { value: 'wireConductor', label: 'Cable: conductor (positive, negative, line, neutral, earth)' },
+  { value: 'wireGauge', label: 'Cable: gauge (number only)' },
+  { value: 'wireGaugeUnit', label: 'Cable: gauge unit' },
+  { value: 'wireGaugeCombined', label: 'Cable: gauge (combined, e.g. "2,5 mm²")' },
+  { value: 'wireColor', label: 'Cable: color' },
+  { value: 'wireLength', label: 'Cable: length' },
+  { value: 'wireLengthUnit', label: 'Cable: length unit' },
+  { value: 'wireZone', label: 'Cable: zone' },
+  { value: 'wireCableLabel', label: 'Cable: cable label' },
+  { value: 'wireSwitchRef', label: 'Cable: switch reference' },
+  { value: 'wireConduit', label: 'Cable: conduit (several in order: separate with ; or >)' }
 ]
+
+const CONDUCTOR_WORDS = {
+  positive: 'positive', plus: 'positive', '+': 'positive', pos: 'positive',
+  negative: 'negative', minus: 'negative', '-': 'negative', '−': 'negative', neg: 'negative',
+  line: 'line', l: 'line', phase: 'line',
+  neutral: 'neutral', n: 'neutral',
+  earth: 'earth', ground: 'earth', pe: 'earth'
+}
+
+// A conductor cell as one of the five conductor types; blank or unknown is positive.
+export function parseConductor (text) {
+  return CONDUCTOR_WORDS[String(text ?? '').trim().toLowerCase()] || 'positive'
+}
 
 function cell (row, header) {
   if (!header) return ''
@@ -162,31 +176,57 @@ function cell (row, header) {
   return value == null ? '' : String(value).trim()
 }
 
-// One CSV row = one device + the wire run feeding it. Rows sharing a
-// "circuit grouping key" become wire runs on the same circuit — but
-// that column is optional, since not every export groups rows that
-// way; without it, every row gets its own circuit. Device names repeat
-// across rows (e.g. a device fed by more than one circuit) reuse the
-// same device rather than creating a duplicate, scoped to this import
-// batch only — not matched against already-existing devices, since a
-// coincidental name collision silently merging two different real
-// devices is worse than an extra one the user can clean up by hand.
-export function groupImportRows (rows, headers, mapping, existingConduits = []) {
+// One CSV row = one cable to a device (the load). The supply side comes from
+// a "from device" column, else the "supply device" column, else a fuse made
+// from the circuit grouping key (rows sharing a key share that fuse, so they
+// become one circuit once the cables exist). A row with none of these still
+// creates its device but no cable. Devices are matched by name, ignoring
+// case, against the live devices already recorded and within the file, and
+// created when missing; circuits are never imported, they follow the cables.
+export function groupImportRows (rows, headers, mapping, existingConduits = [], existingDevices = []) {
   const byTarget = {}
   for (const header of headers) {
     const target = mapping[header]
     if (target && target !== 'skip') byTarget[target] = header
   }
 
-  if (!byTarget.deviceName) {
-    return { error: 'Map at least one column to "Device: name" before importing.' }
+  const toHeader = byTarget.wireToDevice || byTarget.deviceName
+  if (!toHeader) {
+    return { error: 'Map at least one column to "Device: name" (or "Cable: to device") before importing.' }
   }
 
-  const circuitsByKey = new Map()
+  const groupsByKey = new Map()
   const devicesByName = new Map()
   const wireRuns = []
   const conduitsByName = new Map()
   let skippedRows = 0
+  let unconnectedRows = 0
+
+  const liveDevices = new Map()
+  for (const d of existingDevices) {
+    if (d.status !== 'removed' && !liveDevices.has(d.name.toLowerCase())) liveDevices.set(d.name.toLowerCase(), d)
+  }
+  const deviceFor = (name) => {
+    const key = name.toLowerCase()
+    let device = devicesByName.get(key)
+    if (!device) {
+      const existing = liveDevices.get(key)
+      device = {
+        tempId: `device_${devicesByName.size}`,
+        name: existing ? existing.name : name,
+        existingId: existing ? existing.id : null,
+        role: 'consumer',
+        usedAsSupply: false,
+        type: null,
+        zone: null,
+        ratedPowerW: null,
+        notes: null,
+        tripRatingA: null
+      }
+      devicesByName.set(key, device)
+    }
+    return device
+  }
 
   // Conduits are matched by name, ignoring case, to live conduits already
   // recorded, so importing cables into conduits you have already entered
@@ -210,39 +250,51 @@ export function groupImportRows (rows, headers, mapping, existingConduits = []) 
     return conduit
   }
 
-  rows.forEach((row, index) => {
-    const deviceName = cell(row, byTarget.deviceName)
-    if (!deviceName) {
+  rows.forEach((row) => {
+    const toName = cell(row, toHeader)
+    if (!toName) {
       skippedRows++
       return
     }
 
-    const groupValue = cell(row, byTarget.circuitGroupKey)
-    const circuitKey = byTarget.circuitGroupKey && groupValue ? groupValue : `__row_${index}`
-
-    let circuit = circuitsByKey.get(circuitKey)
-    if (!circuit) {
-      circuit = {
-        tempId: `circuit_${circuitsByKey.size}`,
-        name: byTarget.circuitGroupKey && groupValue ? `Circuit ${groupValue}` : `${deviceName} circuit`,
-        sourceLabel: cell(row, byTarget.circuitSourceLabel) || null,
-        breakerRating: parseGermanNumber(cell(row, byTarget.circuitBreakerRating)),
-        voltage: parseGermanNumber(cell(row, byTarget.circuitVoltage))
-      }
-      circuitsByKey.set(circuitKey, circuit)
+    const to = deviceFor(toName)
+    if (!to.existingId) {
+      // Row attributes describe the load; the first row naming it decides.
+      to.type = to.type || cell(row, byTarget.deviceType) || null
+      to.zone = to.zone || cell(row, byTarget.deviceZone) || null
+      to.ratedPowerW = to.ratedPowerW ?? parseGermanNumber(cell(row, byTarget.deviceRatedPowerW))
+      to.notes = to.notes || cell(row, byTarget.notes) || null
     }
 
-    let device = devicesByName.get(deviceName)
-    if (!device) {
-      device = {
-        tempId: `device_${devicesByName.size}`,
-        name: deviceName,
-        type: cell(row, byTarget.deviceType) || null,
-        zone: cell(row, byTarget.deviceZone) || null,
-        ratedPowerW: parseGermanNumber(cell(row, byTarget.deviceRatedPowerW)),
-        notes: cell(row, byTarget.notes) || null
+    const groupValue = cell(row, byTarget.circuitGroupKey)
+    let group = null
+    if (byTarget.circuitGroupKey && groupValue) {
+      group = groupsByKey.get(groupValue)
+      if (!group) {
+        group = {
+          tempId: `circuit_${groupsByKey.size}`,
+          key: groupValue,
+          name: `Circuit ${groupValue}`,
+          voltage: parseGermanNumber(cell(row, byTarget.circuitVoltage)),
+          breakerRating: parseGermanNumber(cell(row, byTarget.circuitBreakerRating)),
+          cableTempIds: []
+        }
+        groupsByKey.set(groupValue, group)
       }
-      devicesByName.set(deviceName, device)
+    }
+
+    const fromName = cell(row, byTarget.wireFromDevice) || cell(row, byTarget.circuitSourceLabel) ||
+      (group ? `Fuse ${group.key}` : '')
+    if (!fromName) {
+      unconnectedRows++
+      return
+    }
+    const from = deviceFor(fromName)
+    from.usedAsSupply = true
+    if (!from.existingId && from.tripRatingA == null) {
+      from.tripRatingA = group && fromName === `Fuse ${group.key}`
+        ? group.breakerRating
+        : parseGermanNumber(cell(row, byTarget.circuitBreakerRating))
     }
 
     let gauge = null
@@ -258,17 +310,14 @@ export function groupImportRows (rows, headers, mapping, existingConduits = []) 
       gaugeUnit = cell(row, byTarget.wireGaugeUnit) || null
     }
 
-    const explicitFrom = cell(row, byTarget.wireFromEndpoint)
-    const fromEndpoint = explicitFrom || circuit.sourceLabel || 'Source'
-    const explicitTo = cell(row, byTarget.wireToEndpoint)
-
+    const tempId = `cable_${wireRuns.length}`
+    if (group) group.cableTempIds.push(tempId)
     wireRuns.push({
-      circuitTempId: circuit.tempId,
-      deviceTempId: device.tempId,
-      fromEndpoint,
-      // an explicit "to" column wins if mapped; otherwise the wire run
-      // goes to the device this row created/reused
-      toEndpointOverride: explicitTo || null,
+      tempId,
+      circuitTempId: group ? group.tempId : null,
+      fromTempId: from.tempId,
+      toTempId: to.tempId,
+      conductor: parseConductor(cell(row, byTarget.wireConductor)),
       gauge,
       gaugeUnit,
       color: cell(row, byTarget.wireColor) || null,
@@ -281,12 +330,18 @@ export function groupImportRows (rows, headers, mapping, existingConduits = []) 
     })
   })
 
+  const devices = [...devicesByName.values()]
+  for (const d of devices) if (d.usedAsSupply && !d.existingId) d.role = 'distribution'
+
   return {
-    circuits: [...circuitsByKey.values()],
-    devices: [...devicesByName.values()],
+    // The old import made circuits. They follow the cables now; these are
+    // the named groups, used to name the derived circuits after the import.
+    circuits: [...groupsByKey.values()],
+    devices,
     conduits: [...conduitsByName.values()],
     wireRuns,
-    skippedRows
+    skippedRows,
+    unconnectedRows
   }
 }
 
@@ -322,40 +377,37 @@ export async function importToStore (grouped) {
     conduitsCreated++
   }
 
-  const circuitIdByTempId = new Map()
-  for (const c of grouped.circuits) {
-    const id = newId()
-    await putResource('wiringCircuits', id, {
-      name: c.name,
-      sourceLabel: c.sourceLabel || undefined,
-      breakerRating: c.breakerRating ?? undefined,
-      voltage: c.voltage ?? undefined
-    })
-    circuitIdByTempId.set(c.tempId, id)
-  }
-
+  // Devices matched by name keep their record; missing ones are created.
   const deviceIdByTempId = new Map()
+  let devicesCreated = 0
   for (const d of grouped.devices) {
+    if (d.existingId) {
+      deviceIdByTempId.set(d.tempId, d.existingId)
+      continue
+    }
     const id = newId()
     await putResource('wiringDevices', id, {
       name: d.name,
+      role: d.role || 'consumer',
       type: d.type || undefined,
       zone: d.zone || undefined,
       ratedPowerW: d.ratedPowerW ?? undefined,
+      tripRatingA: d.tripRatingA ?? undefined,
       notes: d.notes || undefined
     })
     deviceIdByTempId.set(d.tempId, id)
+    devicesCreated++
   }
 
+  const cableIdByTempId = new Map()
   for (const wr of grouped.wireRuns) {
     const id = newId()
     await putResource('wiringWireRuns', id, {
-      circuitId: circuitIdByTempId.get(wr.circuitTempId),
-      fromEndpoint: wr.fromEndpoint,
-      toEndpoint: wr.toEndpointOverride || deviceIdByTempId.get(wr.deviceTempId),
+      fromDeviceId: deviceIdByTempId.get(wr.fromTempId),
+      toDeviceId: deviceIdByTempId.get(wr.toTempId),
+      conductors: [{ conductor: wr.conductor || 'positive', color: wr.color || undefined }],
       gauge: wr.gauge ?? undefined,
       gaugeUnit: wr.gaugeUnit || undefined,
-      color: wr.color || undefined,
       length: wr.length ?? undefined,
       lengthUnit: wr.lengthUnit || undefined,
       zone: wr.zone || undefined,
@@ -365,14 +417,56 @@ export async function importToStore (grouped) {
         ? wr.conduitTempIds.map((t) => conduitIdByTempId.get(t))
         : undefined
     })
+    cableIdByTempId.set(wr.tempId, id)
   }
 
+  const circuitsNamed = await nameDerivedCircuits(grouped, cableIdByTempId)
+
   return {
-    circuitsCreated: grouped.circuits.length,
-    devicesCreated: grouped.devices.length,
+    devicesCreated,
+    devicesMatched: grouped.devices.length - devicesCreated,
     wireRunsCreated: grouped.wireRuns.length,
+    unconnectedRows: grouped.unconnectedRows || 0,
+    circuitsNamed,
     conduitsCreated
   }
+}
+
+// The circuits are worked out from the cables just written. Each named group
+// of the file (the old circuit column) names the derived circuit that holds
+// most of its cables; a circuit is named once, by the first group to claim it.
+// Best effort: if the circuits cannot be read, they keep their default names.
+async function nameDerivedCircuits (grouped, cableIdByTempId) {
+  const groups = (grouped.circuits || []).filter((g) => g.cableTempIds.length > 0)
+  if (groups.length === 0) return 0
+  let circuits = []
+  try {
+    const res = await fetch(`${RESOURCE_BASE}/wiringCircuits`)
+    if (res.ok && typeof res.json === 'function') circuits = Object.values(await res.json())
+  } catch (_) { return 0 }
+
+  const claimed = new Set()
+  let named = 0
+  for (const g of groups) {
+    const ids = new Set(g.cableTempIds.map((t) => cableIdByTempId.get(t)))
+    let best = null
+    let bestOverlap = 0
+    for (const c of circuits) {
+      if (claimed.has(c.id) || !c.derived) continue
+      const overlap = c.derived.cableIds.filter((id) => ids.has(id)).length
+      if (overlap > bestOverlap) { best = c; bestOverlap = overlap }
+    }
+    if (!best) continue
+    claimed.add(best.id)
+    try {
+      await putResource('wiringCircuits', best.id, {
+        name: g.name,
+        ...(g.voltage != null ? { voltage: g.voltage } : {})
+      })
+      named++
+    } catch (_) { /* leave the default name */ }
+  }
+  return named
 }
 
 // --- UI ---
@@ -415,7 +509,13 @@ export function CsvImport ({ onDone, onCancel }) {
         if (res.ok) existingConduits = Object.values(await res.json())
       } catch (_) { /* preview without matching */ }
     }
-    const g = groupImportRows(rows, headers, mapping, existingConduits)
+    // Devices are matched by name too; unreadable means every device is new.
+    let existingDevices = []
+    try {
+      const res = await fetch(`${RESOURCE_BASE}/wiringDevices`)
+      if (res.ok) existingDevices = Object.values(await res.json())
+    } catch (_) { /* preview without matching */ }
+    const g = groupImportRows(rows, headers, mapping, existingConduits, existingDevices)
     if (g.error) {
       setError(g.error)
       return
@@ -444,7 +544,7 @@ export function CsvImport ({ onDone, onCancel }) {
 
       ${step === 'pick' && html`
         <div class="card">
-          <p>Import circuits, wire runs, and devices from a CSV file.</p>
+          <p>Import devices and cables from a CSV file. Circuits are worked out from the cables.</p>
           <input type="file" accept=".csv,text/csv" onChange=${onFile} />
           <div class="form-actions">
             <button type="button" onClick=${onCancel}>Cancel</button>
@@ -483,9 +583,9 @@ export function CsvImport ({ onDone, onCancel }) {
       ${step === 'preview' && grouped && html`
         <div class="card">
           <p>
-            This will create <strong>${grouped.circuits.length}</strong> circuit(s),
-            <strong>${grouped.devices.length}</strong> device(s), and
-            <strong>${grouped.wireRuns.length}</strong> wire run(s).
+            This will create <strong>${grouped.devices.filter((d) => !d.existingId).length}</strong> device(s)
+            (${grouped.devices.filter((d) => d.existingId).length} matched by name to devices you already have) and
+            <strong>${grouped.wireRuns.length}</strong> cable(s). Circuits are worked out from the cables.
             ${grouped.conduits.length > 0 && html`
               <br />${grouped.conduits.filter((k) => !k.existingId).length} new conduit(s) will be created and
               ${grouped.conduits.filter((k) => k.existingId).length} existing one(s) reused.
@@ -493,10 +593,13 @@ export function CsvImport ({ onDone, onCancel }) {
             ${grouped.skippedRows > 0 && html`
               <br />${grouped.skippedRows} row(s) skipped (no device name).
             `}
+            ${grouped.unconnectedRows > 0 && html`
+              <br />${grouped.unconnectedRows} row(s) have no supply device, so their device is created without a cable.
+            `}
           </p>
           <ul class="changelog-list">
-            ${grouped.circuits.map((c) => html`
-              <li key=${c.tempId}>${c.name}${c.sourceLabel ? ` — ${c.sourceLabel}` : ''}</li>
+            ${grouped.devices.map((d) => html`
+              <li key=${d.tempId}>${d.name} (${d.role}${d.tripRatingA ? `, ${d.tripRatingA} A` : ''})${d.existingId ? ' – existing' : ' – new'}</li>
             `)}
           </ul>
           <div class="form-actions">
@@ -512,8 +615,8 @@ export function CsvImport ({ onDone, onCancel }) {
       ${step === 'done' && result && html`
         <div class="card">
           <p>
-            Imported ${result.circuitsCreated} circuit(s), ${result.devicesCreated} device(s),
-            and ${result.wireRunsCreated} wire run(s)${result.conduitsCreated > 0 ? `, plus ${result.conduitsCreated} new conduit(s)` : ''}.
+            Imported ${result.devicesCreated} new device(s) (${result.devicesMatched} matched by name)
+            and ${result.wireRunsCreated} cable(s)${result.circuitsNamed > 0 ? `; ${result.circuitsNamed} circuit(s) named from the circuit column` : ''}${result.conduitsCreated > 0 ? `, plus ${result.conduitsCreated} new conduit(s)` : ''}.
           </p>
           <div class="form-actions">
             <button type="button" onClick=${onDone}>Done</button>

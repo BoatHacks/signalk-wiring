@@ -9,6 +9,7 @@ import {
   parseCombinedGauge,
   groupImportRows,
   parseConduitNames,
+  parseConductor,
   MAPPING_TARGETS
 } from '../public/import.js'
 
@@ -57,58 +58,79 @@ test('groupImportRows requires a device name mapping', () => {
   assert.match(result.error, /Device: name/)
 })
 
-test('groupImportRows groups rows sharing a circuit key into one circuit with multiple wire runs', () => {
-  const headers = ['Device', 'Fuse']
+test('groupImportRows: a cable goes from the supply device to the row device, devices matched by name once', () => {
   const rows = [
-    { Device: 'Nav Bug', Fuse: '1' },
-    { Device: 'Nav Heck', Fuse: '1' },
-    { Device: 'Anchor light', Fuse: '2' }
+    { Device: 'Lamp', Fuse: 'Lamp fuse' },
+    { Device: 'lamp', Fuse: 'LAMP FUSE' },
+    { Device: 'Pump', Fuse: 'Lamp fuse' }
   ]
-  const mapping = { Device: 'deviceName', Fuse: 'circuitGroupKey' }
-  const grouped = groupImportRows(rows, headers, mapping)
-
-  assert.equal(grouped.circuits.length, 2)
-  assert.equal(grouped.devices.length, 3)
-  assert.equal(grouped.wireRuns.length, 3)
-  assert.equal(grouped.circuits.find((c) => c.name === 'Circuit 1').tempId,
-    grouped.wireRuns.find((wr) => wr.deviceTempId === grouped.devices[0].tempId).circuitTempId)
+  const g = groupImportRows(rows, ['Device', 'Fuse'], { Device: 'deviceName', Fuse: 'circuitSourceLabel' })
+  assert.deepEqual(g.devices.map((d) => [d.name, d.role]), [['Lamp', 'consumer'], ['Lamp fuse', 'distribution'], ['Pump', 'consumer']])
+  assert.equal(g.wireRuns.length, 3)
+  assert.equal(g.wireRuns[0].fromTempId, g.wireRuns[2].fromTempId)
+  assert.equal(g.wireRuns[0].toTempId, g.wireRuns[1].toTempId)
 })
 
-test('groupImportRows: without a grouping column, every row gets its own circuit', () => {
-  const rows = [{ Device: 'A' }, { Device: 'B' }]
-  const grouped = groupImportRows(rows, ['Device'], { Device: 'deviceName' })
-  assert.equal(grouped.circuits.length, 2)
-  assert.equal(grouped.circuits[0].name, 'A circuit')
-})
-
-test('groupImportRows de-duplicates a device name repeated across rows within the batch', () => {
-  const rows = [
-    { Device: 'Autopilot', Fuse: '1' },
-    { Device: 'Autopilot', Fuse: '2' }
+test('groupImportRows: existing devices are matched by name, ignoring case, and not created again', () => {
+  const existing = [
+    { id: 'd1', name: 'Lamp Fuse', status: 'active' },
+    { id: 'd2', name: 'Pump', status: 'removed' }
   ]
-  const mapping = { Device: 'deviceName', Fuse: 'circuitGroupKey' }
-  const grouped = groupImportRows(rows, ['Device', 'Fuse'], mapping)
-  assert.equal(grouped.devices.length, 1)
-  assert.equal(grouped.wireRuns.length, 2)
-  assert.equal(grouped.wireRuns[0].deviceTempId, grouped.wireRuns[1].deviceTempId)
-})
-
-test('groupImportRows: wireRun.fromEndpoint falls back to the circuit source label, then "Source"', () => {
-  const withSource = groupImportRows(
-    [{ Device: 'A', Source: 'Breaker 4' }],
-    ['Device', 'Source'],
-    { Device: 'deviceName', Source: 'circuitSourceLabel' }
+  const g = groupImportRows(
+    [{ Device: 'Pump', Fuse: 'lamp fuse' }], ['Device', 'Fuse'],
+    { Device: 'deviceName', Fuse: 'circuitSourceLabel' }, [], existing
   )
-  assert.equal(withSource.wireRuns[0].fromEndpoint, 'Breaker 4')
+  assert.equal(g.devices.find((d) => d.name === 'Lamp Fuse').existingId, 'd1')
+  assert.equal(g.devices.find((d) => d.name === 'Pump').existingId, null) // removed ones are not reused
+})
 
-  const withoutSource = groupImportRows([{ Device: 'A' }], ['Device'], { Device: 'deviceName' })
-  assert.equal(withoutSource.wireRuns[0].fromEndpoint, 'Source')
+test('groupImportRows: explicit from and to columns win, and the conductor column is read', () => {
+  const g = groupImportRows(
+    [{ A: 'Bus', B: 'Pump', Fuse: 'ignored', C: 'minus' }], ['A', 'B', 'Fuse', 'C'],
+    { A: 'wireFromDevice', B: 'wireToDevice', Fuse: 'circuitSourceLabel', C: 'wireConductor' }
+  )
+  assert.deepEqual(g.devices.map((d) => d.name), ['Pump', 'Bus'])
+  assert.equal(g.wireRuns[0].conductor, 'negative')
+})
+
+test('parseConductor knows the five types and common words, defaulting to positive', () => {
+  assert.equal(parseConductor('Negative'), 'negative')
+  assert.equal(parseConductor('+'), 'positive')
+  assert.equal(parseConductor('PE'), 'earth')
+  assert.equal(parseConductor('L'), 'line')
+  assert.equal(parseConductor('N'), 'neutral')
+  assert.equal(parseConductor(''), 'positive')
+  assert.equal(parseConductor('purple'), 'positive')
+})
+
+test('groupImportRows: rows sharing a circuit key share a fuse made from the key', () => {
+  const rows = [
+    { Device: 'A', Fuse: '2', Rating: '10' },
+    { Device: 'B', Fuse: '2', Rating: '16' },
+    { Device: 'C', Fuse: '3', Rating: '5' }
+  ]
+  const g = groupImportRows(rows, ['Device', 'Fuse', 'Rating'], { Device: 'deviceName', Fuse: 'circuitGroupKey', Rating: 'circuitBreakerRating' })
+  const fuse2 = g.devices.find((d) => d.name === 'Fuse 2')
+  assert.equal(fuse2.role, 'distribution')
+  assert.equal(fuse2.tripRatingA, 10) // the first row of the group decides
+  assert.equal(g.circuits.length, 2)
+  assert.equal(g.circuits[0].name, 'Circuit 2')
+  assert.deepEqual(g.circuits[0].cableTempIds.length, 2)
+  assert.equal(g.wireRuns[0].fromTempId, g.wireRuns[1].fromTempId)
+  assert.notEqual(g.wireRuns[0].fromTempId, g.wireRuns[2].fromTempId)
+})
+
+test('groupImportRows: a row with no supply gives a device but no cable, and is counted', () => {
+  const g = groupImportRows([{ Device: 'A' }], ['Device'], { Device: 'deviceName' })
+  assert.equal(g.devices.length, 1)
+  assert.equal(g.wireRuns.length, 0)
+  assert.equal(g.unconnectedRows, 1)
 })
 
 test('groupImportRows skips rows with no device name and counts them', () => {
-  const rows = [{ Device: 'A' }, { Device: '' }, { Device: '  ' }]
-  const grouped = groupImportRows(rows, ['Device'], { Device: 'deviceName' })
-  assert.equal(grouped.devices.length, 1)
+  const rows = [{ Device: 'A', S: 'f' }, { Device: '', S: 'f' }, { Device: '  ', S: 'f' }]
+  const grouped = groupImportRows(rows, ['Device', 'S'], { Device: 'deviceName', S: 'circuitSourceLabel' })
+  assert.equal(grouped.wireRuns.length, 1)
   assert.equal(grouped.skippedRows, 2)
 })
 
@@ -137,36 +159,30 @@ test('real-world fixture: the tinarasia/laserbrain electrical CSV this feature w
   }
   const grouped = groupImportRows(rows, headers, mapping)
 
-  assert.equal(grouped.devices.length, 27)
-  assert.equal(grouped.wireRuns.length, 27)
   assert.equal(grouped.skippedRows, 0)
 
-  // Self-checking rather than a hand-counted magic number: every row
-  // with a blank grouping value gets its own circuit (Kühlschrank has
-  // no Sicherung in the source file), everything else groups by value.
-  const nonBlankGroups = new Set(rows.map((r) => r.Sicherung).filter((v) => v && v.trim())).size
+  // Every row with a fuse value is a cable from that fuse; the one row with a
+  // blank value (Kühlschrank) has no supply and gets no cable.
   const blankGroupRows = rows.filter((r) => !r.Sicherung || !r.Sicherung.trim()).length
-  assert.equal(grouped.circuits.length, nonBlankGroups + blankGroupRows)
+  assert.equal(grouped.unconnectedRows, blankGroupRows)
+  assert.equal(grouped.wireRuns.length, 27 - blankGroupRows)
+  const nonBlankGroups = new Set(rows.map((r) => r.Sicherung).filter((v) => v && v.trim())).size
+  assert.equal(grouped.circuits.length, nonBlankGroups)
+  assert.equal(grouped.devices.filter((d) => d.role === 'distribution').length, nonBlankGroups)
 
   // Spot check a real group: fuse "2" feeds Toplicht/Decklampe/Ankerlaterne.
   const circuit2 = grouped.circuits.find((c) => c.name === 'Circuit 2')
   assert.ok(circuit2)
-  const circuit2WireRuns = grouped.wireRuns.filter((wr) => wr.circuitTempId === circuit2.tempId)
-  assert.equal(circuit2WireRuns.length, 3)
-  assert.equal(circuit2.breakerRating, 25) // LS-Größe of the first row in that group (Toplicht)
+  assert.equal(circuit2.cableTempIds.length, 3)
+  assert.equal(grouped.devices.find((d) => d.name === 'Fuse 2').tripRatingA, 25) // LS-Größe of the first row (Toplicht)
 
   // Spot check combined-gauge parsing against real cells: "2,5 mm²" and "6 mm²".
-  const fridgeDevice = grouped.devices.find((d) => d.name === 'Kühlschrank')
-  assert.ok(fridgeDevice)
-  const fridgeWireRun = grouped.wireRuns.find((wr) => wr.deviceTempId === fridgeDevice.tempId)
-  assert.equal(fridgeWireRun.gauge, 6)
-  assert.equal(fridgeWireRun.gaugeUnit, 'mm2')
-
   const naviBugDevice = grouped.devices.find((d) => d.name === 'Navi Bug')
-  const naviBugWireRun = grouped.wireRuns.find((wr) => wr.deviceTempId === naviBugDevice.tempId)
+  const naviBugWireRun = grouped.wireRuns.find((wr) => wr.toTempId === naviBugDevice.tempId)
   assert.equal(naviBugWireRun.gauge, 2.5)
   assert.equal(naviBugWireRun.gaugeUnit, 'mm2')
   assert.equal(naviBugDevice.ratedPowerW, 2)
+  assert.equal(grouped.devices.find((d) => d.name === 'Kühlschrank').ratedPowerW != null, true)
 })
 
 // Conduit column (plan 0015)
@@ -185,13 +201,13 @@ test('the conduit column is an import target', () => {
 })
 
 test('groupImportRows: a conduit column names the conduits of each wire run, once per conduit', () => {
-  const headers = ['Device', 'Conduit']
+  const headers = ['Device', 'Conduit', 'Fuse']
   const rows = [
-    { Device: 'A', Conduit: 'Galley conduit' },
-    { Device: 'B', Conduit: 'galley CONDUIT; Mast hose' },
-    { Device: 'C', Conduit: '' }
+    { Device: 'A', Conduit: 'Galley conduit', Fuse: 'F' },
+    { Device: 'B', Conduit: 'galley CONDUIT; Mast hose', Fuse: 'F' },
+    { Device: 'C', Conduit: '', Fuse: 'F' }
   ]
-  const grouped = groupImportRows(rows, headers, { Device: 'deviceName', Conduit: 'wireConduit' })
+  const grouped = groupImportRows(rows, headers, { Device: 'deviceName', Conduit: 'wireConduit', Fuse: 'circuitSourceLabel' })
   assert.deepEqual(grouped.conduits.map((c) => c.name), ['Galley conduit', 'Mast hose'])
   assert.ok(grouped.conduits.every((c) => c.existingId === null))
   const [a, b, c] = grouped.wireRuns
@@ -205,8 +221,8 @@ test('groupImportRows: a conduit that already exists (live, any case) is reused,
     { id: 'k1', name: 'Galley Conduit', status: 'active' },
     { id: 'k2', name: 'Old hose', status: 'removed' }
   ]
-  const rows = [{ Device: 'A', Conduit: 'galley conduit; Old hose' }]
-  const grouped = groupImportRows(rows, ['Device', 'Conduit'], { Device: 'deviceName', Conduit: 'wireConduit' }, existing)
+  const rows = [{ Device: 'A', Conduit: 'galley conduit; Old hose', Fuse: 'F' }]
+  const grouped = groupImportRows(rows, ['Device', 'Conduit', 'Fuse'], { Device: 'deviceName', Conduit: 'wireConduit', Fuse: 'circuitSourceLabel' }, existing)
   assert.equal(grouped.conduits.length, 2)
   assert.equal(grouped.conduits[0].existingId, 'k1')
   assert.equal(grouped.conduits[0].name, 'Galley Conduit')
@@ -214,7 +230,7 @@ test('groupImportRows: a conduit that already exists (live, any case) is reused,
 })
 
 test('groupImportRows without a conduit column makes no conduits', () => {
-  const grouped = groupImportRows([{ Device: 'A' }], ['Device'], { Device: 'deviceName' })
+  const grouped = groupImportRows([{ Device: 'A', Fuse: 'F' }], ['Device', 'Fuse'], { Device: 'deviceName', Fuse: 'circuitSourceLabel' })
   assert.deepEqual(grouped.conduits, [])
   assert.deepEqual(grouped.wireRuns[0].conduitTempIds, [])
 })
@@ -230,10 +246,10 @@ test('importToStore writes new conduits first, reuses existing ones, and lists t
   try {
     const existing = [{ id: 'k-old', name: 'Galley conduit', status: 'active' }]
     const rows = [
-      { Device: 'A', Conduit: 'Galley conduit; Mast hose' },
-      { Device: 'B', Conduit: 'Mast hose' }
+      { Device: 'A', Conduit: 'Galley conduit; Mast hose', Fuse: 'F' },
+      { Device: 'B', Conduit: 'Mast hose', Fuse: 'F' }
     ]
-    const grouped = groupImportRows(rows, ['Device', 'Conduit'], { Device: 'deviceName', Conduit: 'wireConduit' }, existing)
+    const grouped = groupImportRows(rows, ['Device', 'Conduit', 'Fuse'], { Device: 'deviceName', Conduit: 'wireConduit', Fuse: 'circuitSourceLabel' }, existing)
     const result = await importToStore(grouped)
     assert.equal(result.conduitsCreated, 1)
 
@@ -247,6 +263,49 @@ test('importToStore writes new conduits first, reuses existing ones, and lists t
     const runs = writes.filter((w) => w.url.startsWith('wiringWireRuns/')).map((w) => w.body)
     assert.deepEqual(runs[0].conduitIds, ['k-old', newConduitId])
     assert.deepEqual(runs[1].conduitIds, [newConduitId])
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('importToStore writes devices first, cables with their conductor, and names the derived circuits', async () => {
+  const { importToStore } = await import('../public/import.js')
+  const writes = []
+  const realFetch = globalThis.fetch
+  let cableIds = []
+  globalThis.fetch = async (url, init) => {
+    const u = String(url).replace('/signalk/v2/api/resources/', '')
+    if (!init) {
+      // The circuits the server derived from the cables just written.
+      return { ok: true, status: 200, json: async () => ({ k1: { id: 'k1', derived: { cableIds } } }) }
+    }
+    writes.push({ url: u, body: JSON.parse(init.body) })
+    if (u.startsWith('wiringWireRuns/')) cableIds.push(u.split('/')[1])
+    return { ok: true, status: 200 }
+  }
+  try {
+    const existing = [{ id: 'dev-lamp', name: 'Lamp', status: 'active' }]
+    const rows = [
+      { Device: 'Lamp', Fuse: '2', Color: 'red', Cond: 'positive', V: '12' },
+      { Device: 'Pump', Fuse: '2', Color: 'black', Cond: 'negative', V: '12' }
+    ]
+    const headers = ['Device', 'Fuse', 'Color', 'Cond', 'V']
+    const mapping = { Device: 'deviceName', Fuse: 'circuitGroupKey', Color: 'wireColor', Cond: 'wireConductor', V: 'circuitVoltage' }
+    const grouped = groupImportRows(rows, headers, mapping, [], existing)
+    const result = await importToStore(grouped)
+
+    assert.equal(result.devicesCreated, 2) // Fuse 2 and Pump; Lamp matched
+    assert.equal(result.devicesMatched, 1)
+    assert.equal(result.wireRunsCreated, 2)
+    assert.equal(result.circuitsNamed, 1)
+    const deviceWrites = writes.filter((w) => w.url.startsWith('wiringDevices/'))
+    assert.deepEqual(deviceWrites.map((w) => w.body.name).sort(), ['Fuse 2', 'Pump'])
+    assert.equal(deviceWrites.find((w) => w.body.name === 'Fuse 2').body.role, 'distribution')
+    const cables = writes.filter((w) => w.url.startsWith('wiringWireRuns/')).map((w) => w.body)
+    assert.equal(cables[0].toDeviceId, 'dev-lamp')
+    assert.deepEqual(cables[1].conductors, [{ conductor: 'negative', color: 'black' }])
+    const naming = writes.find((w) => w.url === 'wiringCircuits/k1')
+    assert.deepEqual(naming.body, { name: 'Circuit 2', voltage: 12 })
   } finally {
     globalThis.fetch = realFetch
   }
