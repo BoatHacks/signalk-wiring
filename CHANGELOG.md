@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-07
+
 ### Added
 
 - Device icons: mark one of a device's images as its icon (or clear it).
