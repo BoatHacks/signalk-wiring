@@ -2,6 +2,7 @@ import { html, render, useState, useEffect } from './vendor/preact-standalone.mo
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
+import { FloorplanTab } from './floorplanView.js'
 import { useSettings, wireRunInitialValues, colorPlaceholder } from './settings.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -790,6 +791,7 @@ function App () {
         <button class=${tab === 'circuits' ? 'active' : ''} onClick=${() => switchTab('circuits')}>Circuits</button>
         <button class=${tab === 'devices' ? 'active' : ''} onClick=${() => switchTab('devices')}>Devices</button>
         <button class=${tab === 'load' ? 'active' : ''} onClick=${() => switchTab('load')}>Load Summary</button>
+        <button class=${tab === 'floorplan' ? 'active' : ''} onClick=${() => switchTab('floorplan')}>Floorplan</button>
       </nav>
       ${tab === 'circuits' && !selectedCircuitId && html`<${CircuitsList} onSelect=${setSelectedCircuitId} />`}
       ${tab === 'circuits' && selectedCircuitId && html`
@@ -800,6 +802,7 @@ function App () {
         <${DeviceDetail} deviceId=${selectedDeviceId} onBack=${() => setSelectedDeviceId(null)} />
       `}
       ${tab === 'load' && html`<${LoadSummary} />`}
+      ${tab === 'floorplan' && html`<${FloorplanTab} />`}
     </div>
   `
 }

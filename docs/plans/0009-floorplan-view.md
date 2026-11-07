@@ -60,9 +60,16 @@ restrictive `Content-Security-Policy` in case someone opens the URL
 directly. The size of the drawing comes from the `viewBox` read on the
 client.
 
+**Raster drawings.** Plans may also be PNG, JPEG or WebP (a scan or a
+photo of a drawing, for example the boat's side profile). The upload
+route checks the file's own bytes against its declared type, stores it as
+`<id>.<ext>`, and replaces the old file when the format changes. The
+viewer reads a raster's pixel size from the decoded image. The routes are
+`POST` and `GET /plans/:id/image`.
+
 **CAD files.** DXF and DWG cannot be shown in a browser without a
-converter library. v1 accepts SVG only and the UI says to export SVG
-from the CAD tool (Inkscape, LibreCAD and QCAD all can). Direct DXF
+converter library. v1 accepts SVG and raster images only and the UI says
+to export SVG from the CAD tool (Inkscape, LibreCAD and QCAD all can). Direct DXF
 import is a possible later step.
 
 **Routes.** A wire run gets an optional `route` (JSON array of
@@ -109,8 +116,12 @@ the same device in the side view, and routes could not be measured.
 
 ## Open Questions
 
-- How to serve the SVG to any authenticated user (see Storage and
-  access). Answered in step 1's spike.
+- ~~How to serve the SVG to any authenticated user.~~ Answered by the
+  step 1 spike: signalk-server 2.36.0 gives the plugin router an
+  `access(level)` registrar (`router.access('readonly').get(...)`), which
+  registers the route's permission with the security strategy. The
+  download route uses it when present and falls back to the admin-only
+  default on older servers.
 
 ## Test Strategy
 
@@ -142,11 +153,11 @@ in the diagram), a device with only x/y set, a plan uploaded without a
 
 Delivered as separate slices, each its own commit with tests:
 
-- [ ] 1. Schema migration, `plans` store kind, `wiringPlans` provider,
+- [x] 1. Schema migration, `plans` store kind, `wiringPlans` provider,
       SVG upload/download routes with the safe headers (backend only).
-- [ ] 2. `floorplan.js` pure logic with tests (calibration, projection,
+- [x] 2. `floorplan.js` pure logic with tests (calibration, projection,
       route length), written before the UI.
-- [ ] 3. Floorplan tab: upload, view with pan/zoom, calibrate.
+- [x] 3. Floorplan tab: upload, view with pan/zoom, calibrate.
 - [ ] 4. Device placement in both views, with cross-highlighting.
 - [ ] 5. Panel link on circuits, route drawing (click to add, drag to
       adjust, delete a point) and measured length.
