@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   axesForView, calibrationFromClicks, pxToMeters, metersToPx, applyClick,
-  waypointFromClick, routeLength, resolveRouteStart, planShowsPoint, parseSvgSize
+  waypointFromClick, routeLength, resolveRouteStart, planShowsPoint, parseSvgSize,
+  conduitRoutePoints, unroutedCables, conduitMembers
 } from '../public/floorplan.js'
 
 const near = (actual, expected, eps = 1e-9) =>
@@ -218,4 +219,41 @@ test('arrowHeadPoints follows a diagonal line and survives a zero-length one', (
   const [tip] = arrowHeadPoints([0, 0], [3, 4], 2)
   assert.deepEqual(tip, [3, 4])
   assert.deepEqual(arrowHeadPoints([5, 5], [5, 5], 2).flat(), [5, 5, 5, 5, 5, 5])
+})
+
+// Conduits (plan 0015)
+
+const pt = (x, y, z = null) => ({ x, y, z })
+
+test('a conduit route is just its stored points, with no derived start', () => {
+  assert.deepEqual(conduitRoutePoints({ route: [pt(0, 0), { x: 1 }] }), [pt(0, 0), pt(1, null)])
+  assert.deepEqual(conduitRoutePoints({ route: null }), [])
+  assert.deepEqual(conduitRoutePoints({}), [])
+})
+
+test('unrouted cables: no own route and no drawn conduit', () => {
+  const drawn = { id: 'k1', status: 'active', route: [pt(0, 0), pt(1, 0)] }
+  const bare = { id: 'k2', status: 'active', route: null }
+  const removedDrawn = { id: 'k3', status: 'removed', route: [pt(0, 0), pt(1, 0)] }
+  const runs = [
+    { id: 'own', status: 'active', route: [pt(0, 0)], conduitIds: [] },
+    { id: 'inDrawn', status: 'active', route: null, conduitIds: ['k1'] },
+    { id: 'inBare', status: 'active', route: null, conduitIds: ['k2'] },
+    { id: 'inRemoved', status: 'active', route: [], conduitIds: ['k3'] },
+    { id: 'nothing', status: 'active' },
+    { id: 'gone', status: 'removed', route: null, conduitIds: [] }
+  ]
+  assert.deepEqual(unroutedCables(runs, [drawn, bare, removedDrawn]).map((r) => r.id), ['inBare', 'inRemoved', 'nothing'])
+})
+
+test('conduit members are its live cables and their ends, for highlighting', () => {
+  const conduit = { id: 'k1', cableIds: ['a', 'b', 'c'] }
+  const runs = [
+    { id: 'a', status: 'active', fromEndpoint: 'd1', toEndpoint: 'd2' },
+    { id: 'b', status: 'removed', fromEndpoint: 'd3', toEndpoint: 'd4' },
+    { id: 'z', status: 'active', fromEndpoint: 'd9', toEndpoint: 'd8' }
+  ]
+  const { runIds, deviceIds } = conduitMembers(conduit, runs)
+  assert.deepEqual([...runIds], ['a'])
+  assert.deepEqual([...deviceIds].sort(), ['d1', 'd2'])
 })

@@ -230,3 +230,38 @@ export function metersToLengthUnit (meters, unit) {
   const value = unit === 'ft' ? meters * METERS_TO_FEET : meters
   return Math.round(value * 100) / 100
 }
+
+// The drawn polyline of a conduit: its stored points. Its ends are the first
+// and last point; nothing is derived from devices.
+export function conduitRoutePoints (conduit) {
+  return (conduit?.route || []).map(pointOf)
+}
+
+function hasDrawnRoute (record) {
+  return record.status !== 'removed' && Array.isArray(record.route) && record.route.length > 0
+}
+
+// Live cables that show nothing on the plans: no route of their own and no
+// live conduit with a drawn route to follow.
+export function unroutedCables (wireRuns, conduits) {
+  const drawn = new Set(conduits.filter(hasDrawnRoute).map((c) => c.id))
+  return wireRuns.filter((run) =>
+    run.status !== 'removed' &&
+    !(Array.isArray(run.route) && run.route.length > 0) &&
+    !(run.conduitIds || []).some((id) => drawn.has(id)))
+}
+
+// Run ids and device ids to highlight for a selected conduit: its live
+// cables and the devices at their ends.
+export function conduitMembers (conduit, wireRuns) {
+  const wanted = new Set(conduit.cableIds || [])
+  const runIds = new Set()
+  const deviceIds = new Set()
+  for (const run of wireRuns) {
+    if (!wanted.has(run.id) || run.status === 'removed') continue
+    runIds.add(run.id)
+    if (run.fromEndpoint) deviceIds.add(run.fromEndpoint)
+    if (run.toEndpoint) deviceIds.add(run.toEndpoint)
+  }
+  return { runIds, deviceIds }
+}

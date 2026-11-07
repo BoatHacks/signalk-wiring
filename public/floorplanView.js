@@ -4,8 +4,10 @@ import { deviceIconUrl } from './deviceIcons.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
   moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
-  metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints
+  metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints, conduitRoutePoints, unroutedCables,
+  conduitMembers
 } from './floorplan.js'
+import { cableName } from './conduits.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -66,6 +68,28 @@ function rasterSize (blob) {
     img.onerror = () => { URL.revokeObjectURL(url); resolve(null) }
     img.src = url
   })
+}
+
+// A wire run or conduit as fetched also lists its assignments. Writing a
+// whole record back must not carry that list along: it could be stale and
+// would replace what the conduit page saved in the meantime.
+function withoutAssignments (record) {
+  const { conduitIds, cableIds, ...rest } = record
+  return rest
+}
+
+// Splits a list of drawing points (null where a point is hidden or has no
+// position in this view) into the runs of consecutive visible points that
+// can be drawn as lines.
+function visibleSegments (pxs) {
+  const segments = []
+  let current = []
+  for (const px of pxs) {
+    if (px) current.push(px)
+    else { if (current.length > 1) segments.push(current); current = [] }
+  }
+  if (current.length > 1) segments.push(current)
+  return segments
 }
 
 function numberOrNull (text) {
@@ -334,19 +358,34 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         const key = i - offset // index into the stored route; negative for the derived start
         return key >= 0 && isActive ? pxFor('waypoint', key, p) : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)
       })
-      const segments = []
-      let current = []
-      for (const px of pxs) {
-        if (px) current.push(px)
-        else { if (current.length > 1) segments.push(current); current = [] }
-      }
-      if (current.length > 1) segments.push(current)
-      for (const seg of segments) {
+      for (const seg of visibleSegments(pxs)) {
         runLines.push({ id: run.id, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' ') })
       }
       if (isActive) {
         const offset = points.length - (run.route || []).length
         points.slice(offset).forEach((p, i) => {
+          const px = pxFor('waypoint', i, p)
+          if (px) waypointMarkers.push({ index: i, px })
+        })
+      }
+    }
+  }
+
+  // Conduits are drawn under the cables, thicker, so cables along them show on top.
+  const conduitLines = []
+  if (cal) {
+    for (const conduit of data.conduits) {
+      if (conduit.status === 'removed') continue
+      const isActive = conduit.id === ctx.conduitId
+      const points = conduitRoutePoints(conduit)
+      const pxs = points.map((p, i) => (isActive
+        ? pxFor('waypoint', i, p)
+        : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)))
+      for (const seg of visibleSegments(pxs)) {
+        conduitLines.push({ id: conduit.id, active: isActive, points: seg.map((p) => p.join(',')).join(' ') })
+      }
+      if (isActive) {
+        points.forEach((p, i) => {
           const px = pxFor('waypoint', i, p)
           if (px) waypointMarkers.push({ index: i, px })
         })
@@ -400,6 +439,11 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         onWheel=${onWheel} onPointerDown=${onPointerDown} onPointerMove=${onPointerMove}
         onPointerUp=${onPointerUp} onPointerCancel=${() => { drag.current = null; setGhost(null) }}>
         <image href=${imageUrl} x=${size.x} y=${size.y} width=${size.width} height=${size.height} />
+
+        ${conduitLines.map((l, i) => html`
+          <polyline key=${'k' + l.id + ':' + i} points=${l.points} fill="none"
+            class="conduit-line ${l.active ? 'active' : ''}" stroke-width=${unit * (l.active ? 2 : 1.6)} />
+        `)}
 
         ${runLines.map((l, i) => html`
           <polyline key=${l.id + ':' + i} points=${l.points} fill="none"
@@ -471,16 +515,16 @@ function Select ({ label, value, onChange, options }) {
 }
 
 function useFloorplanData (reloadKey, onError) {
-  const [state, setState] = useState({ loading: true, plans: [], devices: [], circuits: [], wireRuns: [] })
+  const [state, setState] = useState({ loading: true, plans: [], devices: [], circuits: [], wireRuns: [], conduits: [] })
 
   useEffect(() => {
     let cancelled = false
     Promise.all([
       fetchList('wiringPlans'), fetchList('wiringDevices'),
-      fetchList('wiringCircuits'), fetchList('wiringWireRuns')
+      fetchList('wiringCircuits'), fetchList('wiringWireRuns'), fetchList('wiringConduits')
     ])
-      .then(([plans, devices, circuits, wireRuns]) => {
-        if (!cancelled) setState({ loading: false, plans, devices, circuits, wireRuns })
+      .then(([plans, devices, circuits, wireRuns, conduits]) => {
+        if (!cancelled) setState({ loading: false, plans, devices, circuits, wireRuns, conduits })
       })
       .catch((err) => { if (!cancelled) { setState((s) => ({ ...s, loading: false })); onError(err.message) } })
     return () => { cancelled = true }
@@ -493,7 +537,7 @@ export function FloorplanTab () {
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const reload = () => setReloadKey((k) => k + 1)
-  const { loading, plans, devices, circuits, wireRuns } = useFloorplanData(reloadKey, setError)
+  const { loading, plans, devices, circuits, wireRuns, conduits } = useFloorplanData(reloadKey, setError)
 
   const [topId, setTopId] = useState(null)
   const [sideId, setSideId] = useState(null)
@@ -501,6 +545,7 @@ export function FloorplanTab () {
   const [circuitId, setCircuitId] = useState(null)
   const [deviceId, setDeviceId] = useState(null)
   const [runId, setRunId] = useState(null)
+  const [conduitId, setConduitId] = useState(null)
   const [waypointIndex, setWaypointIndex] = useState(null)
 
   const active = plans.filter((p) => p.status !== 'removed' && p.filename)
@@ -515,8 +560,12 @@ export function FloorplanTab () {
   const circuitsById = new Map(circuits.map((c) => [c.id, c]))
   const circuit = circuitId ? circuitsById.get(circuitId) : null
   const run = runId ? wireRuns.find((r) => r.id === runId) : null
-  const members = circuit ? circuitMembers(circuit, wireRuns) : null
-  const data = { devices, wireRuns, devicesById, circuitsById }
+  const conduitsById = new Map(conduits.map((c) => [c.id, c]))
+  const conduit = conduitId ? conduitsById.get(conduitId) : null
+  const members = circuit
+    ? circuitMembers(circuit, wireRuns)
+    : (conduit ? conduitMembers(conduit, wireRuns) : null)
+  const data = { devices, wireRuns, devicesById, circuitsById, conduits }
 
   const guard = async (fn) => {
     setError(null)
@@ -533,12 +582,19 @@ export function FloorplanTab () {
     guard(() => putResource('wiringDevices', device.id, { ...device, posX: null, posY: null, posZ: null }))
   }
 
-  const saveRoute = (route) => guard(() => putResource('wiringWireRuns', run.id, { ...run, route }))
+  // The route being drawn belongs to the selected conduit, else the selected
+  // wire run. Choosing one clears the other.
+  const currentRoute = () => (conduit ? conduit.route : run?.route) || []
+  const saveRoute = (route) => guard(() => (conduit
+    ? putResource('wiringConduits', conduit.id, { route })
+    : putResource('wiringWireRuns', run.id, { ...withoutAssignments(run), route })))
 
   // The previous point for axis inheritance: the last waypoint, else the
-  // resolved start of the route.
+  // resolved start of a wire run's route.
   const lastPoint = () => {
-    const points = routePoints(run, circuitsById.get(run.circuitId), devicesById)
+    const points = conduit
+      ? conduitRoutePoints(conduit)
+      : routePoints(run, circuitsById.get(run.circuitId), devicesById)
     return points.length ? points[points.length - 1] : null
   }
 
@@ -550,11 +606,11 @@ export function FloorplanTab () {
     },
     moveDevice: (id, view, a, b) => saveDevicePosition(devicesById.get(id), view, a, b),
     addWaypoint: (view, a, b) => {
-      if (!run) { setError('Choose a wire run to draw first.'); return }
-      saveRoute([...(run.route || []), waypointFromClick(lastPoint(), view, a, b)])
+      if (!run && !conduit) { setError('Choose a wire run or a conduit to draw first.'); return }
+      saveRoute([...currentRoute(), waypointFromClick(lastPoint(), view, a, b)])
       setWaypointIndex(null)
     },
-    moveWaypoint: (index, view, a, b) => saveRoute(moveWaypoint(run.route || [], index, view, a, b)),
+    moveWaypoint: (index, view, a, b) => saveRoute(moveWaypoint(currentRoute(), index, view, a, b)),
     removePlan: (plan) => {
       if (!window.confirm(`Remove the plan "${plan.name}"? Placed devices and routes are kept; the plan stays in the record as removed.`)) return
       guard(() => deleteResource('wiringPlans', plan.id))
@@ -564,17 +620,23 @@ export function FloorplanTab () {
     clearSelection: () => { setDeviceId(null); setWaypointIndex(null) }
   }
 
-  const ctx = { tool, deviceId, runId, members, waypointIndex }
+  const ctx = { tool, deviceId, runId, conduitId, members, waypointIndex }
 
   const deleteWaypoint = () => {
-    saveRoute(removeWaypoint(run.route || [], waypointIndex))
+    saveRoute(removeWaypoint(currentRoute(), waypointIndex))
     setWaypointIndex(null)
   }
-  const undoLast = () => saveRoute(removeWaypoint(run.route || [], (run.route || []).length - 1))
+  const undoLast = () => saveRoute(removeWaypoint(currentRoute(), currentRoute().length - 1))
 
   const measured = run ? routeLength(routePoints(run, circuitsById.get(run.circuitId), devicesById)) : null
+  const conduitMeasured = conduit ? routeLength(conduitRoutePoints(conduit)) : null
+  const unrouted = unroutedCables(wireRuns, conduits)
+  const drawCable = (id) => {
+    setTool('route'); setCircuitId(null); setConduitId(null); setRunId(id); setWaypointIndex(null); setError(null)
+  }
+  const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
   const useMeasured = () => guard(() => putResource('wiringWireRuns', run.id, {
-    ...run,
+    ...withoutAssignments(run),
     length: metersToLengthUnit(measured.length, run.lengthUnit),
     lengthUnit: run.lengthUnit || 'm'
   }))
@@ -590,6 +652,9 @@ export function FloorplanTab () {
   const runOptions = liveRuns
     .filter((r) => !circuitId || r.circuitId === circuitId)
     .map((r) => ({ value: r.id, label: `${circuitsById.get(r.circuitId)?.name || '?'}: ${r.fromEndpoint} to ${r.toEndpoint}` }))
+
+  const conduitOptions = conduits.filter((c) => c.status !== 'removed')
+    .map((c) => ({ value: c.id, label: c.kind ? `${c.name} (${c.kind})` : c.name }))
 
   const planButtons = (list, selectedPlan, setId) => list.length > 1 && html`
     <div class="row-actions">
@@ -621,7 +686,9 @@ export function FloorplanTab () {
             `}
             ${tool !== 'place' && html`
               <${Select} label="Wire run" value=${runId} options=${runOptions}
-                onChange=${(v) => { setRunId(v); setWaypointIndex(null) }} />
+                onChange=${(v) => { setRunId(v); setConduitId(null); setWaypointIndex(null) }} />
+              <${Select} label="Conduit" value=${conduitId} options=${conduitOptions}
+                onChange=${(v) => { setConduitId(v); setRunId(null); setWaypointIndex(null) }} />
             `}
             ${circuit && html`
               <${Select} label="Panel device for this circuit" value=${circuit.panelDeviceId} options=${deviceOptions}
@@ -629,13 +696,26 @@ export function FloorplanTab () {
             `}
           </div>
           ${tool === 'place' && html`<p class="meta">Choose a device, then click a calibrated plan to place it. A click in one view sets only the two axes it shows. Drag a marker in Select mode to adjust it.</p>`}
-          ${tool === 'route' && html`<p class="meta">Choose a wire run, then click to add waypoints. The route starts at the run's from-device, else the circuit's panel device. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
+          ${tool === 'route' && html`<p class="meta">Choose a wire run or a conduit, then click to add waypoints. A conduit route is just its points. A wire run route starts at the run's from-device, else the circuit's panel device. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
           ${deviceId && devicesById.get(deviceId) && html`
             <div class="route-info">
               <span>Selected: <strong>${devicesById.get(deviceId).name}</strong>${isPlaced(devicesById.get(deviceId)) ? '' : ' (not placed)'}</span>
               <div class="row-actions">
                 <button disabled=${!isPlaced(devicesById.get(deviceId))} onClick=${() => clearPlacement(devicesById.get(deviceId))}>Remove placement</button>
                 <button onClick=${() => setDeviceId(null)}>Deselect</button>
+              </div>
+            </div>
+          `}
+          ${conduit && html`
+            <div class="route-info">
+              <span>Conduit route: <strong>${conduitMeasured.length.toFixed(2)} m</strong>${conduitMeasured.complete ? '' : ' (incomplete, some heights unset)'}</span>
+              <span>Cables along it: ${(conduit.cableIds || []).length === 0
+                ? 'none yet, add them on the Conduits tab'
+                : (conduit.cableIds || []).map((id) => wireRuns.find((r) => r.id === id)).filter(Boolean)
+                  .map((r) => cableName(r, deviceNameById)).join(', ')}</span>
+              <div class="row-actions">
+                <button disabled=${!(conduit.route || []).length} onClick=${undoLast}>Undo last point</button>
+                <button disabled=${waypointIndex === null} onClick=${deleteWaypoint}>Delete selected point</button>
               </div>
             </div>
           `}
@@ -651,6 +731,19 @@ export function FloorplanTab () {
             </div>
           `}
         </div>
+
+        ${unrouted.length > 0 && html`
+          <details class="unrouted">
+            <summary>${unrouted.length === 1 ? '1 cable is' : `${unrouted.length} cables are`} not drawn on the plans</summary>
+            <p class="meta">These have no route of their own and no conduit with a drawn route. Pick one to draw it.</p>
+            ${unrouted.map((r) => html`
+              <div class="list-item" key=${r.id}>
+                <div>${cableName(r, deviceNameById)}</div>
+                <button onClick=${() => drawCable(r.id)}>Draw</button>
+              </div>
+            `)}
+          </details>
+        `}
 
         ${planButtons(topPlans, topPlan, setTopId)}
         ${planButtons(sidePlans, sidePlan, setSideId)}
