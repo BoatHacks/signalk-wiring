@@ -40,7 +40,11 @@ Registers the resource types via
 `app.registerResourceProvider({ type, methods })`:
 `wiringCircuits`, `wiringWireRuns`, `wiringDevices`, `wiringPlans`,
 `wiringZones` and `wiringConduits`. Owns CRUD against the SQLite store for
-those tables. Conduit assignments ride along on the two resources they
+those tables. A circuit resource is its record plus a `derived` object
+from the derivation (`src/circuits.js`, see §2.5); setting one accepts only
+its name, notes, voltage override and convention, and creating or deleting
+one by hand is refused. A wire run carries its `conductors` and a device its
+`terminals`, written and logged as part of the parent. Conduit assignments ride along on the two resources they
 connect: a conduit lists `cableIds` and a wire run lists `conduitIds` (in
 the cable's order), both read from the join table. A write that carries one
 of them replaces that side's assignments through the store; a write without
@@ -66,8 +70,10 @@ Registered via `registerWithRouter(router)`. Owns:
   the JSON resource API, so they're handled separately and stored on disk
   with metadata in SQLite.
 - Diagram data (`GET /plugins/signalk-wiring/circuits/:id/diagram`) — a
-  denormalized read (circuit + its wire runs + their devices) shaped for
-  the client-side diagram renderer, to avoid N+1 fetches from the webapp.
+  denormalized read (derived circuit + its cables, feed and negative return,
+  + their devices) shaped for a diagram renderer.
+- Derivation leftovers (`GET /plugins/signalk-wiring/derived`, readonly
+  access): the battery banks and the warnings that belong to no circuit.
 - Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`).
 - Device icons (`GET /plugins/signalk-wiring/devices/:id/icon`), registered
   with `router.access('readonly')` like the plan download so drawings can
@@ -89,12 +95,33 @@ webapp's static assets are *not* served from here — see §2.4.
 
 ### 2.3 Storage layer (`src/store.js`)
 
-Wraps `better-sqlite3`. Owns all reads/writes to `circuits`, `wire_runs`,
-`devices`, `conduits`, `wire_run_conduits`, `attachments`, and `change_log`
+Wraps `better-sqlite3`. Owns all reads/writes to `circuits`, `wire_runs`, `wire_run_conductors`,
+`devices`, `device_terminals`, `conduits`, `wire_run_conduits`,
+`attachments`, and `change_log`
 tables, and appends a
 `change_log` row on every mutating write to an active record (SPEC.md
 §3.2). Both the resource provider and the admin routes call into this
 layer rather than touching SQLite directly.
+
+### 2.3.1 Circuit derivation (`src/circuits.js`) and record sync
+
+`deriveCircuits({ devices, cables })` is a pure function: no database, no
+side effects. It builds a graph from the positive and line conductors
+(devices are nodes, cables edges), splits it at devices with a trip rating,
+ends circuits at batteries, consumers, sources and converter ports, and
+traces the negative network separately. It returns the circuits (key, feed
+cables, return cables, devices, supply and end devices, rating, voltage, AC
+flag), the battery banks and warnings. The webapp never derives on its own.
+
+`Store.syncCircuits()` runs after every create or update of a device or a
+cable, inside the store so the change log stays consistent. It matches the
+derived circuits to the thin records in `circuits` by `key`
+(`protector:<device id>` or `cable:<first cable id>`); a key that is new but
+whose cables overlap a record whose key vanished takes that record over
+(a fuse added to an unprotected circuit keeps its name and notes); a record
+with no circuit becomes `removed` and is reactivated if its key returns.
+Each change is a normal change-log entry. `cable_ids` on the record keeps
+the cables it had at the last sync to make that overlap match possible.
 
 ### 2.4 Webapp (`public/`)
 
@@ -151,9 +178,11 @@ importing `app.js`'s, to avoid a circular ES module dependency and keep
 each independently loadable by `node:test` — `app.js` itself can't be,
 since its top-level code calls `render()` against `document`, which
 doesn't exist outside a browser). `import.js`'s CSV parsing and
-column-mapping logic, and `loadSummary.js`'s per-circuit load
-calculation, are both plain exported functions ahead of their Preact
-component, tested directly.
+column-mapping logic, `loadSummary.js`'s per-circuit load
+calculation, `cableForm.js` (conductor kinds, form values to cable payload,
+the default negative landing) and `deviceFields.js` (which device fields
+apply to which role) are plain exported functions, tested directly; the
+import and load summary also sit ahead of a Preact component.
 
 ## 3. Data Models
 
@@ -162,27 +191,23 @@ plan 0008 (§3.1 below) — `circuits.source` renamed to `source_label`, the
 rest of the fields marked `-- 0008` are additions:
 
 ```sql
-CREATE TABLE circuits (
+CREATE TABLE circuits (   -- plan 0014: a thin record kept in step with the cables
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  source_label TEXT,      -- breaker/fuse label, free text (was `source`)
-  breaker_rating REAL,    -- numeric amps, optional -- 0008
-  voltage REAL,           -- optional, per-circuit not installation-wide -- 0008
-  panel_ref TEXT,
-  panel_device_id TEXT,    -- panel/battery/bus bar device, optional -- 0009
+  key TEXT,                -- protector:<device id> | cable:<first cable id>, unique when set
+  cable_ids TEXT,          -- JSON list of the cables at the last sync
+  voltage REAL,            -- optional override of the derived voltage
   convention TEXT,         -- override; NULL = use installation default
   status TEXT NOT NULL,    -- 'active' | 'removed'
   notes TEXT
 );
 
-CREATE TABLE wire_runs (
+CREATE TABLE wire_runs (   -- a cable
   id TEXT PRIMARY KEY,
-  circuit_id TEXT NOT NULL REFERENCES circuits(id),
-  from_endpoint TEXT,      -- device id, source label, or splice ref
-  to_endpoint TEXT,
+  from_device_id TEXT REFERENCES devices(id),  -- supply side -- 0014
+  to_device_id TEXT REFERENCES devices(id),    -- load side -- 0014
   gauge REAL,
   gauge_unit TEXT,          -- 'AWG' | 'mm2'
-  color TEXT,
   length REAL,
   length_unit TEXT,        -- 'm' | 'ft' -- 0008
   zone TEXT,              -- the zone's name, kept in step with zone_id
@@ -193,6 +218,18 @@ CREATE TABLE wire_runs (
   route TEXT,              -- JSON list of {x,y,z} waypoints in meters -- 0009
   status TEXT NOT NULL,
   notes TEXT
+);
+
+CREATE TABLE wire_run_conductors (  -- 0014: the conductors inside a cable
+  id TEXT PRIMARY KEY,
+  wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+  position INTEGER NOT NULL,
+  conductor TEXT NOT NULL,   -- positive | negative | line | neutral | earth
+  color TEXT,
+  from_device_id TEXT REFERENCES devices(id),  -- where it lands when not the cable's end
+  to_device_id TEXT REFERENCES devices(id),
+  from_terminal TEXT,         -- a terminal name on that device
+  to_terminal TEXT
 );
 
 CREATE TABLE devices (
@@ -206,11 +243,24 @@ CREATE TABLE devices (
   tags TEXT,              -- JSON array of strings -- 0010
   rated_power_w REAL,     -- nameplate/rated draw, optional -- 0008
   signalk_path TEXT,      -- e.g. electrical.switches.anchorLight -- 0008
+  trip_rating_a REAL,     -- fuse or breaker rating: it protects its branch -- 0014
+  nominal_voltage REAL,   -- batteries and sources -- 0014
+  power_factor REAL,      -- consumers on AC circuits, optional -- 0014
   pos_x REAL,             -- meters, any axis may be NULL -- 0009
   pos_y REAL,
   pos_z REAL,
   status TEXT NOT NULL,
   notes TEXT
+);
+
+CREATE TABLE device_terminals (  -- 0014
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(id),
+  position INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  conductor TEXT NOT NULL,   -- positive | negative | line | neutral | earth
+  voltage REAL,
+  port TEXT                  -- a converter's side, for example 'DC in'
 );
 
 CREATE TABLE zones (      -- 0010
@@ -280,7 +330,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are six migrations (the third to sixth are described below): plan 0008's field
+every subsequent restart. There are seven migrations (the third to seventh are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -317,6 +367,26 @@ and have no status: `assignCable` and `unassignCable` write one change-log
 entry on the conduit, and `setCableConduits` (a replaced or reordered list)
 one on the wire run. Removing a conduit or a cable keeps its assignments, so
 history stays intact; the webapp and the route functions skip removed ones.
+
+Plan 0014's migration (version 7) adds the trip rating, nominal voltage and
+power factor columns, the `wire_run_conductors` and `device_terminals`
+tables, and rebuilds `wire_runs` (SQLite cannot drop a NOT NULL column) with
+`from_device_id` and `to_device_id` instead of `circuit_id`, `from_endpoint`,
+`to_endpoint` and `color`, with foreign keys switched off for the rebuild
+and the conduit assignments left intact. Each free-text end is matched to a
+device by id, else by name ignoring case and padding; an end that matches
+nothing is kept as a line in the cable's notes. The old colour becomes the
+colour of a positive conductor. On `circuits` it adds `key` and `cable_ids`
+and drops the retired `source_label`, `breaker_rating`, `panel_ref` and
+`panel_device_id`; a circuit made by hand has no key, so the first sync
+marks it removed (name and notes kept). Every step guards itself, and the
+rebuild only runs while `wire_runs.circuit_id` still exists, so the
+migration is safe to run twice.
+
+Conductors and terminals live in child tables but are written, validated
+and change-logged as part of their parent: a write that carries the list
+replaces it, one without it leaves it alone, and an unchanged list adds no
+change-log entry.
 
 The cable's effective route and length (`effectiveCableRoute` in
 `public/floorplan.js`, pure and tested) are derived on the client and never

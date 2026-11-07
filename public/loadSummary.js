@@ -136,7 +136,7 @@ export function LoadSummary () {
                     `}
                   </td>
                   <td>${load.totalWatts} W</td>
-                  <td>${load.voltage ? `${load.voltage} V${load.ac ? ' AC' : ''}` : '—'}</td>
+                  <td>${load.voltage ? `${load.voltage} V${load.ac ? ' AC' : ''}` : '-'}</td>
                   <td>${formatAmps(load.amps)}</td>
                   <td>${load.ratingA ? `${load.ratingA} A` : 'none'}</td>
                   <td>

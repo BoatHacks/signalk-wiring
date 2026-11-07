@@ -981,7 +981,7 @@ function CableForm ({ cable, devices, cables, circuits, onDevicesChanged, onSave
         <div class="row-actions">
           <input type="number" step="any" value=${values.gauge} onInput=${(e) => set('gauge', e.target.value)} />
           <select value=${values.gaugeUnit} onChange=${(e) => set('gaugeUnit', e.target.value)}>
-            <option value="">—</option><option value="AWG">AWG</option><option value="mm2">mm²</option>
+            <option value="">-</option><option value="AWG">AWG</option><option value="mm2">mm²</option>
           </select>
         </div>
       </div>
@@ -990,7 +990,7 @@ function CableForm ({ cable, devices, cables, circuits, onDevicesChanged, onSave
         <div class="row-actions">
           <input type="number" step="any" value=${values.length} onInput=${(e) => set('length', e.target.value)} />
           <select value=${values.lengthUnit} onChange=${(e) => set('lengthUnit', e.target.value)}>
-            <option value="">—</option><option value="m">m</option><option value="ft">ft</option>
+            <option value="">-</option><option value="m">m</option><option value="ft">ft</option>
           </select>
         </div>
       </div>
@@ -1041,7 +1041,9 @@ function CablesList () {
   const { loading, error, items: cables } = useResourceList('wiringWireRuns', reloadKey)
   const { items: devices } = useResourceList('wiringDevices', devKey)
   const { items: circuits } = useResourceList('wiringCircuits', reloadKey)
+  const { items: conduits } = useResourceList('wiringConduits')
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
+  const conduitNameById = new Map(conduits.map((c) => [c.id, c.name]))
   const visible = cables.filter((c) => matchesFilter(c, filter))
 
   const save = async (payload, id) => {
@@ -1100,7 +1102,7 @@ function CablesList () {
       ${visible.length > 0 && html`
         <table>
           <thead>
-            <tr><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Status</th><th></th></tr>
+            <tr><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Conduits</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
             ${visible.flatMap((cable) => {
@@ -1110,11 +1112,12 @@ function CablesList () {
                   <td>${deviceNameById.get(cable.fromDeviceId) || '?'}</td>
                   <td>${deviceNameById.get(cable.toDeviceId) || '?'}</td>
                   <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}</td>
-                  <td>${cable.cableLabel || '—'}</td>
-                  <td>${cable.gauge ? `${cable.gauge} ${cable.gaugeUnit || ''}` : '—'}</td>
-                  <td>${cable.length ? `${cable.length} ${cable.lengthUnit || ''}` : '—'}</td>
-                  <td>${cable.zone || '—'}${(cable.tags || []).length ? html`<div class="meta">${cable.tags.join(', ')}</div>` : ''}</td>
-                  <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '—'}</td>
+                  <td>${cable.cableLabel || '-'}</td>
+                  <td>${(cable.conduitIds || []).map((id) => conduitNameById.get(id) || '?').join(' > ') || '-'}</td>
+                  <td>${cable.gauge ? `${cable.gauge} ${cable.gaugeUnit || ''}` : '-'}</td>
+                  <td>${cable.length ? `${cable.length} ${cable.lengthUnit || ''}` : '-'}</td>
+                  <td>${cable.zone || '-'}${(cable.tags || []).length ? html`<div class="meta">${cable.tags.join(', ')}</div>` : ''}</td>
+                  <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '-'}</td>
                   <td><${StatusBadge} status=${cable.status} /></td>
                   <td class="row-actions">
                     <button onClick=${() => { setNotice(null); setForm(cable) }}>Edit</button>
@@ -1129,10 +1132,10 @@ function CablesList () {
                 </tr>
               `]
               if (attachmentsId === cable.id) {
-                rows.push(html`<tr key="${cable.id}-attachments"><td colspan="10"><${AttachmentList} ownerType="wireRun" ownerId=${cable.id} /></td></tr>`)
+                rows.push(html`<tr key="${cable.id}-attachments"><td colspan="11"><${AttachmentList} ownerType="wireRun" ownerId=${cable.id} /></td></tr>`)
               }
               if (historyId === cable.id) {
-                rows.push(html`<tr key="${cable.id}-history"><td colspan="10"><${ChangeLog} kind="wireRun" id=${cable.id} /></td></tr>`)
+                rows.push(html`<tr key="${cable.id}-history"><td colspan="11"><${ChangeLog} kind="wireRun" id=${cable.id} /></td></tr>`)
               }
               return rows
             })}
@@ -1319,7 +1322,7 @@ function CircuitDetail ({ circuitId, onBack }) {
   const cableById = new Map(cables.map((c) => [c.id, c]))
   const feedCables = d ? d.cableIds.map((id) => cableById.get(id)).filter(Boolean) : []
   const returnCables = d ? d.returnCableIds.map((id) => ({ ...cableById.get(id), isReturn: true })).filter((c) => c.id) : []
-  const names = (ids) => ids.map((id) => deviceNameById.get(id) || '?').join(', ') || '—'
+  const names = (ids) => ids.map((id) => deviceNameById.get(id) || '?').join(', ') || '-'
 
   return html`
     <div>
@@ -1366,9 +1369,9 @@ function CircuitDetail ({ circuitId, onBack }) {
                 <td>${deviceNameById.get(c.fromDeviceId) || '?'}</td>
                 <td>${deviceNameById.get(c.toDeviceId) || '?'}</td>
                 <td>${c.isReturn ? 'Negative return' : 'Feed'}</td>
-                <td>${c.cableLabel || '—'}</td>
-                <td>${c.gauge ? `${c.gauge} ${c.gaugeUnit || ''}` : '—'}</td>
-                <td>${c.length ? `${c.length} ${c.lengthUnit || ''}` : '—'}</td>
+                <td>${c.cableLabel || '-'}</td>
+                <td>${c.gauge ? `${c.gauge} ${c.gaugeUnit || ''}` : '-'}</td>
+                <td>${c.length ? `${c.length} ${c.lengthUnit || ''}` : '-'}</td>
               </tr>
             `)}
           </tbody>

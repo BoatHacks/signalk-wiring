@@ -7,6 +7,27 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Circuits are worked out from the cables. Record a cable between two
+  devices (from the supply side to the load side) and the circuit it belongs
+  to appears: what one fuse or breaker protects, with its rating, voltage,
+  AC or DC, supply and end devices. A cable with no fuse is still a circuit,
+  flagged "no protection", and moves onto a fuse when you add one, keeping
+  its name and notes. Branches off a bus bar are separate circuits; a
+  negative can take its own path or land on a negative bus bar.
+- A Cables tab with the new cable form: From (supply side) and To (load
+  side) device pickers with a "New device..." entry, Positive, Negative or
+  Positive + negative (AC and earth under "More"), a "negative lands on at
+  the supply end" picker that starts as the last one you used, colour per
+  conductor, gauge, length, label, zone and tags. Terminals are asked for
+  only on converters and devices with several. The circuit the cable
+  belongs to is shown under the form.
+- Devices: a trip rating on fuses and breakers, a nominal voltage on
+  batteries and sources, terminals (with ports on converters), and a power
+  factor on consumers of an AC circuit.
+- A `GET /plugins/signalk-wiring/derived` route (readonly) with the battery
+  banks and derivation warnings, and a `derived` object on each circuit
+  resource.
+
 - Conduits: a new tab for conduits, hoses, looms, trunking and cable trays.
   A conduit has a name, a kind (a dropdown with suggestions, kinds already
   used and an "Add kind..." entry), an optional inner diameter, a zone,
@@ -21,10 +42,25 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - CSV import: a "Wire run: conduit" column names the conduits of each cable
   (several in order, separated by ; or >). Conduits already recorded are
   matched by name and reused; new ones are created.
-- The cable table on a circuit page names the conduits of each cable, and
+- The cable table on the Cables tab names the conduits of each cable, and
   zones count conduits as well as devices and wire runs.
 ### Changed
 
+- Circuits are a read-only overview (name, notes, voltage override, rating,
+  AC or DC, warnings). The circuit creation form and its free-text source,
+  breaker and panel fields are gone, as is the floorplan panel link; the
+  protecting fuse or breaker device and its position say it. A cable's ends
+  are devices instead of free text, and its colour is per conductor.
+- The load check reads the derived circuits: consumers only, watts divided
+  by volts, with the optional power factor applied on AC circuits, against
+  the rating of the protecting device.
+- CSV import creates devices (matched by name ignoring case, created when
+  missing) and cables; circuits follow, and the circuit column names the
+  derived circuits.
+- Existing databases are migrated on first start: cable ends are matched to
+  devices by name (an end that matches nothing is kept as a note on the
+  cable), colours become a positive conductor, and circuits made by hand are
+  kept as removed records with their names and notes.
 - The device Type field is a dropdown: popular types for the chosen role
   (solar panel, shore power inlet, battery, fuse, inverter, bilge pump and
   more), then types already used on other devices, and an "Add type..."

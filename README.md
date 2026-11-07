@@ -1,20 +1,24 @@
 # signalk-wiring
 
 A SignalK plugin + webapp for documenting a boat's physical electrical
-wiring: circuits, wire runs, and devices, with photos and a full change
+wiring: devices, the cables between them, and the circuits those imply, with photos and a full change
 history — so tracing a fault or explaining the boat's electrical system
 to someone else doesn't depend on the current owner being present.
 
 ## Features
 
-- **Circuit → wire run → device** data model: a circuit has a source
-  (breaker/fuse label, plus optional numeric breaker rating and system
-  voltage) and one or more wire runs; a wire run connects two endpoints
-  (a device, a source, or a splice) and can carry a physical cable
-  label and switch reference distinct from the circuit's fuse; a device
+- **Cables between devices, circuits worked out for you**: you record
+  cables from the supply side to the load side of devices (battery, fuse,
+  switch, lamp) and the circuits follow. A circuit is what one fuse or
+  breaker protects; an unfused run is still a circuit, flagged. A cable lists
+  its conductors (positive, negative, AC line, neutral, earth) with colours,
+  and a negative can land on its own bus bar. Fuses and breakers carry a
+  trip rating, batteries and sources a nominal voltage, and any device can
+  declare terminals (with ports on converters). The cable form has a "New
+  device..." entry on both ends, so nothing needs setting up first. A device
   can be fed by more than one circuit, and can record its rated power
   draw and a SignalK path (e.g. `electrical.switches.anchorLight`) it
-  corresponds to.
+  corresponds to. You can name a circuit and add notes.
 - **Conduits**: record the conduits, hoses, looms, trunking and cable trays
   that cables share, with an optional route on the floorplan. Add cables to
   a conduit from its page; a cable can pass through several in order. A cable
@@ -23,7 +27,7 @@ to someone else doesn't depend on the current owner being present.
   converter) so power sources such as solar, shore power or a generator,
   batteries, switches and inverters are told apart from the things that
   use power. Only consumers count towards a circuit's load.
-- **Zones** (e.g. "engine room") on wire runs and devices, chosen from a
+- **Zones** (e.g. "engine room") on cables and devices, chosen from a
   managed list you can rename and merge, plus free-text **tags** for other
   groupings such as an audio zone, with zone and tag filters on the lists.
   Wire gauge/length recorded with explicit units (AWG or mm²; meters or
@@ -33,10 +37,13 @@ to someone else doesn't depend on the current owner being present.
 - **CSV import**: upload a spreadsheet, map its columns to wiring
   fields (or skip them), preview the result, then import — generic
   column mapping rather than a fixed layout, so it isn't tied to one
-  particular spreadsheet's shape. A column can name each cable's conduits.
-- **Panel load summary**: per active circuit, total connected devices'
-  rated wattage converted to amps via the circuit's voltage and checked
-  against its breaker rating, flagging circuits over their rating.
+  particular spreadsheet's shape. It imports devices (matched by name,
+  created when missing) and the cables between them, and circuits follow.
+  A column can name each cable's conduits.
+- **Panel load summary**: per derived circuit, the rated wattage of its
+  consumers converted to amps via the voltage of its supply (with an
+  optional power factor on AC) and checked against the rating of the fuse or
+  breaker that protects it, flagging circuits over their rating.
 - **Nothing is ever hard-deleted.** "Removing" a record marks it
   `removed` rather than dropping it, so the wiring's history stays
   intact — a refit doesn't erase what used to be there.
@@ -54,10 +61,9 @@ to someone else doesn't depend on the current owner being present.
   each with an optional height range.
 - **Device icons**: mark one of a device's images as its icon, shown in
   device lists, on circuit diagrams and on floorplan markers.
-- **Photo/file attachments** per wire run, device or conduit (JPEG/PNG/WebP/HEIC/
+- **Photo/file attachments** per cable, device or conduit (JPEG/PNG/WebP/HEIC/
   PDF, 15MB cap).
-- An **auto-generated diagram** per circuit (source → wire run(s) →
-  device(s)), laid out and rendered client-side.
+- An **auto-generated diagram** per circuit (devices joined by cables), laid out and rendered client-side.
 - A configurable **wiring convention** setting (ABYC E-11 / DIN EN ISO
   13297 / freestyle) — drives labeling hints in the UI only, never
   enforced on the data, since not every boat follows one standard.

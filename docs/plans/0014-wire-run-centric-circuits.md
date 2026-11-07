@@ -1,7 +1,9 @@
-# Implementation Plan: 0014 - Wire-run-centric circuits (draft)
+# Implementation Plan: 0014 - Wire-run-centric circuits
 
-This is a draft from a design discussion. Nothing is implemented. The design
-questions are all answered below.
+Implemented on the branch `plan-0014-circuits` (everything except the
+follow-up at the end). The design questions were all answered before
+implementation; the details that were left open are recorded in "Decisions
+made during implementation" below.
 
 ## Overview
 
@@ -188,8 +190,57 @@ are worked out from them. A circuit is what a fuse or breaker protects.
 - [x] Circuits overview (name, notes), diagram and load summary on derived
       circuits, floorplan panel link removed.
 - [x] CSV import updated for device-based ends.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 - [ ] Follow-up: draw wires between devices on a diagram.
+
+## Decisions made during implementation
+
+- **Migration number.** The conduits migration took version 6, so this is
+  version 7. It rebuilds `wire_runs` (SQLite cannot drop a NOT NULL column),
+  with foreign keys off, only while `circuit_id` still exists.
+- **Free-text ends that match no device** are kept as a line in the cable's
+  notes and the end is left empty, instead of inventing devices. The cable
+  then shows a "missing device" warning until the end is set.
+- **Hand-made circuits** from older versions have no key. The first sync
+  marks them removed (kept, with name and notes) rather than guessing a link.
+- **Cable colour** moved to the conductors; the old colour became the colour
+  of a positive conductor. `wire_runs.color` is gone.
+- **Circuit record** has `key`, `cable_ids` (the cables at the last sync, so a
+  record can follow its cables when the key changes, for example when a fuse
+  is added), `voltage` (override), `convention`, `status` and `notes`. The
+  retired columns were dropped. The derived facts are served as a `derived`
+  object on the resource and are never stored.
+- **Default circuit name** is the protecting device's name, or "Unprotected: "
+  and the end devices. Removing a circuit by hand is refused, since the next
+  sync would bring it back; it goes away when its cables do.
+- **Conductors and terminals** are written with their parent record (a list
+  on the wire run and on the device) rather than through routes of their
+  own, so one write is one change-log entry.
+- **Derived circuit under the cable form.** Derivation stays on the server,
+  so a new cable shows its circuit after saving (and while editing an
+  existing one), not as a live preview of unsaved input.
+- **Negative landing default** is read from the cables (the most recently
+  listed live cable that lands a negative on a device at its supply end), so
+  it needs no storage of its own and survives reloads.
+- **Terminals asked on the cable form** only for a converter or a device with
+  more than one terminal, per conductor and end.
+- **Load check** uses the derived circuit: consumers among the end devices,
+  watts divided by the circuit voltage (derived or overridden). On AC
+  circuits each consumer's watts are divided by its power factor when set.
+- **Floorplan.** `resolveRouteStart` and `routePoints` keep their circuit
+  argument (ignored) so the conduit code that calls them is unchanged. The
+  highlight selector uses the derived feed and return cables of a circuit.
+- **CSV import.** A row is a cable to the row's device. The supply comes
+  from a "from device" column, a supply device column, or a fuse device made
+  from the circuit grouping key (rows with one key share it, role
+  distribution, trip rating from the first row). A row with no supply makes
+  its device but no cable and is counted in the preview. After the cables are
+  written the circuit grouping names the derived circuits (and sets a voltage
+  override when mapped); it is best effort.
+- **Device forms** show a field only where it applies (trip rating on
+  distribution devices, nominal voltage on batteries and sources, power
+  factor on consumers of an AC circuit, terminals on everything but
+  consumers and sources unless some exist).
 
 ## Open questions
 
