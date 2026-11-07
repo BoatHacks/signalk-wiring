@@ -5,6 +5,7 @@ const { Store } = require('./src/store')
 const { createResourceProvider } = require('./src/resources')
 const { resolveSettings, createSettingsProvider } = require('./src/settings')
 const { registerRoutes } = require('./src/routes')
+const { registerLiveRoutes } = require('./src/liveRoutes')
 
 module.exports = function (app) {
   const plugin = {}
@@ -83,6 +84,7 @@ module.exports = function (app) {
   // through this getter rather than a captured value.
   plugin.registerWithRouter = function (router) {
     registerRoutes(router, () => store, app.getDataDirPath())
+    registerLiveRoutes(router, () => store, { app })
   }
 
   return plugin

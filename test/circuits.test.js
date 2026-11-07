@@ -294,7 +294,7 @@ test('cables that form a loop do not hang the derivation', () => {
 })
 
 test('no devices or cables is no circuits', () => {
-  assert.deepEqual(deriveCircuits({}), { circuits: [], banks: [], warnings: [] })
+  assert.deepEqual(deriveCircuits({}), { circuits: [], banks: [], warnings: [], feeds: [] })
   assert.deepEqual(deriveCircuits({ devices: [battery('bat')], cables: [] }).circuits, [])
 })
 

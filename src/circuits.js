@@ -20,7 +20,7 @@
 //   conductors listed is a single positive conductor.
 //
 // Output
-//   { circuits, banks, warnings }, everything sorted so the same data always
+//   { circuits, banks, warnings, feeds }, everything sorted so the same data always
 //   gives the same answer.
 
 const POSITIVE_CONDUCTORS = new Set(['positive', 'line'])
@@ -216,7 +216,12 @@ function deriveCircuits ({ devices = [], cables = [] }) {
 
   circuits.sort((a, b) => byString(a.key, b.key))
   warnings.sort((a, b) => byString(`${a.code}:${a.cableId || ''}:${a.deviceId || ''}`, `${b.code}:${b.cableId || ''}:${b.deviceId || ''}`))
-  return { circuits, banks, warnings }
+  // The positive feeds, by device: what the switching and metering derivation
+  // (src/switchability.js) walks. From is the supply side.
+  const feeds = edges
+    .map((e) => ({ cableId: e.id, fromDeviceId: e.from.deviceId, toDeviceId: e.to.deviceId }))
+    .sort((a, b) => byString(a.cableId, b.cableId))
+  return { circuits, banks, warnings, feeds }
 }
 
 function registerNode (nodes, device, id, port) {

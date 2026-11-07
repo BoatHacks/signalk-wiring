@@ -6,6 +6,7 @@ const crypto = require('crypto')
 const Database = require('better-sqlite3')
 const { deriveCircuits } = require('./circuits')
 const { isCriticalType } = require('./safety')
+const { deriveSwitchability } = require('./switchability')
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 
@@ -725,6 +726,42 @@ class Store {
       conductors: w.conductors
     }))
     return deriveCircuits({ devices, cables })
+  }
+
+  // Which consumers can be switched remotely and which meters measure them
+  // (src/switchability.js), from the devices, cables and circuit records now.
+  deriveSwitching () {
+    const devices = this.list('device').map((d) => ({
+      id: d.id,
+      name: d.name,
+      role: d.role,
+      status: d.status,
+      tripRatingA: d.trip_rating_a,
+      nominalVoltage: d.nominal_voltage,
+      terminals: d.terminals,
+      switchPath: d.switch_path,
+      confirmSwitching: Boolean(d.confirm_switching),
+      neverRemote: Boolean(d.never_remote),
+      meterPath: d.meter_path,
+      meterUnit: d.meter_unit
+    }))
+    const cables = this.list('wireRun').map((w) => ({
+      id: w.id,
+      fromDeviceId: w.from_device_id,
+      toDeviceId: w.to_device_id,
+      status: w.status,
+      conductors: w.conductors
+    }))
+    const circuits = this.list('circuit').map((c) => ({
+      id: c.id, key: c.key, status: c.status, voltage: c.voltage, meterPath: c.meter_path, meterUnit: c.meter_unit
+    }))
+    return deriveSwitchability({ devices, cables, circuits })
+  }
+
+  // An action worth keeping a trace of that is not a change to the record
+  // (a switch command sent), written to the record's change log.
+  logAction (kind, id, summary, diff) {
+    this._logChange(kind, id, summary, diff)
   }
 
   // Brings the circuit records in step with the derived circuits. Records
