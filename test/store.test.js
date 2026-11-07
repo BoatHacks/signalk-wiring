@@ -689,7 +689,7 @@ test('a fresh database already has the conduit tables', () => {
 function conduitFixture () {
   const store = freshStore()
   const circuit = store.create('circuit', { name: 'C' })
-  const cable = (label) => store.create('wireRun', { circuit_id: circuit.id, cable_label: label })
+  const cable = (label) => store.create('wireRun', { cable_label: label })
   return { store, circuit, cable }
 }
 
@@ -797,6 +797,9 @@ test('conduit assignment maps list both directions in order', () => {
   const maps = store.conduitAssignmentMaps()
   assert.deepEqual(maps.byCable[c1.id], [b.id, a.id])
   assert.deepEqual(maps.byConduit[a.id], [c1.id])
+  store.close()
+})
+
 // ---- Plan 0014: cables between devices, conductors, terminals ----
 
 test('a cable joins two devices and lists its conductors, logged as one change', () => {

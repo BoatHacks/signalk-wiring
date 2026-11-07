@@ -218,8 +218,8 @@ test('wiringConduits: a conduit resource carries its cable ids and a cable its c
   const runs = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
   const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
   await circuits.methods.setResource('c1', { name: 'C' })
-  await runs.methods.setResource('w1', { circuitId: 'c1' })
-  await runs.methods.setResource('w2', { circuitId: 'c1' })
+  await runs.methods.setResource('w1', {})
+  await runs.methods.setResource('w2', {})
   await conduits.methods.setResource('k1', { name: 'Galley', kind: 'conduit', innerDiameter: 25, diameterUnit: 'mm', cableIds: ['w1', 'w2'] })
   await conduits.methods.setResource('k2', { name: 'Mast', route: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 }] })
 
@@ -233,7 +233,7 @@ test('wiringConduits: a conduit resource carries its cable ids and a cable its c
   // A write without the list leaves assignments alone; with it, replaces them.
   await conduits.methods.setResource('k1', { name: 'Galley 2' })
   assert.deepEqual((await conduits.methods.getResource('k1')).cableIds, ['w1', 'w2'])
-  await runs.methods.setResource('w1', { circuitId: 'c1', conduitIds: ['k2', 'k1'] })
+  await runs.methods.setResource('w1', { conduitIds: ['k2', 'k1'] })
   assert.deepEqual((await runs.methods.getResource('w1')).conduitIds, ['k2', 'k1'])
   await conduits.methods.setResource('k1', { name: 'Galley 2', cableIds: ['w2'] })
   assert.deepEqual((await runs.methods.getResource('w1')).conduitIds, ['k2'])
