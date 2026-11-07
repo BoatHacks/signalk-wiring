@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-07
+
 ### Added
 
 - Circuits are worked out from the cables. Record a cable between two
@@ -44,6 +46,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   matched by name and reused; new ones are created.
 - The cable table on the Cables tab names the conduits of each cable, and
   zones count conduits as well as devices and wire runs.
+
 ### Changed
 
 - Circuits are a read-only overview (name, notes, voltage override, rating,
