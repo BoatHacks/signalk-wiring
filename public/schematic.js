@@ -1,0 +1,475 @@
+// Pure geometry for the schematic canvas (plan 0016): device boxes and their
+// terminal anchors, right-angle wire routing with lane offsets, wires through
+// bend points, off-page stubs, hit testing, default conductors and the
+// left-to-right auto layout. No DOM, so it is unit tested with plain data.
+//
+// Coordinates are canvas units. A box is { id, x, y, w, h, terminals } with
+// x, y its top-left corner. A side is 'left', 'right', 'top' or 'bottom'.
+
+export const BOX_W = 150
+export const BOX_MIN_H = 46
+export const HEADER_H = 30
+export const TERMINAL_ROW_H = 18
+export const STUB = 18
+export const LANE_GAP = 10
+export const OFFPAGE_LEN = 46
+export const OFFPAGE_TAB_W = 130
+export const OFFPAGE_TAB_H = 20
+export const OFFPAGE_GAP = 24
+
+const NORMALS = {
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+  top: { x: 0, y: -1 },
+  bottom: { x: 0, y: 1 }
+}
+
+export function sideNormal (side) {
+  return NORMALS[side]
+}
+
+// ---- Devices as boxes -------------------------------------------------------
+
+// Which side of the box each terminal sits on. A device with ports (a
+// converter) puts its first port on the left and the others on the right.
+// Without ports, consumers take their terminals on the left (supply arrives
+// from the left), sources and storage on the right, and anything else splits
+// them: the first half left, the rest right.
+export function terminalSides (device) {
+  const terminals = device.terminals || []
+  const ports = []
+  for (const t of terminals) if (t.port && !ports.includes(t.port)) ports.push(t.port)
+  const role = device.role || 'consumer'
+  return terminals.map((t, i) => {
+    if (ports.length > 1) return t.port === ports[0] ? 'left' : 'right'
+    if (role === 'consumer') return 'left'
+    if (role === 'source' || role === 'storage') return 'right'
+    return i < Math.ceil(terminals.length / 2) ? 'left' : 'right'
+  })
+}
+
+export function deviceBox (device, pos) {
+  const terminals = device.terminals || []
+  const sides = terminalSides(device)
+  const count = { left: 0, right: 0 }
+  for (const s of sides) count[s]++
+  const rows = Math.max(count.left, count.right)
+  const h = Math.max(BOX_MIN_H, HEADER_H + rows * TERMINAL_ROW_H + 6)
+  const seen = { left: 0, right: 0 }
+  return {
+    id: device.id,
+    x: pos.x,
+    y: pos.y,
+    w: BOX_W,
+    h,
+    terminals: terminals.map((t, i) => {
+      const side = sides[i]
+      const row = seen[side]++
+      return {
+        name: t.name,
+        conductor: t.conductor,
+        side,
+        x: side === 'left' ? pos.x : pos.x + BOX_W,
+        y: pos.y + HEADER_H + row * TERMINAL_ROW_H + TERMINAL_ROW_H / 2
+      }
+    })
+  }
+}
+
+export const boxCenter = (box) => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 })
+
+// The side of a box that faces a point.
+export function facingSide (box, point) {
+  const c = boxCenter(box)
+  const dx = point.x - c.x
+  const dy = point.y - c.y
+  // Compare against the box proportions so a wide box prefers its short sides.
+  if (Math.abs(dx) * box.h >= Math.abs(dy) * box.w) return dx >= 0 ? 'right' : 'left'
+  return dy >= 0 ? 'bottom' : 'top'
+}
+
+// Where a wire meets a box: at the named terminal, else on the edge facing
+// `toward`, shifted along the edge by `shift` (lane offsets) and kept inside
+// the edge.
+export function anchorOf (box, terminalName, toward, shift = 0) {
+  const t = terminalName && box.terminals.find((x) => x.name === terminalName)
+  if (t) return { x: t.x, y: t.y, side: t.side }
+  const side = facingSide(box, toward)
+  const clamp = (v, lo, hi) => Math.max(lo + 6, Math.min(hi - 6, v))
+  const c = boxCenter(box)
+  if (side === 'left' || side === 'right') {
+    return { x: side === 'left' ? box.x : box.x + box.w, y: clamp(c.y + shift, box.y, box.y + box.h), side }
+  }
+  return { x: clamp(c.x + shift, box.x, box.x + box.w), y: side === 'top' ? box.y : box.y + box.h, side }
+}
+
+// ---- Routing ----------------------------------------------------------------
+
+function simplify (points) {
+  const out = []
+  for (const p of points) {
+    const last = out[out.length - 1]
+    if (last && last.x === p.x && last.y === p.y) continue
+    out.push({ x: p.x, y: p.y })
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    for (let i = 1; i < out.length - 1; i++) {
+      const a = out[i - 1]
+      const b = out[i]
+      const c = out[i + 1]
+      if ((a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y)) {
+        out.splice(i, 1)
+        changed = true
+        break
+      }
+    }
+  }
+  return out
+}
+
+const swapXY = (p) => ({ x: p.y, y: p.x })
+
+// Route between two anchors that both leave horizontally.
+function routeHorizontal (p, np, q, nq, lane) {
+  const s1 = { x: p.x + np.x * STUB, y: p.y }
+  const s2 = { x: q.x + nq.x * STUB, y: q.y }
+  // Facing each other with room between: one vertical channel in the middle.
+  if (np.x === 1 && nq.x === -1 && s1.x <= s2.x) {
+    const mx = (s1.x + s2.x) / 2 + lane
+    return [p, { x: mx, y: p.y }, { x: mx, y: q.y }, q]
+  }
+  if (np.x === -1 && nq.x === 1 && s1.x >= s2.x) {
+    const mx = (s1.x + s2.x) / 2 + lane
+    return [p, { x: mx, y: p.y }, { x: mx, y: q.y }, q]
+  }
+  // Same direction: both leave to one side and meet in a channel beyond both.
+  if (np.x === nq.x) {
+    const cx = np.x === 1 ? Math.max(s1.x, s2.x) + lane : Math.min(s1.x, s2.x) - lane
+    return [p, { x: cx, y: p.y }, { x: cx, y: q.y }, q]
+  }
+  // Facing each other without room (the target is behind): go round in a
+  // horizontal channel between the two.
+  const my = p.y === q.y ? p.y + 40 + lane : (p.y + q.y) / 2 + lane
+  return [p, s1, { x: s1.x, y: my }, { x: s2.x, y: my }, s2, q]
+}
+
+// Route between a horizontally leaving anchor and a vertically leaving one.
+function routeMixed (p, np, q, nq, lane) {
+  const corner = { x: q.x, y: p.y }
+  const towardQx = Math.sign(q.x - p.x) === np.x
+  const qApproach = Math.sign(p.y - q.y) === nq.y
+  if (towardQx && qApproach) return [p, corner, q]
+  const s1 = { x: p.x + np.x * STUB, y: p.y }
+  const s2 = { x: q.x, y: q.y + nq.y * STUB }
+  const ym = s2.y + lane
+  return [p, s1, { x: s1.x, y: ym }, { x: s2.x, y: ym }, s2, q]
+}
+
+// A right-angle route from anchor p to anchor q, each with its side.
+// `lane` shifts the middle channel so parallel wires do not overlap.
+export function routeElbow (p, q, lane = 0) {
+  const np = NORMALS[p.side]
+  const nq = NORMALS[q.side]
+  const pHoriz = np.y === 0
+  const qHoriz = nq.y === 0
+  let pts
+  if (pHoriz && qHoriz) pts = routeHorizontal(p, np, q, nq, lane)
+  else if (!pHoriz && !qHoriz) {
+    const t = routeHorizontal(swapXY(p), swapXY(np), swapXY(q), swapXY(nq), lane)
+    pts = t.map(swapXY)
+  } else if (pHoriz) pts = routeMixed(p, np, q, nq, lane)
+  else {
+    const t = routeMixed(swapXY(p), swapXY(np), swapXY(q), swapXY(nq), lane)
+    pts = t.map(swapXY)
+  }
+  return simplify(pts)
+}
+
+// Lane offsets for wires that share the same pair of devices: the first gets
+// the most negative lane and the offsets are centred on zero. Input is a list
+// of { id, a, b } (device ids); output maps id to a lane in canvas units.
+export function assignLanes (wires) {
+  const groups = new Map()
+  for (const w of wires) {
+    const key = [w.a, w.b].sort().join('|')
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(w)
+  }
+  const lanes = {}
+  for (const list of groups.values()) {
+    list.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
+    list.forEach((w, i) => { lanes[w.id] = (i - (list.length - 1) / 2) * LANE_GAP })
+  }
+  return lanes
+}
+
+// The terminal names a cable lands on at its two ends: the first conductor
+// that names one wins.
+export function endTerminals (cable) {
+  const out = { from: null, to: null }
+  for (const c of cable.conductors || []) {
+    if (!out.from && c.fromTerminal) out.from = c.fromTerminal
+    if (!out.to && c.toTerminal) out.to = c.toTerminal
+  }
+  return out
+}
+
+// The points of one wire between two boxes. With bend points the wire goes
+// straight from the anchor to each bend in turn (so it can run at any angle);
+// without, it is routed with right angles and shifted by its lane.
+export function wirePath ({ fromBox, toBox, fromTerminal, toTerminal, lane = 0, points = [] }) {
+  const toward = (box, other) => boxCenter(other)
+  if (points && points.length > 0) {
+    const a = anchorOf(fromBox, fromTerminal, points[0], lane)
+    const b = anchorOf(toBox, toTerminal, points[points.length - 1], lane)
+    return [{ x: a.x, y: a.y }, ...points.map((p) => ({ x: p.x, y: p.y })), { x: b.x, y: b.y }]
+  }
+  const a = anchorOf(fromBox, fromTerminal, toward(fromBox, toBox), lane)
+  const b = anchorOf(toBox, toTerminal, toward(toBox, fromBox), lane)
+  return routeElbow(a, b, lane)
+}
+
+// The point halfway along a path, for labels.
+export function pathMidpoint (points) {
+  let total = 0
+  for (let i = 1; i < points.length; i++) total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+  let walk = total / 2
+  for (let i = 1; i < points.length; i++) {
+    const len = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+    if (walk <= len && len > 0) {
+      const t = walk / len
+      return { x: points[i - 1].x + (points[i].x - points[i - 1].x) * t, y: points[i - 1].y + (points[i].y - points[i - 1].y) * t }
+    }
+    walk -= len
+  }
+  return points[0] || { x: 0, y: 0 }
+}
+
+export const pathToD = (points) => points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x} ${p.y}`).join(' ')
+
+// ---- Off-page stubs ---------------------------------------------------------
+
+// For each live cable with exactly one end on the page, a short stub leaving
+// the device and ending in a labelled tab. The side follows supply flow: a
+// cable that comes from the device (the device is the supply end) leaves to
+// the right, one that goes to it arrives from the left; a named terminal's
+// own side wins. Several stubs on one side of a device are spaced apart.
+//   onPage: Map or object of device id -> box
+//   cables: wire run resources; deviceName(id) gives the label text
+export function offPageStubs ({ boxes, cables, deviceName }) {
+  const get = (id) => (boxes instanceof Map ? boxes.get(id) : boxes[id])
+  const items = []
+  for (const cable of cables) {
+    if (cable.status === 'removed') continue
+    const fromBox = get(cable.fromDeviceId)
+    const toBox = get(cable.toDeviceId)
+    if (!!fromBox === !!toBox) continue
+    const box = fromBox || toBox
+    const isFrom = !!fromBox
+    const otherId = isFrom ? cable.toDeviceId : cable.fromDeviceId
+    if (!otherId) continue
+    const terminal = endTerminals(cable)[isFrom ? 'from' : 'to']
+    const t = terminal && box.terminals.find((x) => x.name === terminal)
+    const side = t ? t.side : (isFrom ? 'right' : 'left')
+    items.push({ cableId: cable.id, deviceId: box.id, otherDeviceId: otherId, box, side, terminal: t || null })
+  }
+  const groups = new Map()
+  for (const it of items) {
+    const key = it.deviceId + '|' + it.side
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(it)
+  }
+  const out = []
+  for (const list of groups.values()) {
+    list.sort((a, b) => (a.cableId < b.cableId ? -1 : 1))
+    list.forEach((it, i) => {
+      const dir = NORMALS[it.side].x
+      const c = boxCenter(it.box)
+      const offset = (i - (list.length - 1) / 2) * OFFPAGE_GAP
+      const ay = it.terminal ? it.terminal.y : c.y + offset
+      const ax = it.side === 'left' ? it.box.x : it.box.x + it.box.w
+      const endX = ax + dir * OFFPAGE_LEN
+      const endY = it.terminal ? ay + offset : ay
+      const path = simplify(it.terminal && offset !== 0
+        ? [{ x: ax, y: ay }, { x: ax + dir * 14, y: ay }, { x: ax + dir * 14, y: endY }, { x: endX, y: endY }]
+        : [{ x: ax, y: ay }, { x: endX, y: endY }])
+      out.push({
+        cableId: it.cableId,
+        deviceId: it.deviceId,
+        otherDeviceId: it.otherDeviceId,
+        side: it.side,
+        label: 'to ' + (deviceName(it.otherDeviceId) || '?'),
+        path,
+        tab: {
+          x: dir === 1 ? endX : endX - OFFPAGE_TAB_W,
+          y: endY - OFFPAGE_TAB_H / 2,
+          w: OFFPAGE_TAB_W,
+          h: OFFPAGE_TAB_H
+        }
+      })
+    })
+  }
+  return out
+}
+
+// ---- Hit testing ------------------------------------------------------------
+
+export const insideBox = (box, x, y) => x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h
+
+// The topmost box under a point. Later boxes are drawn on top, so the last
+// match wins.
+export function hitDevice (boxes, x, y) {
+  let found = null
+  for (const b of boxes) if (insideBox(b, x, y)) found = b
+  return found
+}
+
+// A terminal dot within `radius` of the point, on any box.
+export function hitTerminal (boxes, x, y, radius = 8) {
+  let best = null
+  let bestD = radius
+  for (const b of boxes) {
+    for (const t of b.terminals) {
+      const d = Math.hypot(t.x - x, t.y - y)
+      if (d <= bestD) { best = { deviceId: b.id, terminal: t.name, x: t.x, y: t.y, side: t.side }; bestD = d }
+    }
+  }
+  return best
+}
+
+export function distanceToSegment (px, py, a, b) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len2 = dx * dx + dy * dy
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / len2))
+  return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy))
+}
+
+export function distanceToPath (points, x, y) {
+  let best = Infinity
+  for (let i = 1; i < points.length; i++) best = Math.min(best, distanceToSegment(x, y, points[i - 1], points[i]))
+  return best
+}
+
+// The nearest wire within `tolerance`. wires: [{ id, path }].
+export function hitWire (wires, x, y, tolerance = 6) {
+  let best = null
+  let bestD = tolerance
+  for (const w of wires) {
+    const d = distanceToPath(w.path, x, y)
+    if (d <= bestD) { best = w; bestD = d }
+  }
+  return best
+}
+
+export function hitBend (points, x, y, radius = 8) {
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (Math.hypot(points[i].x - x, points[i].y - y) <= radius) return i
+  }
+  return -1
+}
+
+// Where a click on a wire would insert a bend point: the index in the bend
+// list and the point itself. `path` is the full path including both anchors,
+// `bends` the current bend points (a straight, unbent path has none).
+export function insertBendIndex (path, bends, x, y) {
+  let bestI = 1
+  let bestD = Infinity
+  for (let i = 1; i < path.length; i++) {
+    const d = distanceToSegment(x, y, path[i - 1], path[i])
+    if (d < bestD) { bestD = d; bestI = i }
+  }
+  return Math.min(bends.length, Math.max(0, bestI - 1))
+}
+
+// ---- Defaults ---------------------------------------------------------------
+
+const SUPPLY_RANK = { source: 0, storage: 1, converter: 2, distribution: 3, consumer: 4 }
+
+// A drag can start at either end, so the cable's From (supply side) is the
+// device with the lower supply rank; ties keep the drag order.
+export function supplyOrder (a, b) {
+  const rank = (d) => SUPPLY_RANK[d.role || 'consumer'] ?? 4
+  return rank(b) < rank(a) ? [b, a] : [a, b]
+}
+
+// The conductors to suggest for a new wire. AC terminals on either end give
+// the AC set; a switch, fuse, breaker or bus bar at either end gives a lone
+// positive; otherwise positive and negative.
+export function defaultKind (a, b) {
+  const terminals = [...(a.terminals || []), ...(b.terminals || [])]
+  const hasAc = terminals.some((t) => t.conductor === 'line')
+  const hasDc = terminals.some((t) => t.conductor === 'positive')
+  if (hasAc && !hasDc) return 'ac'
+  if ((a.role === 'distribution') || (b.role === 'distribution')) return 'positive'
+  return 'both'
+}
+
+// Whether a cable that is already drawn between the two devices exists, so
+// the caller can warn before drawing a second.
+export function cablesBetween (cables, idA, idB) {
+  return cables.filter((c) => c.status !== 'removed' &&
+    ((c.fromDeviceId === idA && c.toDeviceId === idB) || (c.fromDeviceId === idB && c.toDeviceId === idA)))
+}
+
+// ---- Wire colours -----------------------------------------------------------
+
+// The conductor types of a cable in drawing order. A cable with none listed
+// is a single positive conductor.
+export function conductorTypes (cable) {
+  const types = (cable.conductors || []).map((c) => c.conductor)
+  return types.length ? types : ['positive']
+}
+
+// ---- Highlighting -----------------------------------------------------------
+
+// The devices and cables a circuit resource spans, for highlighting.
+export function circuitHighlight (circuit) {
+  const d = circuit && circuit.derived
+  if (!d) return { deviceIds: new Set(), cableIds: new Set() }
+  return {
+    deviceIds: new Set(d.deviceIds || []),
+    cableIds: new Set([...(d.cableIds || []), ...(d.returnCableIds || [])])
+  }
+}
+
+// ---- Layout -----------------------------------------------------------------
+
+// Positions for devices left to right from the supply, with dagre (passed in
+// so this module stays free of imports). Only cables with both ends in the
+// list count. Returns { [deviceId]: { x, y } } with x, y the top-left corner.
+export function autoLayout (dagre, devices, cables) {
+  const g = new dagre.graphlib.Graph({ multigraph: true })
+  g.setGraph({ rankdir: 'LR', nodesep: 30, ranksep: 90, marginx: 20, marginy: 20 })
+  g.setDefaultEdgeLabel(() => ({}))
+  const ids = new Set(devices.map((d) => d.id))
+  const sizes = {}
+  for (const d of devices) {
+    const box = deviceBox(d, { x: 0, y: 0 })
+    sizes[d.id] = box
+    g.setNode(d.id, { width: box.w, height: box.h })
+  }
+  for (const c of cables) {
+    if (c.status === 'removed' || !ids.has(c.fromDeviceId) || !ids.has(c.toDeviceId)) continue
+    g.setEdge(c.fromDeviceId, c.toDeviceId, {}, c.id)
+  }
+  dagre.layout(g)
+  const out = {}
+  for (const d of devices) {
+    const n = g.node(d.id)
+    out[d.id] = { x: Math.round(n.x - sizes[d.id].w / 2), y: Math.round(n.y - sizes[d.id].h / 2) }
+  }
+  return out
+}
+
+// A viewBox that frames every box with a margin, or a default when empty.
+export function fitView (boxes, margin = 40) {
+  if (boxes.length === 0) return { x: 0, y: 0, w: 800, h: 500 }
+  const x0 = Math.min(...boxes.map((b) => b.x)) - margin
+  const y0 = Math.min(...boxes.map((b) => b.y)) - margin
+  const x1 = Math.max(...boxes.map((b) => b.x + b.w)) + margin
+  const y1 = Math.max(...boxes.map((b) => b.y + b.h)) + margin
+  return { x: x0, y: y0, w: Math.max(200, x1 - x0), h: Math.max(150, y1 - y0) }
+}

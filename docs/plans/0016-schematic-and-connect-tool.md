@@ -118,7 +118,7 @@ the load check and everything else follow without changes.
 
 - [x] Schema, migration, store and resource: schematics, their devices and
       wires, with tests.
-- [ ] `public/schematic.js`: geometry and routing, with tests.
+- [x] `public/schematic.js`: geometry and routing, with tests.
 - [ ] Schematics tab: list, create, rename, remove; canvas with pan and zoom;
       place existing devices; palette that creates devices; drag devices;
       Auto-arrange.
@@ -153,3 +153,16 @@ None. The design is settled; the next step is the schema and store work.
 - Only a change in which devices are on a page is written to the change log
   (as a `devices` diff of ids). Moving a device or bending a wire is not.
   Adding a wire needs no entry because the cable itself is logged.
+- Terminal sides on a device box: with two or more ports the first port is
+  on the left and the rest on the right; without ports consumers take theirs
+  on the left, sources and storage on the right, anything else splits them.
+- A wire is one path per cable, coloured by conductor type (not the free-text
+  colour): the first conductor is the line, a second is overlaid dashed.
+- Dragging a wire from the load to the supply still makes the supply side the
+  cable's From (`supplyOrder`, by role: source, storage, converter,
+  distribution, consumer). Default conductors: AC set for AC terminals, a lone
+  positive when a distribution device is an end, otherwise positive and
+  negative.
+- Stubs for off-page cables leave right when the on-page device is the supply
+  end and arrive from the left otherwise, unless a named terminal fixes the
+  side. A wire that has bend points is drawn as straight segments between them.
