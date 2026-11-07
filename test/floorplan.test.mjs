@@ -136,3 +136,55 @@ test('svg size: viewBox, falling back to width and height, else null', () => {
   assert.equal(parseSvgSize('<svg>'), null)
   assert.equal(parseSvgSize('not svg'), null)
 })
+
+import {
+  pointToPx, moveWaypoint, removeWaypoint, routePoints, circuitMembers, metersToLengthUnit
+} from '../public/floorplan.js'
+
+test('pointToPx needs both of the view axes', () => {
+  const cal = calibrationFromClicks([0, 100], [100, 100], 10) // 10 px per meter, up is -y
+  assert.deepEqual(pointToPx(cal, 'top', { x: 2, y: 1, z: null }).map(Math.round), [20, 90])
+  assert.deepEqual(pointToPx(cal, 'side', { x: 2, y: null, z: 3 }).map(Math.round), [20, 70])
+  assert.equal(pointToPx(cal, 'top', { x: 2, y: null, z: 3 }), null)
+  assert.equal(pointToPx(cal, 'side', null), null)
+})
+
+test('moveWaypoint changes only the clicked axes of one point and does not mutate', () => {
+  const route = [{ x: 0, y: 0, z: 1 }, { x: 1, y: 1, z: 1 }]
+  const moved = moveWaypoint(route, 1, 'side', 5, 2)
+  assert.deepEqual(moved, [{ x: 0, y: 0, z: 1 }, { x: 5, y: 1, z: 2 }])
+  assert.deepEqual(route[1], { x: 1, y: 1, z: 1 })
+})
+
+test('removeWaypoint drops one point and tolerates the last index', () => {
+  const route = [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }]
+  assert.deepEqual(removeWaypoint(route, 1).map((p) => p.x), [0, 2])
+  assert.equal(removeWaypoint(route, 2).length, 2)
+  assert.deepEqual(removeWaypoint([], 0), [])
+})
+
+test('routePoints prepends the resolved start and copes with no route', () => {
+  const circuit = { panelDeviceId: 'panel' }
+  const run = { fromEndpoint: 'pump', route: [{ x: 2, y: 2, z: 0.5 }] }
+  assert.deepEqual(routePoints(run, circuit, devices), [{ x: 1, y: 2, z: 0.5 }, { x: 2, y: 2, z: 0.5 }])
+  assert.deepEqual(routePoints({ fromEndpoint: 'F12' }, { panelDeviceId: null }, devices), [])
+  assert.deepEqual(routePoints({ fromEndpoint: 'F12', route: [{ x: 1 }] }, { panelDeviceId: null }, devices), [{ x: 1, y: null, z: null }])
+})
+
+test('circuitMembers collects devices and runs, skipping removed runs, adding the panel', () => {
+  const circuit = { id: 'c1', panelDeviceId: 'panel' }
+  const runs = [
+    { id: 'r1', circuitId: 'c1', fromEndpoint: 'F12', toEndpoint: 'pump', status: 'active' },
+    { id: 'r2', circuitId: 'c1', fromEndpoint: 'pump', toEndpoint: 'old', status: 'removed' },
+    { id: 'r3', circuitId: 'c2', fromEndpoint: 'x', toEndpoint: 'y', status: 'active' }
+  ]
+  const m = circuitMembers(circuit, runs)
+  assert.deepEqual([...m.runIds], ['r1'])
+  assert.deepEqual([...m.deviceIds].sort(), ['F12', 'panel', 'pump'])
+})
+
+test('metersToLengthUnit converts to feet and rounds', () => {
+  assert.equal(metersToLengthUnit(3.14159, 'm'), 3.14)
+  assert.equal(metersToLengthUnit(3.14159, undefined), 3.14)
+  assert.equal(metersToLengthUnit(1, 'ft'), 3.28)
+})

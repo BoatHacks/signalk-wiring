@@ -158,8 +158,8 @@ Delivered as separate slices, each its own commit with tests:
 - [x] 2. `floorplan.js` pure logic with tests (calibration, projection,
       route length), written before the UI.
 - [x] 3. Floorplan tab: upload, view with pan/zoom, calibrate.
-- [ ] 4. Device placement in both views, with cross-highlighting.
-- [ ] 5. Panel link on circuits, route drawing (click to add, drag to
+- [x] 4. Device placement in both views, with cross-highlighting.
+- [x] 5. Panel link on circuits, route drawing (click to add, drag to
       adjust, delete a point) and measured length.
 - [ ] 6. Docs: SPEC.md, ARCHITECTURE.md, README, CHANGELOG; CSV import is
       unaffected.

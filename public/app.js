@@ -344,6 +344,9 @@ const DEVICE_FIELDS = [
     type: 'text',
     placeholder: 'e.g. electrical.switches.anchorLight'
   },
+  { key: 'posX', label: 'Position x (m, along the boat)', type: 'number' },
+  { key: 'posY', label: 'Position y (m, athwartships)', type: 'number' },
+  { key: 'posZ', label: 'Position z (m, height)', type: 'number' },
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
 

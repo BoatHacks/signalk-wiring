@@ -149,3 +149,57 @@ export function parseSvgSize (svgText) {
   if (width > 0 && height > 0) return { x: 0, y: 0, width, height }
   return null
 }
+
+// Where a point shows in a view: pixels in the drawing, or null when one
+// of the view's two axes is unset (a half-placed point shows only in the
+// view where both of its axes are known).
+export function pointToPx (cal, view, point) {
+  const [first, second] = axesForView(view)
+  const a = point?.[first] ?? null
+  const b = point?.[second] ?? null
+  if (a === null || b === null) return null
+  return metersToPx(cal, a, b)
+}
+
+// New route with one waypoint moved by a click or drag in a view. The
+// axis the view does not show keeps its value.
+export function moveWaypoint (route, index, view, a, b) {
+  return route.map((p, i) => (i === index ? applyClick(p, view, a, b) : pointOf(p)))
+}
+
+export function removeWaypoint (route, index) {
+  return route.filter((_, i) => i !== index).map(pointOf)
+}
+
+// The drawn polyline of a wire run: its resolved start (if any) followed
+// by the stored waypoints. The start is derived, never stored, so moving
+// the device moves the start with it.
+export function routePoints (wireRun, circuit, devicesById) {
+  const start = resolveRouteStart(wireRun, circuit, devicesById)
+  const waypoints = (wireRun.route || []).map(pointOf)
+  return start ? [start, ...waypoints] : waypoints
+}
+
+// Device ids and wire run ids that belong to a circuit, for highlighting.
+// Removed runs are left out; the panel device counts as a member.
+export function circuitMembers (circuit, wireRuns) {
+  const runIds = new Set()
+  const deviceIds = new Set()
+  for (const run of wireRuns) {
+    if (run.circuitId !== circuit.id || run.status === 'removed') continue
+    runIds.add(run.id)
+    if (run.fromEndpoint) deviceIds.add(run.fromEndpoint)
+    if (run.toEndpoint) deviceIds.add(run.toEndpoint)
+  }
+  if (circuit.panelDeviceId) deviceIds.add(circuit.panelDeviceId)
+  return { runIds, deviceIds }
+}
+
+const METERS_TO_FEET = 3.280839895
+
+// A measured length expressed in the unit a wire run records, rounded to
+// two decimals. Anything other than feet is meters.
+export function metersToLengthUnit (meters, unit) {
+  const value = unit === 'ft' ? meters * METERS_TO_FEET : meters
+  return Math.round(value * 100) / 100
+}

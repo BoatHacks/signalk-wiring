@@ -432,3 +432,47 @@ label.inline {
   align-items: center;
   margin: 8px 0;
 }
+
+.floorplan-canvas.crosshair { cursor: crosshair; }
+
+.floorplan-pair {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 1100px) {
+  .floorplan-pair { grid-template-columns: 1fr 1fr; }
+}
+
+.floorplan-toolbar { margin-bottom: 12px; }
+
+.toolbar-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.route-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.device-marker circle { fill: #f59e0b; fill-opacity: 0.55; stroke: #92400e; stroke-width: 0.4; cursor: grab; }
+.device-marker text { fill: var(--text); paint-order: stroke; stroke: #fff; stroke-width: 0.6; pointer-events: none; }
+.device-marker.highlighted circle { fill: var(--accent); fill-opacity: 0.8; stroke: #1e3a8a; }
+
+.run-line { stroke: #6b7280; stroke-opacity: 0.5; stroke-linejoin: round; pointer-events: none; }
+.run-line.highlighted { stroke: var(--accent); stroke-opacity: 0.9; }
+.run-line.active { stroke: #dc2626; stroke-opacity: 1; }
+
+.waypoint { fill: #fff; stroke: #dc2626; stroke-width: 0.5; cursor: grab; }
+.waypoint.selected { fill: #dc2626; }
+
+#app:has(.floorplan-pair) { max-width: 1800px; }
