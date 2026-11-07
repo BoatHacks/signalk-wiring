@@ -95,7 +95,7 @@ cable.
 - [x] Floorplan: draw a conduit route and show cables along it.
 - [x] Effective route and length of a cable from its conduits.
 - [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
-- [ ] CSV import: a conduit column on cables.
+- [x] CSV import: a conduit column on cables.
 
 ## Follow-ups (not in this plan)
 
@@ -157,6 +157,16 @@ Where the plan left a detail open:
   points) make the result incomplete, as do unset heights. A cable partly in
   a conduit is therefore still the follow-up in the plan: give it a route of
   its own, or split it at a junction.
+- **CSV import.** A new mapping target, "Wire run: conduit", takes one or
+  more conduit names per row, separated by `;` or `>` (not a comma, which
+  can be part of a name). Names are matched ignoring case to live conduits
+  already recorded, which are reused (unlike devices, which are only matched
+  within a batch: reusing a conduit by name is safe and importing cables
+  into conduits entered by hand is the point). Removed conduits are not
+  reused. Others are created with only a name; the kind and size are set
+  afterwards. Conduits are written before the wire runs so each wire run is
+  written with its `conduitIds`, in the order named. The preview says how
+  many conduits will be created and reused.
 - **Drawing a cable that follows conduits** shows no waypoint markers; the
   points belong to the conduits. Clicking a waypoint for such a cable starts
   a route of its own and then it keeps that route.

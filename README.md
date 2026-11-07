@@ -33,7 +33,7 @@ to someone else doesn't depend on the current owner being present.
 - **CSV import**: upload a spreadsheet, map its columns to wiring
   fields (or skip them), preview the result, then import — generic
   column mapping rather than a fixed layout, so it isn't tied to one
-  particular spreadsheet's shape.
+  particular spreadsheet's shape. A column can name each cable's conduits.
 - **Panel load summary**: per active circuit, total connected devices'
   rated wattage converted to amps via the circuit's voltage and checked
   against its breaker rating, flagging circuits over their rating.

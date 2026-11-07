@@ -18,6 +18,9 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   highlighted, and see how many cables are not drawn anywhere, with a button
   to draw each. A cable with no route of its own is drawn along its conduits
   and its measured length is taken from them.
+- CSV import: a "Wire run: conduit" column names the conduits of each cable
+  (several in order, separated by ; or >). Conduits already recorded are
+  matched by name and reused; new ones are created.
 - The cable table on a circuit page names the conduits of each cable, and
   zones count conduits as well as devices and wire runs.
 ### Changed

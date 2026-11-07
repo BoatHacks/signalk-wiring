@@ -244,3 +244,19 @@ test('wiringConduits: a conduit resource carries its cable ids and a cable its c
   assert.equal((await conduits.methods.getResource('k1')).status, 'removed')
   store.close()
 })
+
+test('wiringWireRuns: a new wire run written with conduitIds is assigned in order', async () => {
+  const store = new Store(':memory:')
+  const conduits = createResourceProvider(store, 'conduit', 'wiringConduits')
+  const runs = createResourceProvider(store, 'wireRun', 'wiringWireRuns')
+  const circuits = createResourceProvider(store, 'circuit', 'wiringCircuits')
+  await circuits.methods.setResource('c1', { name: 'C' })
+  await conduits.methods.setResource('k1', { name: 'One' })
+  await conduits.methods.setResource('k2', { name: 'Two' })
+
+  await runs.methods.setResource('w1', { circuitId: 'c1', conduitIds: ['k2', 'k1'] })
+
+  assert.deepEqual((await runs.methods.getResource('w1')).conduitIds, ['k2', 'k1'])
+  assert.deepEqual((await conduits.methods.getResource('k1')).cableIds, ['w1'])
+  store.close()
+})

@@ -252,7 +252,10 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - CSV import: upload a spreadsheet, map its columns to wiring fields (or
   skip them), preview the resulting circuits/wire runs/devices, then
   import. Column mapping rather than a fixed layout, since a real-world
-  export's columns won't match another boat's.
+  export's columns won't match another boat's. A column can name the
+  conduits of each cable (several in order, separated by ; or >); conduits
+  already recorded are matched by name ignoring case and reused, and the
+  others are created.
 - A floorplan view: upload a top-down or side drawing, calibrate it
   once, then place devices by clicking (one 3D position shown in both
   views), draw wire run routes over it (click to add, drag to adjust),

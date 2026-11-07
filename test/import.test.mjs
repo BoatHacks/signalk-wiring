@@ -7,7 +7,9 @@ import {
   parseCsv,
   parseGermanNumber,
   parseCombinedGauge,
-  groupImportRows
+  groupImportRows,
+  parseConduitNames,
+  MAPPING_TARGETS
 } from '../public/import.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -165,4 +167,87 @@ test('real-world fixture: the tinarasia/laserbrain electrical CSV this feature w
   assert.equal(naviBugWireRun.gauge, 2.5)
   assert.equal(naviBugWireRun.gaugeUnit, 'mm2')
   assert.equal(naviBugDevice.ratedPowerW, 2)
+})
+
+// Conduit column (plan 0015)
+
+test('parseConduitNames splits on ; and >, trims, and drops blanks and repeats', () => {
+  assert.deepEqual(parseConduitNames('Galley conduit'), ['Galley conduit'])
+  assert.deepEqual(parseConduitNames(' A ; B > a ;; C '), ['A', 'B', 'C'])
+  assert.deepEqual(parseConduitNames(''), [])
+  assert.deepEqual(parseConduitNames(null), [])
+  // A comma is part of a name, not a separator.
+  assert.deepEqual(parseConduitNames('Hose 1, port'), ['Hose 1, port'])
+})
+
+test('the conduit column is an import target', () => {
+  assert.ok(MAPPING_TARGETS.some((t) => t.value === 'wireConduit'))
+})
+
+test('groupImportRows: a conduit column names the conduits of each wire run, once per conduit', () => {
+  const headers = ['Device', 'Conduit']
+  const rows = [
+    { Device: 'A', Conduit: 'Galley conduit' },
+    { Device: 'B', Conduit: 'galley CONDUIT; Mast hose' },
+    { Device: 'C', Conduit: '' }
+  ]
+  const grouped = groupImportRows(rows, headers, { Device: 'deviceName', Conduit: 'wireConduit' })
+  assert.deepEqual(grouped.conduits.map((c) => c.name), ['Galley conduit', 'Mast hose'])
+  assert.ok(grouped.conduits.every((c) => c.existingId === null))
+  const [a, b, c] = grouped.wireRuns
+  assert.deepEqual(a.conduitTempIds, [grouped.conduits[0].tempId])
+  assert.deepEqual(b.conduitTempIds, [grouped.conduits[0].tempId, grouped.conduits[1].tempId])
+  assert.deepEqual(c.conduitTempIds, [])
+})
+
+test('groupImportRows: a conduit that already exists (live, any case) is reused, not created again', () => {
+  const existing = [
+    { id: 'k1', name: 'Galley Conduit', status: 'active' },
+    { id: 'k2', name: 'Old hose', status: 'removed' }
+  ]
+  const rows = [{ Device: 'A', Conduit: 'galley conduit; Old hose' }]
+  const grouped = groupImportRows(rows, ['Device', 'Conduit'], { Device: 'deviceName', Conduit: 'wireConduit' }, existing)
+  assert.equal(grouped.conduits.length, 2)
+  assert.equal(grouped.conduits[0].existingId, 'k1')
+  assert.equal(grouped.conduits[0].name, 'Galley Conduit')
+  assert.equal(grouped.conduits[1].existingId, null) // removed ones are not reused
+})
+
+test('groupImportRows without a conduit column makes no conduits', () => {
+  const grouped = groupImportRows([{ Device: 'A' }], ['Device'], { Device: 'deviceName' })
+  assert.deepEqual(grouped.conduits, [])
+  assert.deepEqual(grouped.wireRuns[0].conduitTempIds, [])
+})
+
+test('importToStore writes new conduits first, reuses existing ones, and lists them on each cable in order', async () => {
+  const { importToStore } = await import('../public/import.js')
+  const writes = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    writes.push({ url: String(url).replace('/signalk/v2/api/resources/', ''), body: JSON.parse(init.body) })
+    return { ok: true, status: 200 }
+  }
+  try {
+    const existing = [{ id: 'k-old', name: 'Galley conduit', status: 'active' }]
+    const rows = [
+      { Device: 'A', Conduit: 'Galley conduit; Mast hose' },
+      { Device: 'B', Conduit: 'Mast hose' }
+    ]
+    const grouped = groupImportRows(rows, ['Device', 'Conduit'], { Device: 'deviceName', Conduit: 'wireConduit' }, existing)
+    const result = await importToStore(grouped)
+    assert.equal(result.conduitsCreated, 1)
+
+    const conduitWrites = writes.filter((w) => w.url.startsWith('wiringConduits/'))
+    assert.equal(conduitWrites.length, 1)
+    assert.equal(conduitWrites[0].body.name, 'Mast hose')
+    const newConduitId = conduitWrites[0].url.split('/')[1]
+    const firstRunWrite = writes.findIndex((w) => w.url.startsWith('wiringWireRuns/'))
+    assert.ok(writes.indexOf(conduitWrites[0]) < firstRunWrite)
+
+    const runs = writes.filter((w) => w.url.startsWith('wiringWireRuns/')).map((w) => w.body)
+    assert.deepEqual(runs[0].conduitIds, ['k-old', newConduitId])
+    assert.deepEqual(runs[1].conduitIds, [newConduitId])
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })
