@@ -44,6 +44,10 @@ constraint enforced on the data model.
 - **Zone**: a named area a wire run or device is in (e.g. "salon", "aft
   cabin", "port lazarette"), chosen from a managed list. Used to find and
   filter. Access hints (behind a panel, under a hatch) belong in notes.
+- **Conduit**: a physical path several cables share: a conduit, hose, loom,
+  trunking or cable tray. It has its own optional route on the plans, and
+  cables are assigned to it, so "which cables are in the conduit behind the
+  galley panel?" has an answer. A cable is a wire run.
 - **Role**: what a device does with power: consumer (uses it), source
   (supplies it: solar, shore power, generator, hydro, wind, alternator),
   storage (batteries), distribution (switches, breakers, fuses, bus bars,
@@ -144,6 +148,21 @@ A wire run or device is either:
     (origin, scale and axis direction, set by clicking two points and
     entering the real distance), `status`, `notes`. Several plans per
     view are allowed.
+- **Conduit**
+  - `id`, `name`, `kind` (free text; suggestions are Conduit, Hose, Loom,
+    Trunking and Cable tray), `innerDiameter` + `diameterUnit` (mm | in,
+    optional, a note only), `zoneId` (as on a wire run; `zone` carries the
+    name), `route` (optional, a list of `{x, y, z}` points in meters drawn
+    on the floorplan; its ends are the first and last point, nothing is
+    derived from devices), `status`, `attachments`, `notes`. The response
+    also carries `cableIds`, the wire runs assigned to it.
+  - **Assignments**: a cable (wire run) passes through an ordered list of
+    conduits, served as `conduitIds` on the wire run. It follows each
+    conduit for its whole length; a cable only partly in a conduit is
+    described by splitting it at a splice or junction box, or by a note.
+    Assignments are made from the conduit's page (or by writing `cableIds`
+    on the conduit or `conduitIds` on the wire run). Removing a conduit or
+    a cable keeps its assignments.
 - **Zone**
   - `id`, `name` (unique ignoring case). Renaming changes it everywhere
     because items link by id. A zone in use cannot be removed; merging two
@@ -168,7 +187,8 @@ import is a deferred feature (see 10.2), not an MVP input source.
 
 - `Circuit`, `WireRun`, and `Device` are served as SignalK resource types
   (`/signalk/v2/api/resources/wiringCircuits`, `.../wiringWireRuns`,
-  `.../wiringDevices`, `.../wiringPlans`, `.../wiringZones`) via standard `listResources` / `getResource` /
+  `.../wiringDevices`, `.../wiringPlans`, `.../wiringZones`,
+  `.../wiringConduits`) via standard `listResources` / `getResource` /
   `setResource` / `deleteResource` semantics.
 - The plugin configuration (§9) is served read-only as
   `/signalk/v2/api/resources/wiringSettings/config`, so the anonymously
@@ -210,6 +230,11 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - A role on every device (a dropdown with a hint on each choice), shown
   in the device list and details, with a role filter on the device list,
   and a colour per role on floorplan markers.
+- A Conduits tab: list conduits with zone and kind filters, create and edit
+  them (the kind is a dropdown with an "Add kind..." entry, like the device
+  type), and on a conduit's page add cables to it or take them out, change
+  the order a cable passes through its conduits, and attach photos. The
+  cable table on a circuit page names the conduits of each cable.
 - A zones manager to rename, merge and remove zones, and zone and tag
   filters on the circuit, wire run and device lists.
 - Photo/file attachment upload and viewing per wire run or device: any
@@ -234,6 +259,15 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   and read the measured cable length, offered as a suggestion next to
   the recorded length and never applied automatically. Selecting a
   circuit highlights its devices and routes in both views.
+- Conduits on the floorplan: draw a conduit's route like a cable's (it is
+  drawn as a thick line under the cables), and see its cables highlighted.
+  A cable with no route of its own is drawn along its conduits and its
+  measured length comes from them: each conduit counts for its whole
+  length, in the cable's order, turned to meet the one before, with a
+  straight link counted where two conduits do not meet. A cable with a
+  route of its own keeps it. A cable with neither shows nothing; the
+  floorplan says how many cables are not drawn and lets you pick one to
+  draw.
 - A panel load summary: per active circuit, total connected devices'
   rated wattage converted to amps via the circuit's voltage, checked
   against its breaker rating. States its own known limitation in the UI
@@ -278,6 +312,7 @@ configuration.
 
 - Circuit / wire run / device data model with full CRUD via the UI.
 - Managed zone list plus free-text tags on wire runs and devices.
+- Conduits: shared cable paths with their own route and assigned cables.
 - Photo/file attachments on wire runs and devices.
 - Change log (append-only) on edits.
 - Auto-generated per-circuit diagram view.
@@ -328,6 +363,15 @@ configuration.
   in the free-text type. Distribution and converters are separate roles
   because a switch or an inverter neither produces, stores nor uses power
   in the plain sense. See plan 0011.
+- **Conduits are records with assignments on the conduit, and a layer on
+  top of cables.** A conduit is a physical thing with its own route that
+  several cables share, so it is not a label on the cable. Cables are added
+  from the conduit's page, and circuits are still derived from the
+  electrical connections; a conduit only says where cables run. The route,
+  not the conduit, decides what is drawn: a cable with its own route keeps
+  it, so a cable only partly in a conduit is handled by giving it a route
+  or by splitting it at a junction. Fill estimates and derating are left
+  for later.
 - **Zones are a managed list, with free-text tags beside them.** The MVP
   kept zones as free text so documentation could start without defining a
   list. Real data then showed the same area spelled several ways, so zones

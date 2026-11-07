@@ -1,6 +1,6 @@
-# Implementation Plan: 0015 - Conduits (draft)
+# Implementation Plan: 0015 - Conduits
 
-This is a draft. Nothing is implemented. It goes before the schema work of
+It goes before the schema work of
 plan 0014 (cables with conductors): a cable is a wire run, 0014 keeps the
 wire run records and their ids, and conduits only need an id to refer to.
 
@@ -86,7 +86,7 @@ cable.
 - Manual: assigning cables and drawing a conduit on a plan, against a
   running server.
 
-## Implementation Steps (draft)
+## Implementation Steps
 
 - [x] Settle the open design questions.
 - [x] Schema and migration: conduits, cable assignments, conduit route.
@@ -94,7 +94,7 @@ cable.
 - [x] Conduits tab with cable assignment on the conduit's detail page.
 - [x] Floorplan: draw a conduit route and show cables along it.
 - [x] Effective route and length of a cable from its conduits.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 - [ ] CSV import: a conduit column on cables.
 
 ## Follow-ups (not in this plan)
@@ -107,4 +107,57 @@ cable.
 
 ## Open questions
 
-None. The design is settled; the next step is the schema and migration.
+None.
+
+## Decisions made during implementation
+
+Where the plan left a detail open:
+
+- **Order lives on the cable.** The join table `wire_run_conduits` has a
+  `position` per cable (0, 1, 2 ...), the order the cable passes through its
+  conduits. A conduit lists its cables in the order they were added; that
+  order carries no meaning. The conduit page can move a conduit earlier or
+  later in a cable's own list.
+- **Assignments ride on the resources.** A conduit resource has `cableIds`
+  and a wire run resource has `conduitIds`. A write carrying one replaces
+  that side's assignments; a write without it leaves them alone. The
+  floorplan strips both before writing a whole record back, so a stale list
+  cannot overwrite what the conduit page saved.
+- **Change log.** `assignCable` and `unassignCable` log one entry on the
+  conduit ("cable assigned", "cable unassigned"). `setCableConduits` (used
+  to reorder or replace the list from the cable's side) logs one entry on
+  the wire run ("conduits changed"). No entry is written when nothing
+  changes. Assignments have no status; removing a conduit or a cable keeps
+  them, and the UI and route functions skip removed ones.
+- **Size.** `innerDiameter` plus `diameterUnit` (mm or in), both optional.
+  No tags on conduits, only a zone.
+- **Kinds** are stored as the displayed text (Conduit, Hose, Loom, Trunking,
+  Cable tray, or anything added), trimmed. The "other" kind in the plan is
+  just any added kind.
+- **Zones** count conduits too (usage, rename sync, merge, delete refusal).
+- **Attachments** accept the owner type `conduit`, and the change log accepts
+  the kind `conduit`.
+- **Floorplan.** A conduit is drawn as a thick pale line under the cables.
+  The Draw route tool has a Conduit selector next to the Wire run selector;
+  choosing one clears the other. Selecting a conduit highlights its cables
+  and their devices like selecting a circuit does (a selected circuit wins).
+- **Unrouted cables** are live cables with no route points of their own and
+  no live conduit that has a route. The floorplan lists them in a collapsed
+  section with a Draw button for each.
+- **Effective route.** A cable with its own waypoints keeps its own route
+  (derived start plus waypoints), whatever conduits it is in, and its length
+  is that route's. With no waypoints, it follows its live conduits that have
+  at least two points, each for its whole length, in the cable's order.
+  Each conduit is turned to meet the end of the one before; the first is
+  turned toward the cable's start device if that is placed, else toward the
+  second conduit; a single conduit with no placed start device is used as
+  drawn. Where two conduits do not meet, a straight link joins them and its
+  length counts. The device start itself is not added in front, since that
+  would be a made-up line. Skipped conduits (removed, or fewer than two
+  points) make the result incomplete, as do unset heights. A cable partly in
+  a conduit is therefore still the follow-up in the plan: give it a route of
+  its own, or split it at a junction.
+- **Drawing a cable that follows conduits** shows no waypoint markers; the
+  points belong to the conduits. Clicking a waypoint for such a cable starts
+  a route of its own and then it keeps that route.
+

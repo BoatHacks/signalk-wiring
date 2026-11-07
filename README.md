@@ -15,6 +15,10 @@ to someone else doesn't depend on the current owner being present.
   can be fed by more than one circuit, and can record its rated power
   draw and a SignalK path (e.g. `electrical.switches.anchorLight`) it
   corresponds to.
+- **Conduits**: record the conduits, hoses, looms, trunking and cable trays
+  that cables share, with an optional route on the floorplan. Add cables to
+  a conduit from its page; a cable can pass through several in order. A cable
+  with no route of its own is drawn, and measured, along its conduits.
 - A **role** on every device (consumer, source, storage, distribution or
   converter) so power sources such as solar, shore power or a generator,
   batteries, switches and inverters are told apart from the things that
@@ -50,7 +54,7 @@ to someone else doesn't depend on the current owner being present.
   each with an optional height range.
 - **Device icons**: mark one of a device's images as its icon, shown in
   device lists, on circuit diagrams and on floorplan markers.
-- **Photo/file attachments** per wire run or device (JPEG/PNG/WebP/HEIC/
+- **Photo/file attachments** per wire run, device or conduit (JPEG/PNG/WebP/HEIC/
   PDF, 15MB cap).
 - An **auto-generated diagram** per circuit (source → wire run(s) →
   device(s)), laid out and rendered client-side.

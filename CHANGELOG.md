@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Conduits: a new tab for conduits, hoses, looms, trunking and cable trays.
+  A conduit has a name, a kind (a dropdown with suggestions, kinds already
+  used and an "Add kind..." entry), an optional inner diameter, a zone,
+  notes and photos. Cables are added to a conduit on its page; a cable can
+  pass through several conduits in order, and the order can be changed.
+  Conduits are served as the new `wiringConduits` resource, and the wire run
+  resource lists its `conduitIds`.
+- Floorplan: draw a conduit's route like a cable's, see the cables along it
+  highlighted, and see how many cables are not drawn anywhere, with a button
+  to draw each. A cable with no route of its own is drawn along its conduits
+  and its measured length is taken from them.
+- The cable table on a circuit page names the conduits of each cable, and
+  zones count conduits as well as devices and wire runs.
 ### Changed
 
 - The device Type field is a dropdown: popular types for the chosen role

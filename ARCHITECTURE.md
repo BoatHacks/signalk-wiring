@@ -36,10 +36,16 @@ this plugin's own code — see §2.4).
 
 ### 2.1 Resource provider (`src/resources.js`)
 
-Registers three resource types via
+Registers the resource types via
 `app.registerResourceProvider({ type, methods })`:
-`wiringCircuits`, `wiringWireRuns`, `wiringDevices`. Owns CRUD against the
-SQLite store for those three tables. Served at
+`wiringCircuits`, `wiringWireRuns`, `wiringDevices`, `wiringPlans`,
+`wiringZones` and `wiringConduits`. Owns CRUD against the SQLite store for
+those tables. Conduit assignments ride along on the two resources they
+connect: a conduit lists `cableIds` and a wire run lists `conduitIds` (in
+the cable's order), both read from the join table. A write that carries one
+of them replaces that side's assignments through the store; a write without
+it leaves them alone, so a client writing a whole wire run back does not
+have to know them. Served at
 `/signalk/v2/api/resources/<type>`, per SignalK's standard resource API
 (see SPEC.md §6.1 for the contract, §2 of the `signalk-plugin` skill for
 why this pattern over a raw router).
@@ -84,7 +90,8 @@ webapp's static assets are *not* served from here — see §2.4.
 ### 2.3 Storage layer (`src/store.js`)
 
 Wraps `better-sqlite3`. Owns all reads/writes to `circuits`, `wire_runs`,
-`devices`, `attachments`, and `change_log` tables, and appends a
+`devices`, `conduits`, `wire_run_conduits`, `attachments`, and `change_log`
+tables, and appends a
 `change_log` row on every mutating write to an active record (SPEC.md
 §3.2). Both the resource provider and the admin routes call into this
 layer rather than touching SQLite directly.
@@ -211,6 +218,26 @@ CREATE TABLE zones (      -- 0010
   name TEXT NOT NULL COLLATE NOCASE UNIQUE
 );
 
+CREATE TABLE conduits (    -- 0015
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT,                -- free text: Conduit, Hose, Loom, Trunking, Cable tray, ...
+  inner_diameter REAL,      -- optional, a note
+  diameter_unit TEXT,       -- 'mm' | 'in'
+  zone TEXT,                -- the zone's name, kept in step with zone_id
+  zone_id TEXT REFERENCES zones(id),
+  route TEXT,               -- JSON list of {x,y,z} points in meters
+  status TEXT NOT NULL,
+  notes TEXT
+);
+
+CREATE TABLE wire_run_conduits (  -- 0015: the conduits a cable passes through
+  wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+  conduit_id TEXT NOT NULL REFERENCES conduits(id),
+  position INTEGER NOT NULL,       -- order within the cable, from 0
+  PRIMARY KEY (wire_run_id, conduit_id)
+);
+
 CREATE TABLE plans (       -- 0009
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -225,7 +252,7 @@ CREATE TABLE plans (       -- 0009
 
 CREATE TABLE attachments (
   id TEXT PRIMARY KEY,
-  owner_type TEXT NOT NULL,  -- 'wire_run' | 'device'
+  owner_type TEXT NOT NULL,  -- 'wireRun' | 'device' | 'conduit'
   owner_id TEXT NOT NULL,
   filename TEXT NOT NULL,
   mime_type TEXT NOT NULL,
@@ -253,7 +280,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are five migrations (the third to fifth are described below): plan 0008's field
+every subsequent restart. There are six migrations (the third to sixth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -280,6 +307,21 @@ Plan 0013's migration adds `devices.icon_attachment_id`. `store.js` accepts
 it only for a JPEG, PNG or WebP attachment of the same device, and
 `deleteAttachment` clears it (with a change-log entry) when its image is
 deleted.
+
+Plan 0015's migration (version 6) adds the `conduits` and
+`wire_run_conduits` tables. They come from `schema.sql` on every open, so
+the migration only guards the version for databases that somehow lack them.
+Conduits take part in zones like devices and wire runs (zone resolution,
+rename sync, usage count, merge). Assignments are not records of their own
+and have no status: `assignCable` and `unassignCable` write one change-log
+entry on the conduit, and `setCableConduits` (a replaced or reordered list)
+one on the wire run. Removing a conduit or a cable keeps its assignments, so
+history stays intact; the webapp and the route functions skip removed ones.
+
+The cable's effective route and length (`effectiveCableRoute` in
+`public/floorplan.js`, pure and tested) are derived on the client and never
+stored: a cable with waypoints of its own keeps them, otherwise it follows
+its live, drawn conduits in order.
 
 ## 4. Technology Stack
 
@@ -359,6 +401,7 @@ signalk-wiring/
     loadSummary.js             # panel load summary: calculation, UI
     deviceTypes.js             # popular device types per role, dropdown options
     deviceIcons.js             # icon url, which images can be icons
+    conduits.js                # conduit kinds, cable names, list helpers
     theme.js                   # light and red night theme, optional auto switching
     roles.js                   # device roles: labels and hints
     zones.js                   # tags parsing, zone and tag filters
@@ -378,6 +421,7 @@ signalk-wiring/
     theme.test.mjs
     deviceIcons.test.mjs
     deviceTypes.test.mjs
+    conduits.test.mjs
     fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md
