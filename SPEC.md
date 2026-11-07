@@ -202,6 +202,11 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - Forms to create/edit circuits, wire runs, and devices, including gauge
   + unit, color, zone, tags, and notes. The zone field is a dropdown
   with an "Add new zone..." entry and a hint saying what a zone is.
+- A Type dropdown on devices: popular types for the chosen role (for
+  example Solar panel for a source, Fuse for distribution), then types
+  already used on other devices, and an "Add type..." entry for anything
+  else. The type stays free text underneath, so a new type needs no setup
+  and an older free-text type is kept and shown.
 - A role on every device (a dropdown with a hint on each choice), shown
   in the device list and details, with a role filter on the device list,
   and a colour per role on floorplan markers.

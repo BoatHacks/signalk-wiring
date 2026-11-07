@@ -7,6 +7,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The device Type field is a dropdown: popular types for the chosen role
+  (solar panel, shore power inlet, battery, fuse, inverter, bilge pump and
+  more), then types already used on other devices, and an "Add type..."
+  entry for anything else. Existing free-text types are kept.
 - The axis indicator on calibrated plans uses arrow tips on its lines
   instead of the "to bow" and "up" text labels. Hovering an arrow still
   names its direction.

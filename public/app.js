@@ -9,6 +9,7 @@ import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { useSettings, wireRunInitialValues, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
+import { typeOptions } from './deviceTypes.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -84,7 +85,57 @@ function confirmRemove (label) {
   return window.confirm(`Mark "${label}" as removed? It stays in the record, but shows as removed.`)
 }
 
-const ADD_ZONE = '__add__'
+const ADD_OPTION = '__add__'
+const ADD_ZONE = ADD_OPTION
+
+// Dropdown of popular device types for the chosen role, plus the types
+// already used on other devices, with an "Add type..." entry for anything
+// else. The type is free text underneath, so a new one needs no setup.
+function TypeField ({ role, value, onChange }) {
+  const { items: devices } = useResourceList('wiringDevices')
+  const [adding, setAdding] = useState(false)
+  const [newType, setNewType] = useState('')
+  const { suggested, used } = typeOptions(role, devices.map((d) => d.type), value)
+
+  const addType = () => {
+    const name = newType.trim()
+    if (!name) return
+    // Reuse an existing spelling rather than creating a near-duplicate.
+    const existing = [...suggested, ...used].find((t) => t.toLowerCase() === name.toLowerCase())
+    onChange(existing || name)
+    setAdding(false)
+    setNewType('')
+  }
+
+  return html`
+    <div>
+      <select value=${adding ? ADD_OPTION : value}
+        onChange=${(e) => {
+          if (e.target.value === ADD_OPTION) setAdding(true)
+          else { setAdding(false); onChange(e.target.value) }
+        }}>
+        <option value="">No type recorded</option>
+        <optgroup label=${`Suggested for ${roleLabel(role).toLowerCase()}`}>
+          ${suggested.map((t) => html`<option value=${t} key=${t}>${t}</option>`)}
+        </optgroup>
+        ${used.length > 0 && html`
+          <optgroup label="Already used">
+            ${used.map((t) => html`<option value=${t} key=${t}>${t}</option>`)}
+          </optgroup>
+        `}
+        <option value=${ADD_OPTION}>Add type…</option>
+      </select>
+      ${adding && html`
+        <div class="row-actions">
+          <input type="text" value=${newType} placeholder="Type, e.g. Sonar" autofocus
+            onInput=${(e) => setNewType(e.target.value)}
+            onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); addType() } }} />
+          <button type="button" onClick=${addType}>Add type</button>
+        </div>
+      `}
+    </div>
+  `
+}
 
 // Dropdown of the zones with an "Add new zone..." entry that creates the
 // zone on the spot and selects it. An absent zone stays valid.
@@ -163,7 +214,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
     for (const f of fields) {
       const raw = values[f.key]
       // Zone and tags are always sent, so clearing them on an edit takes effect.
-      if (f.type === 'zone') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
+      if (f.type === 'zone' || f.type === 'deviceType') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
       if (raw === '' || raw == null) continue
       payload[f.key] = f.type === 'number' ? Number(raw) : raw
@@ -199,6 +250,9 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save' }) {
           `}
           ${f.type === 'zone' && html`
             <${ZoneField} value=${values[f.key]} onChange=${(v) => setField(f.key, v)} />
+          `}
+          ${f.type === 'deviceType' && html`
+            <${TypeField} role=${values.role} value=${values[f.key]} onChange=${(v) => setField(f.key, v)} />
           `}
           ${f.type === 'tags' && html`
             <input type="text" value=${values[f.key]} placeholder="e.g. audio: main, audio: cockpit"
@@ -438,7 +492,12 @@ const DEVICE_FIELDS = [
     noBlank: true,
     hint: 'Consumer uses power. Source supplies it (solar, shore power, generator, hydro, wind, alternator). Storage is batteries. Distribution is switches, breakers, bus bars and panels. Converter is inverters, chargers and DC-DC. Put the specific kind in Type.'
   },
-  { key: 'type', label: 'Type', type: 'text' },
+  {
+    key: 'type',
+    label: 'Type',
+    type: 'deviceType',
+    hint: 'The kind of device, for example Solar panel or Bilge pump. Pick one, or choose Add type for anything not listed.'
+  },
   {
     key: 'zoneId',
     label: 'Zone',

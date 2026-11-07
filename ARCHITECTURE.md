@@ -357,6 +357,7 @@ signalk-wiring/
     app.js                   # UI: browse/search, forms, diagram, changelog view
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
+    deviceTypes.js             # popular device types per role, dropdown options
     deviceIcons.js             # icon url, which images can be icons
     theme.js                   # light and red night theme, optional auto switching
     roles.js                   # device roles: labels and hints
@@ -376,6 +377,7 @@ signalk-wiring/
     roles.test.mjs
     theme.test.mjs
     deviceIcons.test.mjs
+    deviceTypes.test.mjs
     fixtures/                # real-world CSVs used as import regression fixtures
   package.json
   README.md
