@@ -31,6 +31,12 @@
   --marker-storage: #185fa5;
   --marker-distribution: #8a8a85;
   --marker-converter: #7a3f98;
+  --wire-positive: #c62828;
+  --wire-negative: #1c1c1c;
+  --wire-line: #8a5a2b;
+  --wire-neutral: #2f6fb5;
+  --wire-earth: #4a9a3a;
+  --wire-highlight: #e0a800;
 }
 
 [data-theme="dark"] {
@@ -61,6 +67,12 @@
   --marker-storage: #a8443a;
   --marker-distribution: #a15850;
   --marker-converter: #c06657;
+  --wire-positive: #ff5c47;
+  --wire-negative: #7a2f28;
+  --wire-line: #d9776a;
+  --wire-neutral: #a15850;
+  --wire-earth: #c06657;
+  --wire-highlight: #ffb3a6;
 }
 
 * { box-sizing: border-box; }
@@ -574,3 +586,70 @@ main:has(.floorplan-pair) { max-width: none; }
 .derived-circuit { padding: 8px 12px; margin: 8px 0; border: 1px dashed var(--border-strong); border-radius: 6px; background: var(--surface-alt); }
 .terminals-editor { display: flex; flex-direction: column; gap: 6px; }
 .terminals-editor .row-actions input[type="text"] { min-width: 8em; }
+
+/* Schematics (plan 0016) */
+.plain-list { list-style: none; margin: 12px 0; padding: 0; }
+.list-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+.list-row .row-title { flex: 1; color: var(--link); text-decoration: none; font-weight: 600; }
+.schematic-title { margin: 4px 0 8px; font-size: 18px; }
+.schematic-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.schematic-layout { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
+@media (max-width: 700px) { .schematic-layout { grid-template-columns: 1fr; } }
+.schematic-palette { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px; max-height: 70vh; overflow-y: auto; }
+.schematic-palette h3 { margin: 0 0 6px; font-size: 13px; }
+.palette-title { font-size: 11px; text-transform: uppercase; color: var(--text-muted-strong); margin: 8px 0 3px; }
+.palette-item { display: block; width: 100%; text-align: left; margin: 2px 0; padding: 4px 6px; font-size: 12px; border: 1px solid var(--border-strong); border-radius: 4px; cursor: grab; }
+.schematic-canvas-wrap { position: relative; }
+.schematic-canvas { width: 100%; height: 66vh; min-height: 320px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; touch-action: none; cursor: grab; user-select: none; display: block; }
+.schematic-empty { position: absolute; left: 0; right: 0; top: 40%; text-align: center; padding: 0 24px; pointer-events: none; }
+.schematic-rename { position: absolute; font-size: 12px; padding: 2px 4px; }
+.schematic-inspector { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.schematic-tabmenu { position: absolute; right: 8px; top: 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+.sch-device-box { fill: var(--surface-alt); stroke: var(--border-strong); stroke-width: 1.5; cursor: move; }
+.sch-device.role-consumer .sch-device-box { stroke: var(--marker-consumer); }
+.sch-device.role-source .sch-device-box { stroke: var(--marker-source); }
+.sch-device.role-storage .sch-device-box { stroke: var(--marker-storage); }
+.sch-device.role-distribution .sch-device-box { stroke: var(--marker-distribution); }
+.sch-device.role-converter .sch-device-box { stroke: var(--marker-converter); }
+.sch-device.selected .sch-device-box { stroke-width: 3; }
+.sch-device.dim { opacity: 0.3; }
+.sch-device.lit .sch-device-box { stroke: var(--wire-highlight); stroke-width: 3; }
+.sch-device-name { font-size: 12px; font-weight: 600; fill: var(--text); pointer-events: none; }
+.sch-device-type, .sch-terminal-label { font-size: 9px; fill: var(--text-muted-strong); pointer-events: none; }
+.sch-terminal { stroke: var(--surface); stroke-width: 1; }
+.sch-terminal.c-positive, .sch-terminal.c-line { fill: var(--wire-positive); }
+.sch-terminal.c-negative { fill: var(--wire-negative); }
+.sch-terminal.c-neutral { fill: var(--wire-neutral); }
+.sch-terminal.c-earth { fill: var(--wire-earth); }
+
+.sch-wire-line, .sch-wire-over, .sch-stub-line { fill: none; stroke-width: 3; stroke-linejoin: round; }
+.sch-wire-line.c-positive { stroke: var(--wire-positive); }
+.sch-wire-line.c-negative { stroke: var(--wire-negative); }
+.sch-wire-line.c-line { stroke: var(--wire-line); }
+.sch-wire-line.c-neutral { stroke: var(--wire-neutral); }
+.sch-wire-line.c-earth { stroke: var(--wire-earth); }
+.sch-wire-over { stroke-dasharray: 6 6; }
+.sch-wire-over.c-positive { stroke: var(--wire-positive); }
+.sch-wire-over.c-negative { stroke: var(--wire-negative); }
+.sch-wire-over.c-line { stroke: var(--wire-line); }
+.sch-wire-over.c-neutral { stroke: var(--wire-neutral); }
+.sch-wire-over.c-earth { stroke: var(--wire-earth); }
+.sch-wire.selected .sch-wire-line { stroke-width: 5; }
+.sch-wire.dim { opacity: 0.2; }
+.sch-wire.lit .sch-wire-line { stroke-width: 5; }
+.sch-stub-line { stroke: var(--text-muted-strong); stroke-dasharray: 4 3; stroke-width: 2; }
+.sch-tab { fill: var(--surface); stroke: var(--text-muted-strong); cursor: pointer; }
+.sch-tab-label { font-size: 11px; fill: var(--text); pointer-events: none; }
+.sch-bend { fill: var(--surface); stroke: var(--text); stroke-width: 2; cursor: move; }
+.sch-bend-add { fill: var(--surface); stroke: var(--text-muted-strong); stroke-width: 1; opacity: .7; cursor: copy; }
+.sch-preview { fill: none; stroke: var(--text); stroke-width: 2; stroke-dasharray: 5 4; pointer-events: none; }
+.sch-connect-handle { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; cursor: crosshair; }
+.sch-connect-target .sch-device-box { stroke-width: 3; stroke: var(--accent); }
+.cable-popover { position: absolute; z-index: 5; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 10px 12px; box-shadow: 0 4px 14px rgba(0,0,0,.3); display: flex; flex-direction: column; gap: 8px; min-width: 230px; }
+.cable-popover-title { font-weight: 600; font-size: 13px; }
+.cable-popover-kinds { display: flex; flex-direction: column; gap: 3px; }
+.cable-popover-row { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.cable-popover-row input.short { width: 70px; }
+.radio-line { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+main:has(.schematic-editor) { max-width: none; }

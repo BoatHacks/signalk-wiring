@@ -11,6 +11,7 @@ import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
+import { SchematicsTab } from './schematicView.js'
 import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
 import { typeOptions } from './deviceTypes.js'
@@ -1758,6 +1759,7 @@ function App () {
         <button class=${tab === 'conduits' ? 'active' : ''} onClick=${() => switchTab('conduits')}>Conduits</button>
         <button class=${tab === 'load' ? 'active' : ''} onClick=${() => switchTab('load')}>Load Summary</button>
         <button class=${tab === 'zones' ? 'active' : ''} onClick=${() => switchTab('zones')}>Zones</button>
+        <button class=${tab === 'schematics' ? 'active' : ''} onClick=${() => switchTab('schematics')}>Schematics</button>
         <button class=${tab === 'floorplan' ? 'active' : ''} onClick=${() => switchTab('floorplan')}>Floorplan</button>
       </nav>
       <main>
@@ -1776,6 +1778,7 @@ function App () {
       `}
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
+      ${tab === 'schematics' && html`<${SchematicsTab} />`}
       ${tab === 'floorplan' && html`<${FloorplanTab} />`}
       </main>
     </div>

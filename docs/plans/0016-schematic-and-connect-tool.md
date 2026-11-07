@@ -119,7 +119,7 @@ the load check and everything else follow without changes.
 - [x] Schema, migration, store and resource: schematics, their devices and
       wires, with tests.
 - [x] `public/schematic.js`: geometry and routing, with tests.
-- [ ] Schematics tab: list, create, rename, remove; canvas with pan and zoom;
+- [x] Schematics tab: list, create, rename, remove; canvas with pan and zoom;
       place existing devices; palette that creates devices; drag devices;
       Auto-arrange.
 - [ ] Drawing wires: drag between devices or terminals, the quick popover,
@@ -166,3 +166,9 @@ None. The design is settled; the next step is the schema and store work.
 - Stubs for off-page cables leave right when the on-page device is the supply
   end and arrive from the left otherwise, unless a named terminal fixes the
   side. A wire that has bend points is drawn as straight segments between them.
+- Moving a device writes the whole page layout once, when the drag ends. A
+  new device from the palette (click, or drag onto the canvas) is created with
+  its type as the name, made unique, and opens in an inline name box.
+- The canvas view (pan, zoom, selection) is not stored. Pan is a drag on empty
+  canvas, zoom is the wheel or the buttons. Two-finger touch pan and pinch are
+  left to the follow-up.
