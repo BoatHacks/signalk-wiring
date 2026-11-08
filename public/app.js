@@ -14,7 +14,8 @@ import { FloorplanTab } from './floorplanView.js'
 import { SchematicsTab } from './schematicView.js'
 import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
-import { typeOptions } from './deviceTypes.js'
+import { typeOptions, isCriticalType } from './deviceTypes.js'
+import { describeMeasured, describeGroup } from './measured.js'
 import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
@@ -272,12 +273,13 @@ function TerminalsEditor ({ value, role, onChange }) {
 // "a handful of inputs, Save/Cancel, an error banner on failure" with
 // different field lists, so this covers all three rather than
 // duplicating the submit/error/loading handling three times.
-function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', context }) {
+function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', context, onFieldChange }) {
   const [values, setValues] = useState(() => {
     const v = {}
     for (const f of fields) {
       const raw = initial ? initial[f.key] : null
       if (f.type === 'terminals') { v[f.key] = Array.isArray(raw) ? raw.map((t) => ({ ...t })) : []; continue }
+      if (f.type === 'checkbox') { v[f.key] = initial ? Boolean(raw) : Boolean(f.defaultValue); continue }
       v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : (f.defaultValue ?? '')
     }
     return v
@@ -285,7 +287,17 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  const setField = (key, value) => setValues((v) => ({ ...v, [key]: value }))
+  const [touched, setTouched] = useState({})
+  // onFieldChange(key, value, values, touched) may return more values to set,
+  // for example a default that follows another field until the user sets it.
+  const setField = (key, value) => {
+    setTouched((t) => ({ ...t, [key]: true }))
+    setValues((v) => {
+      const next = { ...v, [key]: value }
+      const extra = onFieldChange ? onFieldChange(key, value, next, touched) : null
+      return extra ? { ...next, ...extra } : next
+    })
+  }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -296,6 +308,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
       if (f.showWhen && !f.showWhen(values, context)) continue
       const raw = values[f.key]
       if (f.type === 'terminals') { payload[f.key] = cleanTerminals(raw); continue }
+      if (f.type === 'checkbox') { payload[f.key] = Boolean(raw); continue }
       // Zone and tags are always sent, so clearing them on an edit takes effect.
       if (f.type === 'zone' || f.type === 'deviceType' || f.type === 'conduitKind') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
@@ -319,6 +332,10 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
           <span>${f.label}${f.required ? ' *' : ''}</span>
           ${f.type === 'terminals' && html`
             <${TerminalsEditor} value=${values[f.key]} role=${values.role} onChange=${(v) => setField(f.key, v)} />
+          `}
+          ${f.type === 'checkbox' && html`
+            <input type="checkbox" class="checkbox-input" checked=${Boolean(values[f.key])}
+              onChange=${(e) => setField(f.key, e.target.checked)} />
           `}
           ${f.type === 'textarea' && html`
             <textarea
@@ -562,6 +579,12 @@ function ChangeLog ({ kind, id }) {
   `
 }
 
+// A new device of a critical-looking type starts with confirm-before-switching
+// on, until the user sets the box themselves.
+function criticalDefault (key, value, values, touched) {
+  return key === 'type' && !touched.confirmSwitching ? { confirmSwitching: isCriticalType(value) } : null
+}
+
 const DEVICE_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true },
   {
@@ -628,6 +651,42 @@ const DEVICE_FIELDS = [
     label: 'SignalK path',
     type: 'signalkPath',
     placeholder: 'e.g. electrical.switches.anchorLight'
+  },
+  {
+    key: 'switchPath',
+    label: 'Switch path',
+    type: 'signalkPath',
+    clearable: true,
+    placeholder: 'e.g. electrical.switches.bank.0.3.state',
+    hint: 'Only for a relay, switch or breaker module the plugin may turn on and off, or a device that switches itself. The SignalK path that holds its on or off state. Every consumer fed through it can then be switched from the Live view.'
+  },
+  {
+    key: 'confirmSwitching',
+    label: 'Confirm before switching',
+    type: 'checkbox',
+    hint: 'Ask "are you sure" before this device (or anything on the same switch) is turned on or off from the app. Starts on for devices that look critical, such as a bilge pump, refrigerator, autopilot, navigation light or windlass. The type is free text, so check it for your own critical devices.'
+  },
+  {
+    key: 'neverRemote',
+    label: 'Never switch remotely',
+    type: 'checkbox',
+    hint: 'The app and the calibration refuse to switch this device, and the Live view shows it with a lock. A switch shared with a locked device is locked too, since turning it off would turn the locked device off.'
+  },
+  {
+    key: 'meterPath',
+    label: 'Meter path',
+    type: 'signalkPath',
+    clearable: true,
+    placeholder: 'e.g. electrical.batteries.shunt.current',
+    hint: 'A SignalK path that measures the current or power through this device: a shunt, a relay channel with a current reading, a battery. Consumers downstream are measured by the nearest meter upstream. A whole-battery meter works but is less accurate, since every other load adds noise.'
+  },
+  {
+    key: 'meterUnit',
+    label: 'Meter unit',
+    type: 'select',
+    options: [{ value: 'A', label: 'Amps (A)' }, { value: 'W', label: 'Watts (W)' }],
+    clearable: true,
+    hint: 'Watts are better. With amps the plugin multiplies by the circuit voltage and assumes a power factor of 1, and marks the result as an estimate. Blank counts as amps.'
   },
   { key: 'posX', label: 'Position x (m, from the transom toward the bow)', type: 'number' },
   { key: 'posY', label: 'Position y (m, athwartships)', type: 'number' },
@@ -1405,6 +1464,7 @@ function DevicesList ({ onSelect }) {
       ${showForm && html`
         <${Form}
           fields=${DEVICE_FIELDS}
+          onFieldChange=${criticalDefault}
           onSubmit=${createDevice}
           onCancel=${() => setShowForm(false)}
           submitLabel="Create device"
@@ -1443,6 +1503,8 @@ function DeviceDetail ({ deviceId, onBack }) {
   const [editing, setEditing] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const { items: circuits } = useResourceList('wiringCircuits')
+  const { items: allDevices } = useResourceList('wiringDevices')
+  const deviceNames = new Map(allDevices.map((d) => [d.id, d.name]))
 
   useEffect(() => {
     let cancelled = false
@@ -1496,6 +1558,23 @@ function DeviceDetail ({ deviceId, onBack }) {
           `}
           ${device.signalkPath && html`
             <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>
+          `}
+          ${device.switchPath && html`
+            <div class="meta">Switch path: <code>${device.switchPath}</code></div>
+          `}
+          ${(device.confirmSwitching || device.neverRemote) && html`
+            <div class="meta">
+              ${device.neverRemote ? '\u{1F512} Never switched remotely' : 'Asks for confirmation before switching'}
+            </div>
+          `}
+          ${device.meterPath && html`
+            <div class="meta">Meter: <code>${device.meterPath}</code> (${device.meterUnit === 'W' ? 'watts' : 'amps'})</div>
+          `}
+          ${describeMeasured(device.measured, device.ratedPowerW).map((line, i) => html`
+            <div class=${i === 0 ? 'meta measured' : 'meta'} key=${i}>${line}</div>
+          `)}
+          ${device.measured && device.measured.group && html`
+            <div class="meta">${describeGroup(device.measured, (id) => (deviceNames.get(id) || id))}</div>
           `}
           ${device.notes && html`<p>${device.notes}</p>`}
           <div class="row-actions">

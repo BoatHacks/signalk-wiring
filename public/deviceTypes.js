@@ -40,3 +40,17 @@ export function typeOptions (role, usedTypes, current) {
   used.sort((a, b) => a.localeCompare(b))
   return { suggested, used }
 }
+
+// Types that look critical: switching them off by mistake could hurt the
+// boat or the crew. A new device of one of these starts with "confirm before
+// switching" on. Matched ignoring case against the free-text type. The same
+// list is in src/safety.js (the store applies it too); a test keeps both equal.
+export const CRITICAL_TYPE_WORDS = [
+  'bilge', 'refrigerator', 'fridge', 'freezer', 'autopilot', 'navigation light', 'nav light', 'windlass'
+]
+
+export function isCriticalType (type) {
+  if (typeof type !== 'string') return false
+  const text = type.trim().toLowerCase()
+  return text !== '' && CRITICAL_TYPE_WORDS.some((word) => text.includes(word))
+}

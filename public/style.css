@@ -653,3 +653,7 @@ main:has(.floorplan-pair) { max-width: none; }
 .cable-popover-row input.short { width: 70px; }
 .radio-line { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 main:has(.schematic-editor) { max-width: none; }
+
+/* Plan 0017: checkboxes in forms and measured values */
+.form-field .checkbox-input { width: auto; align-self: flex-start; min-height: 0; }
+.meta.measured { font-weight: 600; color: var(--text); }
