@@ -196,7 +196,7 @@ These are open to change in review:
 - [x] The Batteries tab and its route.
 - [x] Live values for batteries on the tab, the circuit diagram, the schematic
       and the battery page.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #6.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #6.
 
 ## Files to Create/Modify
 

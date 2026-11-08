@@ -66,6 +66,12 @@ to someone else doesn't depend on the current owner being present.
   strip, and a red-shifted **night theme** that protects night vision,
   switched by a button or, with the `autoTheme` option, by the vessel's
   `environment.sun` or `environment.mode`.
+- **Batteries**: chemistry, purpose, capacity, make and model and install
+  date, a link to the shunt or monitor, and SignalK paths. Cables between
+  batteries are series or parallel links, and the bank is worked out from them
+  (layout like 2S2P, voltage, total and usable capacity, energy). A Batteries
+  tab shows each bank, what protects it, and with Live mode on its voltage,
+  state of charge and the monitor's time remaining.
 - **AC and DC aware**: mark devices AC or DC (new devices get it from their
   type) and a new cable's type is chosen from its two ends, with a warning when
   they disagree. A cable cannot carry both AC and DC, a conduit holding both

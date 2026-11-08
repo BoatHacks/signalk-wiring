@@ -447,7 +447,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are ten migrations (the third to tenth are described below): plan 0008's field
+every subsequent restart. There are eleven migrations (the third to eleventh are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -508,6 +508,21 @@ are emptied is dropped. `store.js` writes the two lists with the parent in one
 transaction. Only a change in which devices are on a page is logged (a
 `devices` diff of ids); moving a device or a bend point is layout and adds no
 entry, and a cable carries its own wiring history.
+
+Plan 0020's migration (version 11) adds the battery columns to `devices`
+(`chemistry`, `purpose`, `capacity_ah`, `usable_fraction`, `make_model`,
+`installed_on`, `monitor_device_id`, `voltage_path`, `current_path`,
+`soc_path`, `time_remaining_path`) and `wire_runs.link`, and fills `chemistry`
+and `purpose` once from the type name where they are null (never overriding a
+set value or rewriting the type). The store validates every value and refuses
+a link on a cable that is not between two storage devices. `src/banks.js`
+derives the banks (`deriveBanks`, called by the store's `deriveAll` and served
+by `/derived`); `src/batteries.js` and `public/batteries.js` hold the chemistry
+defaults and type-name helpers (a parity test keeps them equal). The live
+route also lists, per battery, the paths to subscribe to (its own, else its
+monitor's, `resolveBatteryPaths` in `src/switchability.js`), and
+`public/liveBattery.js` turns stream values into the reading shown on the
+Batteries tab (`public/batteriesView.js`), the diagrams and the device page.
 
 Plan 0019's migration (version 10) adds `devices.current` (`ac`, `dc` or
 null) and fills it once for existing devices: from the type (the same table
@@ -663,6 +678,9 @@ signalk-wiring/
     measured.js                # measured values beside the rating, load figures
     schematic.js               # pure geometry: boxes, terminals, routing, stubs, hit tests
     schematicView.js           # schematics tab: pages, canvas, palette, wires, bends
+    batteries.js               # chemistry and purpose lists, defaults, bank card text
+    batteriesView.js           # the Batteries tab
+    liveBattery.js             # pure: live battery readings and time remaining text
     current.js                 # pure: AC or DC of an end, the cable type suggestion,
                                # the mixed cable rule, the conduit AC/DC mix
     quickCable.js              # pure: values for the quick cable popover

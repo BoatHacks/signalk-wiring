@@ -179,6 +179,10 @@ A wire run or device is either:
     E-11, cited from a reprint of the 2003 edition and not checked against the
     current one; the ISO 13297 clause wording was not confirmed), so it is a
     design rule of this plugin and not a quotation of the standard.
+  - `link` (series | parallel, optional): only on a cable whose two ends are
+    both batteries (storage devices); any other cable refuses it. A cable
+    between two batteries without one counts as parallel. A series link is one
+    positive conductor, a parallel link carries positive and negative.
   - `gauge` + `gaugeUnit` (AWG | mm²; one gauge per cable), `length` +
     `lengthUnit` (m | ft), `zoneId`
     (optional, a Zone; the response also carries the zone's name as
@@ -189,6 +193,28 @@ A wire run or device is either:
     in meters drawn on the floorplan; the start is derived from the
     from-device and is not stored), `status`, `attachments` (photo/file
     ids), `notes`.
+- **Battery details** (on a Device with role storage; all optional):
+  `chemistry` (flooded | agm | gel | lifepo4 | lithium | other), `purpose`
+  (house | starter | thruster | windlass | motor | other), `capacityAh` (amp-hours
+  of this battery), `usableFraction` (0 to 1), `makeModel`, `installedOn` (an ISO
+  date, shown as an age), `monitorDeviceId` (the shunt or battery monitor that
+  measures it) and four SignalK paths: `voltagePath`, `currentPath`, `socPath`
+  and `timeRemainingPath`. Choosing a chemistry suggests a nominal voltage per
+  12 V battery (12 V for the lead-acid kinds, 12.8 V for LiFePO4) and a usable
+  fraction (0.5 for flooded, AGM and gel, 0.8 for the lithium kinds), which stay
+  editable. A battery with no path of its own uses its monitor's.
+- **Bank** (derived, never stored): batteries joined by cables form a bank. A
+  series link joins batteries into a string and parallel links join strings. A
+  bank has its `strings`, a layout such as 2S2P (when all strings are equally
+  long), a voltage (the sum along a string), a total capacity (the sum over
+  strings of the smallest capacity in each string), a usable capacity (with the
+  lowest usable fraction in the bank), energy in Wh, its chemistries, monitors
+  and the protectors of the circuits it feeds, and warnings (uneven strings,
+  strings that differ in voltage, mixed chemistries, a parallel link between
+  different voltages, a network that cannot be reduced to series strings in
+  parallel). A missing capacity or voltage makes the bank incomplete and says
+  what is missing; no number is ever made up. A battery with no links is a bank
+  of one.
 - **Device**
   - `id`, `name`, `type` (free text, e.g. "bilge pump", "solar"), `iconAttachmentId`
     (optional: one of the device's own JPEG, PNG or WebP attachments, used as
@@ -395,6 +421,18 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - A role on every device (a dropdown with a hint on each choice), shown
   in the device list and details, with a role filter on the device list,
   and a colour per role on floorplan markers.
+- A Batteries tab (`#/batteries`): one card per bank with its batteries (links
+  to their pages), layout, voltage, total and usable capacity and energy,
+  chemistries, monitors, what protects it and its warnings, and an
+  "incomplete" note naming what is missing. With Live mode on each card shows the
+  bank's voltage, state of charge and time remaining from SignalK, and so do
+  battery boxes on the circuit diagram and the schematic and the battery's page.
+  The time remaining is only the monitor's own `capacity.timeRemaining` value
+  (seconds, null while nothing discharges is normal and reads "not
+  discharging" when the current shows no discharge; the SignalK specification
+  makes current positive when it flows out of the battery). Nothing is
+  computed: with no value there is no runtime. A reading older than a minute is
+  shown stale. Device pages and the device form carry the battery fields.
 - A Conduits tab: list conduits with zone and kind filters, create and edit
   them (the kind is a dropdown with an "Add kind..." entry, like the device
   type), and on a conduit's page add cables to it or take them out, change
