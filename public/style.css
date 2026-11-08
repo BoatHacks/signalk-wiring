@@ -778,3 +778,9 @@ main:has(.schematic-editor) { max-width: none; }
 .link-badge { margin-left: 4px; text-transform: none; }
 .battery-details .bank-summary { margin-top: 6px; }
 .battery-details .warning-banner { margin: 4px 0; }
+
+.sch-conduit { pointer-events: none; }
+.sch-conduit-outline, .sch-conduit-fill { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.sch-conduit-outline { stroke: var(--text-muted-strong); }
+.sch-conduit-fill { stroke: var(--surface); }
+.sch-conduit-label { font-size: 9px; fill: var(--text-muted-strong); }

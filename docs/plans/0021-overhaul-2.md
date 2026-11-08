@@ -267,11 +267,11 @@ These are open to change in review:
 - [ ] Permanent deletion: the three purge methods, routes, UI, show removed on
       conduits and schematics.
 - [ ] Version: the version route, the update hint, the pack-time stamping.
-- [ ] Wire routing: `wireRouter.js`, bridges, stub lanes, tests on the boat's
+- [x] Wire routing: `wireRouter.js`, bridges, stub lanes, tests on the boat's
       pages.
-- [ ] Layout: `schematicLayout.js` with no overlaps (and the Tidy notice) and the
+- [x] Layout: `schematicLayout.js` with no overlaps (and the Tidy notice) and the
       cable length gaps in Auto-arrange.
-- [ ] Conduit bands on the schematic: shared channels, the band and label, the
+- [x] Conduit bands on the schematic: shared channels, the band and label, the
       legend and the highlight.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
       #14.

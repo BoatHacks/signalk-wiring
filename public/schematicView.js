@@ -1,4 +1,4 @@
-import { html, useState, useEffect, useRef } from './vendor/preact-standalone.module.js'
+import { html, useState, useEffect, useRef, useMemo } from './vendor/preact-standalone.module.js'
 import dagre from './vendor/dagre.esm.js'
 import { newId } from './ids.js'
 import { TYPE_SUGGESTIONS } from './deviceTypes.js'
@@ -104,9 +104,9 @@ export function SchematicsTab ({ renderCableForm, selectedId = null, onSelect = 
     let cancelled = false
     Promise.all([
       fetchList('wiringSchematics'), fetchList('wiringDevices'),
-      fetchList('wiringWireRuns'), fetchList('wiringCircuits')
-    ]).then(([schematics, devices, cables, circuits]) => {
-      if (!cancelled) setData({ schematics, devices, cables, circuits })
+      fetchList('wiringWireRuns'), fetchList('wiringCircuits'), fetchList('wiringConduits')
+    ]).then(([schematics, devices, cables, circuits, conduits]) => {
+      if (!cancelled) setData({ schematics, devices, cables, circuits, conduits })
     }).catch((err) => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }
   }, [reloadKey])
@@ -219,6 +219,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   useEffect(() => () => { mounted.current = false }, [])
 
   const { devices, cables, circuits, schematics } = data
+  const conduits = data.conduits || []
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const deviceName = (id) => (deviceById.get(id) || {}).name
   // Live mode (plan 0017): states and meter readings on the devices, and a
@@ -250,25 +251,59 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const liveCables = cables.filter(isLive)
   const onPage = liveCables.filter((c) => boxById.has(c.fromDeviceId) && boxById.has(c.toDeviceId))
   const lanes = G.assignLanes(onPage.map((c) => ({ id: c.id, a: c.fromDeviceId, b: c.toDeviceId })))
+  const stubsBase = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName })
+  // Routing runs when the page's layout, wires or conduits change, not on
+  // every pointer move: while a device or a bend point is being dragged the
+  // old cheap routes are drawn and the full routing follows the drop.
+  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'bend')
+  const routeKey = dragging ? 'drag' : JSON.stringify([
+    boxes.map((b) => [b.id, b.x, b.y, b.w, b.h]), onPage.map((c) => [c.id, c.fromDeviceId, c.toDeviceId, c.conductors, c.conduitIds]),
+    bends, stubsBase.map((x) => x.cableId)
+  ])
+  const routed = useMemo(() => {
+    if (dragging) return null
+    return G.routeSchematicPage({
+      boxes,
+      wires: onPage.map((c) => {
+        const t = G.endTerminals(c)
+        return { id: c.id, fromId: c.fromDeviceId, toId: c.toDeviceId, fromTerminal: t.from, toTerminal: t.to, points: bends[c.id] || [], conduitIds: c.conduitIds || [], lane: lanes[c.id] || 0 }
+      }),
+      stubs: stubsBase,
+      legacy: G.wirePath
+    })
+  }, [routeKey])
   const wires = onPage.map((c) => {
     const t = G.endTerminals(c)
+    const r = routed && routed.wires.get(c.id)
     return {
       id: c.id,
       cable: c,
-      path: G.wirePath({
-        fromBox: boxById.get(c.fromDeviceId),
-        toBox: boxById.get(c.toDeviceId),
-        fromTerminal: t.from,
-        toTerminal: t.to,
-        lane: lanes[c.id] || 0,
-        points: bends[c.id] || []
-      })
+      bridges: r ? r.bridges : [],
+      path: r
+        ? r.points
+        : G.wirePath({ fromBox: boxById.get(c.fromDeviceId), toBox: boxById.get(c.toDeviceId), fromTerminal: t.from, toTerminal: t.to, lane: lanes[c.id] || 0, points: bends[c.id] || [] })
     }
   })
-  const stubs = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName })
+  const stubs = stubsBase.map((st) => {
+    const r = routed && routed.stubs.get(st.cableId)
+    return r ? { ...st, path: r.path, tab: r.tab } : st
+  })
+  const conduitInfo = new Map(conduits.filter(isLive).map((c) => [c.id, c]))
+  const bands = G.conduitBands({
+    wires: onPage.map((c) => ({ id: c.id, conduitIds: (c.conduitIds || []).filter((x) => conduitInfo.has(x)) })),
+    paths: new Map(wires.map((w) => [w.id, w.path])),
+    conduits: conduitInfo
+  })
+
+  const overlapping = G.findOverlaps(boxes).length > 0
+  const tidyAll = async () => {
+    const next = tidied(pos)
+    setPos(next)
+    await save(next, bends)
+  }
 
   const selectedWireId = selection && selection.type === 'wire' ? selection.id : null
-  const view = vb || G.fitView(boxes)
+  const view = vb || G.fitView([...boxes, ...stubs.map((s) => s.tab)])
   const fitNow = () => setVb(null)
 
   // ---- Coordinates ----
@@ -292,7 +327,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const zoomAt = (factor, at) => {
     setVb((cur) => {
-      const v = cur || G.fitView(boxes)
+      const v = cur || G.fitView([...boxes, ...stubs.map((s) => s.tab)])
       const nw = v.w / factor
       const nh = v.h / factor
       const cx = at ? at.x : v.x + v.w / 2
@@ -329,11 +364,24 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const centre = () => ({ x: view.x + view.w / 2, y: view.y + view.h / 2 })
 
+  // Moves the given devices (default: all) to the nearest free spot, at least
+  // the overlap margin from every other device and every off-page tab.
+  const tidied = (layout, movable = null) => {
+    const bx = []
+    for (const id of Object.keys(layout)) {
+      const d = deviceById.get(id)
+      if (d) bx.push(G.deviceBox(d, layout[id]))
+    }
+    const tabs = stubs.map((st) => ({ ...st.tab, deviceId: st.deviceId }))
+    const moved = G.resolveOverlaps(bx, tabs, G.OVERLAP_MARGIN, movable)
+    return Object.keys(moved).length ? { ...layout, ...moved } : layout
+  }
+
   const addExisting = async (id, at) => {
     if (!id || pos[id]) return
     const c = at || centre()
     const n = Object.keys(pos).length
-    const next = { ...pos, [id]: { x: c.x - G.BOX_W / 2 + (at ? 0 : (n % 5) * 24), y: c.y - 23 + (at ? 0 : (n % 5) * 24) } }
+    const next = tidied({ ...pos, [id]: { x: c.x - G.BOX_W / 2 + (at ? 0 : (n % 5) * 24), y: c.y - 23 + (at ? 0 : (n % 5) * 24) } }, [id])
     setPos(next)
     setAddId('')
     await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id])
@@ -350,7 +398,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const id = newId()
     try {
       await putResource('wiringDevices', id, { name: uniqueName(item.type), type: item.type, role: item.role })
-      const next = { ...pos, [id]: { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) } }
+      const next = tidied({ ...pos, [id]: { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) } }, [id])
       setPos(next)
       await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id])
       setSelection({ type: 'device', id })
@@ -388,7 +436,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const autoArrange = async () => {
     setBusy(true)
-    const layout = G.autoLayout(dagre, pageDevices, onPage)
+    const layout = tidied(G.autoLayout(dagre, pageDevices, onPage))
     setPos(layout)
     await save(layout, bends)
     setBusy(false)
@@ -604,7 +652,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const d = drag.current
     drag.current = null
     if (!d) return
-    if (d.kind === 'move' && d.moved) save(pos, bends)
+    if (d.kind === 'move' && d.moved) {
+      const next = tidied(pos, [d.id])
+      if (next !== pos) setPos(next)
+      save(next, bends)
+    }
     if (d.kind === 'bend' && d.moved) save(pos, bends)
     if (d.kind === 'wire') {
       setPreview(null)
@@ -628,14 +680,20 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     ? circuits.filter((c) => isLive(c) && c.derived &&
         (c.derived.cableIds.includes(selectedWire.id) || c.derived.returnCableIds.includes(selectedWire.id)))
     : []
+  const conduitLit = highlightId.startsWith('conduit:') ? conduitInfo.get(highlightId.slice(8)) : null
   const highlighted = [...(highlightId ? circuits.filter((c) => c.id === highlightId) : []), ...wireCircuits]
   const hl = { deviceIds: new Set(), cableIds: new Set() }
+  if (conduitLit) {
+    for (const c of onPage) {
+      if ((c.conduitIds || []).includes(conduitLit.id)) { hl.cableIds.add(c.id); hl.deviceIds.add(c.fromDeviceId); hl.deviceIds.add(c.toDeviceId) }
+    }
+  }
   for (const c of highlighted) {
     const h = G.circuitHighlight(c)
     h.deviceIds.forEach((x) => hl.deviceIds.add(x))
     h.cableIds.forEach((x) => hl.cableIds.add(x))
   }
-  const dimming = highlighted.length > 0
+  const dimming = highlighted.length > 0 || (conduitLit && hl.cableIds.size > 0)
   const pageCircuits = circuits.filter((c) => isLive(c) && c.derived && c.derived.deviceIds.some((id) => boxById.has(id)))
 
   const addable = devices.filter((d) => isLive(d) && !pos[d.id]).sort((a, b) => a.name.localeCompare(b.name))
@@ -663,9 +721,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <select value=${highlightId} onChange=${(e) => setHighlightId(e.target.value)} data-testid="highlight-circuit">
           <option value="">Highlight a circuit…</option>
           ${pageCircuits.map((c) => html`<option value=${c.id} key=${c.id}>${c.name}</option>`)}
+          ${bands.map((b) => html`<option value=${'conduit:' + b.conduitId} key=${'conduit:' + b.conduitId}>${(conduitInfo.get(b.conduitId) || {}).name || b.label} (conduit)</option>`)}
         </select>
       </div>
-      <div class="meta schematic-legend" data-testid="schematic-legend">Solid lines are DC, dashed lines are AC. A thin line beside a wire is its second conductor.</div>
+      <div class="meta schematic-legend" data-testid="schematic-legend">Solid lines are DC, dashed lines are AC. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
+      ${overlapping && html`<div class="meta schematic-notice" data-testid="overlap-notice">Some devices overlap. <button type="button" class="link-btn" data-testid="tidy" onClick=${tidyAll}>Tidy</button></div>`}
       ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
       ${notice && html`<div class="meta schematic-notice" data-testid="notice">${notice}</div>`}
       ${moreForm && html`
@@ -701,6 +761,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             viewBox="${view.x} ${view.y} ${view.w} ${view.h}"
             onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp}
             onDragOver=${(e) => e.preventDefault()} onDrop=${onDrop}>
+            ${bands.map((b) => html`<${ConduitBand} key=${b.conduitId} band=${b} />`)}
             ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName}
               selected=${!!selection && selection.type === 'wire' && selection.id === w.id}
               dim=${dimming && !hl.cableIds.has(w.id)} lit=${dimming && hl.cableIds.has(w.id)} />`)}
@@ -799,7 +860,7 @@ function WireMarker ({ kind, at }) {
 function WireShape ({ wire, deviceName, selected, dim, lit }) {
   const types = G.conductorTypes(wire.cable)
   const style = G.wireLineStyle(wire.cable)
-  const d = G.pathToD(wire.path)
+  const d = G.pathToDWithBridges(wire.path, wire.bridges)
   const paired = types.length > 1 ? G.pathToD(G.offsetPath(wire.path, 4)) : null
   const cls = `sch-wire${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
   return html`
@@ -807,6 +868,23 @@ function WireShape ({ wire, deviceName, selected, dim, lit }) {
       <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.cable, deviceName)}</title></path>
       ${paired && html`<path d=${paired} class="sch-wire-pair c-${types[1]}" stroke-dasharray=${style.dasharray || undefined} />`}
       ${style.marker && html`<${WireMarker} kind=${style.marker} at=${G.pathMidpoint(wire.path)} />`}
+    </g>
+  `
+}
+
+// A conduit or hose: a thin outlined band with a faint fill around the shared
+// stretches of its wires, stacked wider for a wire in several conduits, and
+// labelled at its start. The outline is drawn as a wider stroke under a
+// narrower fill stroke, so overlapping wires give one outline.
+function ConduitBand ({ band }) {
+  const w = 16 + band.layer * 8
+  const ds = band.stretches.map((p) => G.pathToD(p))
+  const at = band.labelAt
+  return html`
+    <g class="sch-conduit" data-conduit=${band.conduitId}>
+      ${ds.map((d, i) => html`<path key=${'o' + i} d=${d} class="sch-conduit-outline" stroke-width=${w + 2} />`)}
+      ${ds.map((d, i) => html`<path key=${'f' + i} d=${d} class="sch-conduit-fill" stroke-width=${w} />`)}
+      <text x=${at.x + 4} y=${at.y - w / 2 - 3} class="sch-conduit-label">${shorten(band.label, 40)}</text>
     </g>
   `
 }

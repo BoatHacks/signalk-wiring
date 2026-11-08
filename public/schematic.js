@@ -422,6 +422,7 @@ export function offPageStubs ({ boxes, cables, deviceName }) {
         otherDeviceId: it.otherDeviceId,
         side: it.side,
         label: 'to ' + (deviceName(it.otherDeviceId) || '?'),
+        terminal: it.terminal ? it.terminal.name : null,
         path,
         tab: {
           x: dir === 1 ? endX : endX - OFFPAGE_TAB_W,
@@ -604,32 +605,10 @@ export function circuitHighlight (circuit) {
 
 // ---- Layout -----------------------------------------------------------------
 
-// Positions for devices left to right from the supply, with dagre (passed in
-// so this module stays free of imports). Only cables with both ends in the
-// list count. Returns { [deviceId]: { x, y } } with x, y the top-left corner.
-export function autoLayout (dagre, devices, cables) {
-  const g = new dagre.graphlib.Graph({ multigraph: true })
-  g.setGraph({ rankdir: 'LR', nodesep: 30, ranksep: 90, marginx: 20, marginy: 20 })
-  g.setDefaultEdgeLabel(() => ({}))
-  const ids = new Set(devices.map((d) => d.id))
-  const sizes = {}
-  for (const d of devices) {
-    const box = deviceBox(d, { x: 0, y: 0 })
-    sizes[d.id] = box
-    g.setNode(d.id, { width: box.w, height: box.h })
-  }
-  for (const c of cables) {
-    if (c.status === 'removed' || !ids.has(c.fromDeviceId) || !ids.has(c.toDeviceId)) continue
-    g.setEdge(c.fromDeviceId, c.toDeviceId, {}, c.id)
-  }
-  dagre.layout(g)
-  const out = {}
-  for (const d of devices) {
-    const n = g.node(d.id)
-    out[d.id] = { x: Math.round(n.x - sizes[d.id].w / 2), y: Math.round(n.y - sizes[d.id].h / 2) }
-  }
-  return out
-}
+// autoLayout, resolveOverlaps and the other layout functions live in
+// schematicLayout.js and are re-exported here.
+export { autoLayout, resolveOverlaps, findOverlaps, rankGap, GAP_MIN, GAP_MAX, OVERLAP_MARGIN } from './schematicLayout.js'
+export { routePage, routeSchematicPage, conduitBands, pathToDWithBridges, USE_NEW_ROUTER } from './wireRouter.js'
 
 // A viewBox that frames every box with a margin, or a default when empty.
 export function fitView (boxes, margin = 40) {
