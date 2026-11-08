@@ -123,8 +123,14 @@ A wire run or device is either:
   confirmed step. This erases the cable with its conductors, conduit
   assignments, schematic bends, attachments and change log. Nothing else is
   deleted this way.
-- There is no `removed → active` transition; if something is reinstalled,
-  it's a new record (possibly referencing the old one as prior art).
+- There is no `removed → active` transition, with one exception: **undo**.
+  Right after a cable, device or conduit is removed in the web app, an
+  "X removed. Undo" message is shown for about eight seconds. Undo sets the
+  record back to active and appends a change log entry "restored (undo)" with
+  the before and after status. Only that message uses it; once the message is
+  gone, a record that was not undone stays removed, and if something is
+  reinstalled later it's a new record (possibly referencing the old one as
+  prior art).
 
 ## 4. Data Model
 

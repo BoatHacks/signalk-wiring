@@ -715,3 +715,12 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-port-block { fill: none; stroke: var(--border-strong); stroke-width: 1; }
 .sch-port-label { font-size: 9px; fill: var(--text-muted-strong); pointer-events: none; }
 .sch-terminal.c-signal { fill: var(--wire-signal); }
+
+/* Undo message at the top of the main area */
+.undo-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 12px; padding: 8px 12px;
+  background: var(--surface-alt); color: var(--text);
+  border: 1px solid var(--border-strong); border-left: 4px solid var(--warn);
+  border-radius: 4px;
+}

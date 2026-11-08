@@ -13,6 +13,7 @@ import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { SchematicsTab } from './schematicView.js'
 import { hashForState, parseHash } from './router.js'
+import { UndoProvider, useUndo } from './undoBar.js'
 import { deviceBox, endTerminals } from './schematic.js'
 import { PortBlocks } from './ports.js'
 import { useSettings, colorPlaceholder } from './settings.js'
@@ -61,6 +62,11 @@ async function putResource (type, id, value) {
     body: JSON.stringify(value)
   })
   if (!res.ok) throw new Error(apiErrorMessage(res.status))
+}
+
+// Undo of a removal: a plain write of status active, which the store logs as a restore.
+async function restoreResource (type, id) {
+  await putResource(type, id, { status: 'active' })
 }
 
 async function deleteResource (type, id) {
@@ -1209,6 +1215,7 @@ function IconButton ({ icon, label, onClick, active, disabled }) {
 }
 
 function CablesList () {
+  const undo = useUndo()
   const settings = useSettings()
   const [reloadKey, setReloadKey] = useState(0)
   const [devKey, setDevKey] = useState(0)
@@ -1271,8 +1278,13 @@ function CablesList () {
 
   const removeCable = async (cable) => {
     if (!confirmRemove(cableTitle(cable, deviceNameById))) return
+    const title = cableTitle(cable, deviceNameById)
     await deleteResource('wiringWireRuns', cable.id)
     setReloadKey((k) => k + 1)
+    undo.offer({
+      message: `Cable "${title}" removed.`,
+      onUndo: async () => { await restoreResource('wiringWireRuns', cable.id); setReloadKey((k) => k + 1) }
+    })
   }
 
   if (showImport) {
@@ -1708,6 +1720,7 @@ function DevicesList ({ onSelect }) {
 }
 
 function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
+  const undo = useUndo()
   const [device, setDevice] = useState(null)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -1744,8 +1757,10 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
 
   const removeDevice = async () => {
     if (!device || !confirmRemove(device.name)) return
+    const name = device.name
     await deleteResource('wiringDevices', deviceId)
-    onBack()
+    onBack() // leaving the page first: it would otherwise finish the message below
+    undo.offer({ message: `Device "${name}" removed.`, onUndo: () => restoreResource('wiringDevices', deviceId) })
   }
 
   return html`
@@ -1890,6 +1905,7 @@ function ConduitsList ({ onSelect }) {
 }
 
 function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
+  const undo = useUndo()
   const [conduit, setConduit] = useState(null)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -1923,8 +1939,10 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
   }
   const removeConduit = async () => {
     if (!conduit || !confirmRemove(conduit.name)) return
+    const name = conduit.name
     await deleteResource('wiringConduits', conduitId)
-    onBack()
+    onBack() // leaving the page first: it would otherwise finish the message below
+    undo.offer({ message: `Conduit "${name}" removed.`, onUndo: () => restoreResource('wiringConduits', conduitId) })
   }
   const setCables = (cableIds) => guard(() => putResource('wiringConduits', conduitId, { cableIds }))
   const addCable = () => {
@@ -2073,10 +2091,12 @@ function AppBody () {
   const settings = useSettings()
   const [theme, toggleTheme] = useTheme(settings.autoTheme)
   const [notFound, setNotFound] = useState(null)
+  const undo = useUndo()
   const [route, navigate] = useRoute(() => setNotFound(null))
   const { tab, id } = route
 
-  const go = (next, opts) => { setNotFound(null); navigate(next, opts) }
+  // Leaving a view finishes whatever an open undo message was waiting to do.
+  const go = (next, opts) => { setNotFound(null); undo.flush(); navigate(next, opts) }
   const switchTab = (nextTab) => go({ tab: nextTab, id: null })
   const open = (nextTab) => (nextId) => go({ tab: nextTab, id: nextId })
   const back = (nextTab) => () => go({ tab: nextTab, id: null })
@@ -2131,7 +2151,7 @@ function AppBody () {
 }
 
 function App () {
-  return html`<${AppBody} />`
+  return html`<${UndoProvider}><${AppBody} /><//>`
 }
 
 // index.html's "Loading…" placeholder is static markup, not something

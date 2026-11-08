@@ -227,6 +227,15 @@ change writes the hash only when it differs from the current one, and a
 id opens the list with a short notice. Tools, forms, selected wires and zoom
 are not in the URL.
 
+**Undo** (plan 0018). `public/undoBar.js` has `UndoProvider` (wrapped around
+the main area by `App`, renders the message at its top), the `UndoBar`
+component (message, Undo button, about eight second timer that pauses while
+the pointer is on it) and the `useUndo()` hook with `offer({ message, onUndo,
+onExpire })` and `flush()`. The store's `restore(kind, id)` sets a removed
+record back to active and logs "restored (undo)"; a plain write of `status:
+active` over a removed record is logged the same way, so the resource API
+needs no new route.
+
 **Schematic canvas** (plan 0016). `public/schematic.js` is pure geometry
 (device boxes and terminal anchors, right-angle routing with lane offsets,
 wires through bend points, off-page stubs, hit testing, default conductors,

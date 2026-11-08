@@ -464,6 +464,15 @@ const CHILDREN = {
 // Records are never hard-deleted (SPEC.md §3.1): "removing" a wire run or
 // device means setting status to 'removed' so the history stays queryable.
 const REMOVED_STATUS = 'removed'
+const RESTORED_SUMMARY = 'restored (undo)'
+
+// The one allowed way back from removed to active is the undo message, so a
+// write that does it is logged as a restore (SPEC.md section 3.2).
+function changeSummary (existing, updated) {
+  if (existing.status !== REMOVED_STATUS && updated.status === REMOVED_STATUS) return 'removed'
+  if (existing.status === REMOVED_STATUS && updated.status === 'active') return RESTORED_SUMMARY
+  return 'updated'
+}
 
 class Store {
   constructor (dbPath) {
@@ -646,7 +655,7 @@ class Store {
       if (!same(before, after)) diff.devices = { before, after }
     }
     if (Object.keys(diff).length > 0) {
-      const summary = existing.status !== REMOVED_STATUS && updated.status === REMOVED_STATUS ? 'removed' : 'updated'
+      const summary = changeSummary(existing, updated)
       this._logChange('schematic', id, summary, diff)
     }
     return updated
@@ -856,9 +865,7 @@ class Store {
     }
     if (childrenChanged) diff[children.field] = { before: existing[children.field], after: updated[children.field] }
     if (Object.keys(diff).length > 0) {
-      const summary = existing.status !== 'removed' && updated.status === REMOVED_STATUS
-        ? 'removed'
-        : 'updated'
+      const summary = changeSummary(existing, updated)
       this._logChange(kind, id, summary, diff)
     }
     this._afterWrite(kind)
@@ -1231,6 +1238,14 @@ class Store {
   // Marks a record removed rather than deleting the row (SPEC.md §3.1/§3.2).
   remove (kind, id) {
     return this.update(kind, id, { status: REMOVED_STATUS })
+  }
+
+  // Undo of a removal: status back to active, logged once as a restore.
+  // Only a removed record can be restored; anything else is left alone.
+  restore (kind, id) {
+    const existing = this.get(kind, id)
+    if (!existing || existing.status !== REMOVED_STATUS) return existing
+    return this.update(kind, id, { status: 'active' })
   }
 
   // Erases a cable for good, only once it has been removed (so it takes two

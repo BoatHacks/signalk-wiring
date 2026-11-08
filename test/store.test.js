@@ -82,6 +82,46 @@ test('remove marks status removed instead of deleting the row', () => {
   store.close()
 })
 
+test('restore puts a removed record back to active and logs one restore', () => {
+  const store = freshStore()
+  const device = store.create('device', { name: 'Old autopilot' })
+  store.remove('device', device.id)
+  const before = store.changeLog('device', device.id).length
+
+  const restored = store.restore('device', device.id)
+  assert.equal(restored.status, 'active')
+  const log = store.changeLog('device', device.id)
+  assert.equal(log.length, before + 1)
+  const last = log[log.length - 1]
+  assert.equal(last.summary, 'restored (undo)')
+  assert.deepEqual(JSON.parse(last.diff_json).status, { before: 'removed', after: 'active' })
+  store.close()
+})
+
+test('restore leaves active and unknown records alone, and works for cables and conduits', () => {
+  const store = freshStore()
+  const device = store.create('device', { name: 'Pump' })
+  const n = store.changeLog('device', device.id).length
+  assert.equal(store.restore('device', device.id).status, 'active')
+  assert.equal(store.changeLog('device', device.id).length, n)
+  assert.equal(store.restore('device', 'nope'), null)
+
+  const conduit = store.create('conduit', { name: 'Conduit A' })
+  store.remove('conduit', conduit.id)
+  assert.equal(store.restore('conduit', conduit.id).status, 'active')
+  store.close()
+})
+
+test('a plain write of status active on a removed record is logged as a restore', () => {
+  const store = freshStore()
+  const device = store.create('device', { name: 'Pump' })
+  store.remove('device', device.id)
+  store.update('device', device.id, { status: 'active' })
+  const log = store.changeLog('device', device.id)
+  assert.equal(log[log.length - 1].summary, 'restored (undo)')
+  store.close()
+})
+
 test('update on an unknown id returns null', () => {
   const store = freshStore()
   assert.equal(store.update('device', 'does-not-exist', { name: 'x' }), null)

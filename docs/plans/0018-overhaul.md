@@ -211,7 +211,7 @@ because they use it.
 
 - [x] Hash routing: `public/router.js` with tests, App and the schematic and
       floorplan tabs wired to it, not-found handling.
-- [ ] Undo: store `restore`, `UndoBar`, wired into the lists and the canvases,
+- [x] Undo: store `restore`, `UndoBar`, wired into the lists (the canvases follow in the steps below),
       SPEC §3.2 updated with the exception.
 - [ ] Lists and cables: row icons on one line, search box, show removed,
       links between views.
