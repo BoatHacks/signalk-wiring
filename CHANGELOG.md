@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-08
+
 ### Fixed
 
 - Live mode ignored every update from a real SignalK server, so nothing showed
