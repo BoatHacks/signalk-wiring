@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-08
+
 ### Added
 
 - Live view: a Live tool on the floorplan, and a Live button on the circuit
