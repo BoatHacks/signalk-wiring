@@ -319,7 +319,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
   const stubs = stubsBase.map((st) => {
     const r = routed && routed.stubs.get(st.cableId)
-    return r ? { ...st, path: r.path, tab: r.tab } : st
+    return r ? { ...st, path: r.path, tab: r.tab, bridges: r.bridges || [] } : st
   })
   const conduitInfo = new Map(conduits.filter(isLive).map((c) => [c.id, c]))
   const bands = G.conduitBands({
@@ -926,7 +926,7 @@ function StubShape ({ stub }) {
   const end = stub.path[stub.path.length - 1]
   return html`
     <g class="sch-stub" data-stub=${stub.cableId}>
-      <path d=${G.pathToD(stub.path)} class="sch-stub-line" />
+      <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class="sch-stub-line" />
       <rect x=${stub.tab.x} y=${stub.tab.y} width=${stub.tab.w} height=${stub.tab.h} rx="3" class="sch-tab" />
       <text x=${stub.tab.x + stub.tab.w / 2} y=${stub.tab.y + 14} text-anchor="middle" class="sch-tab-label">${shorten(stub.label, 20)}</text>
     </g>
