@@ -213,9 +213,9 @@ because they use it.
       floorplan tabs wired to it, not-found handling.
 - [x] Undo: store `restore`, `UndoBar`, wired into the lists (the canvases follow in the steps below),
       SPEC §3.2 updated with the exception.
-- [ ] Lists and cables: row icons on one line, search box, show removed,
+- [x] Lists and cables: row icons on one line, search box, show removed,
       links between views.
-- [ ] Duplicate device and cable, and the "Take photo" button.
+- [x] Duplicate device and cable, and the "Take photo" button.
 - [ ] Load summary explanations and legend.
 - [x] Schematic canvas: delete wire with Undo and permanent deletion when the
       window ends, take a device off the page with Undo, keyboard handling.

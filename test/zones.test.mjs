@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseTags, tagsToText, collectTags, matchesFilter, circuitMatches } from '../public/zones.js'
+import {
+  parseTags, tagsToText, collectTags, matchesFilter, circuitMatches, matchesSearch, matchesRemoved, readShowRemoved, writeShowRemoved
+} from '../public/zones.js'
 
 test('parseTags splits on commas, trims, drops empties and duplicates', () => {
   assert.deepEqual(parseTags(' audio: main, audio: cockpit ,, audio: main '), ['audio: main', 'audio: cockpit'])
@@ -46,4 +48,51 @@ test('a circuit matches when any live cable of it matches', () => {
   assert.equal(circuitMatches(c1, cables, { zoneId: 'z1' }), false)
   assert.equal(circuitMatches({ derived: null }, cables, {}), true)
   assert.equal(circuitMatches({ derived: null }, cables, { zoneId: 'z1' }), false)
+})
+
+test('matchesSearch matches name, label, type, zone and tags case-insensitively', () => {
+  const d = { name: 'Bilge Pump', type: 'pump', zone: 'Engine room', tags: ['Safety: bilge'], cableLabel: 'W12' }
+  assert.equal(matchesSearch(d, ''), true)
+  assert.equal(matchesSearch(d, '  '), true)
+  assert.equal(matchesSearch(d, 'BILGE'), true)
+  assert.equal(matchesSearch(d, 'pump'), true)
+  assert.equal(matchesSearch(d, 'engine'), true)
+  assert.equal(matchesSearch(d, 'safety'), true)
+  assert.equal(matchesSearch(d, 'w12'), true)
+  assert.equal(matchesSearch(d, 'bilge engine'), true)
+  assert.equal(matchesSearch(d, 'bilge galley'), false)
+  assert.equal(matchesSearch(d, 'zzz'), false)
+  assert.equal(matchesSearch({ cableLabel: '' }, 'anchor', ['Anchor winch']), true)
+  assert.equal(matchesSearch({}, 'x'), false)
+})
+
+test('search combines with the zone and tag filter', () => {
+  const items = [
+    { name: 'Pump A', zoneId: 'z1', tags: ['bilge'] },
+    { name: 'Pump B', zoneId: 'z2', tags: ['bilge'] },
+    { name: 'Light', zoneId: 'z1', tags: [] }
+  ]
+  const hits = items.filter((i) => matchesFilter(i, { zoneId: 'z1' }) && matchesSearch(i, 'pump'))
+  assert.deepEqual(hits.map((i) => i.name), ['Pump A'])
+})
+
+test('matchesRemoved hides removed records unless asked', () => {
+  assert.equal(matchesRemoved({ status: 'removed' }, false), false)
+  assert.equal(matchesRemoved({ status: 'removed' }, true), true)
+  assert.equal(matchesRemoved({ status: 'active' }, false), true)
+})
+
+test('the show-removed choice is remembered per list and survives missing or throwing storage', () => {
+  const data = new Map()
+  const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) }
+  assert.equal(readShowRemoved('cables', storage), false)
+  writeShowRemoved('cables', true, storage)
+  assert.equal(readShowRemoved('cables', storage), true)
+  assert.equal(readShowRemoved('devices', storage), false)
+  writeShowRemoved('cables', false, storage)
+  assert.equal(readShowRemoved('cables', storage), false)
+  const broken = { getItem () { throw new Error('blocked') }, setItem () { throw new Error('blocked') } }
+  assert.equal(readShowRemoved('cables', broken), false)
+  assert.doesNotThrow(() => writeShowRemoved('cables', true, broken))
+  assert.equal(readShowRemoved('cables', undefined), false) // no localStorage on the host
 })

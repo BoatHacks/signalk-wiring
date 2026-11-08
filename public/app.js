@@ -2,7 +2,11 @@ import { html, render, useState, useEffect } from './vendor/preact-standalone.mo
 import { newId } from './ids.js'
 import { PathCombobox } from './signalkPaths.js'
 import { ROLES, roleLabel } from './roles.js'
-import { NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches } from './zones.js'
+import {
+  NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches, matchesSearch, matchesRemoved,
+  readShowRemoved, writeShowRemoved
+} from './zones.js'
+import { duplicateDevicePayload, duplicateCablePrefill } from './duplicate.js'
 import {
   CABLE_KINDS, CONDUCTOR_LABELS, kindByValue, defaultNegativeLanding, negativeLandingCandidates, needsTerminal,
   terminalOptions, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle
@@ -96,6 +100,40 @@ function StatusBadge ({ status }) {
 function ErrorBanner ({ message }) {
   if (!message) return null
   return html`<div class="error-banner">${message}</div>`
+}
+
+// Plain anchors on the hash routes, so a link can be opened in a new tab and
+// the Back button returns to where the link was. Clicks do not reach the
+// clickable list row around a link.
+function RouteLink ({ tab, id, children }) {
+  return html`<a class="route-link" href=${hashForState({ tab, id })} onClick=${(e) => e.stopPropagation()}>${children}</a>`
+}
+
+// A device name that links to the device, or "?" when the device is unknown.
+function DeviceLink ({ id, names }) {
+  const name = id ? names.get(id) : null
+  return name ? html`<${RouteLink} tab="devices" id=${id}>${name}<//>` : '?'
+}
+
+// The remembered "Show removed" choice of one list; off by default.
+function useShowRemoved (listKey) {
+  const [on, setOn] = useState(() => readShowRemoved(listKey))
+  const set = (value) => { setOn(value); writeShowRemoved(listKey, value) }
+  return [on, set]
+}
+
+// Search box and "Show removed" toggle, placed in the zone and tag filter bar.
+function ListControls ({ query, onQuery, showRemoved, onShowRemoved, removedCount, label }) {
+  return html`
+    <label class="form-field compact search-field"><span>Search</span>
+      <input type="search" value=${query} placeholder=${label} aria-label="Search"
+        onInput=${(e) => onQuery(e.target.value)} />
+    </label>
+    <label class="check-inline">
+      <input type="checkbox" class="checkbox-input" checked=${showRemoved} onChange=${(e) => onShowRemoved(e.target.checked)} />
+      Show removed${removedCount > 0 ? ` (${removedCount})` : ''}
+    </label>
+  `
 }
 
 function BackLink ({ onClick, children }) {
@@ -513,16 +551,30 @@ function AttachmentList ({ ownerType, ownerId, iconAttachmentId, onIconChange })
           `)}
         </div>
       `}
-      <label class="upload-button">
-        ${uploading ? 'Uploading…' : '+ Add photo, schematic or file'}
-        <input
-          type="file"
-          accept=${ALLOWED_ATTACHMENT_MIME_TYPES}
-          onChange=${upload}
-          disabled=${uploading}
-          hidden
-        />
-      </label>
+      <div class="upload-row">
+        <label class="upload-button">
+          ${uploading ? 'Uploading…' : '+ Add photo, schematic or file'}
+          <input
+            type="file"
+            accept=${ALLOWED_ATTACHMENT_MIME_TYPES}
+            onChange=${upload}
+            disabled=${uploading}
+            hidden
+          />
+        </label>
+        <label class="upload-button">
+          Take photo
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            data-testid="take-photo"
+            onChange=${upload}
+            disabled=${uploading}
+            hidden
+          />
+        </label>
+      </div>
     </div>
   `
 }
@@ -965,7 +1017,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
         notes: '',
         ...(prefill || {})
       })
-  const [tagsText, setTagsText] = useState(() => tagsToText(cable ? cable.tags : []))
+  const [tagsText, setTagsText] = useState(() => tagsToText(cable ? cable.tags : (prefill && prefill.tags) || []))
   const [more, setMore] = useState(() => (cable || prefill) ? kindByValue(values.kind).more : false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -1203,6 +1255,7 @@ const ROW_ICONS = {
   remove: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
   purge: '<circle cx="12" cy="12" r="9"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/><line x1="15.5" y1="8.5" x2="8.5" y2="15.5"/>',
   attachments: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  duplicate: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
   history: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>'
 }
 
@@ -1225,6 +1278,8 @@ function CablesList () {
   const [attachmentsId, setAttachmentsId] = useState(null)
   const [historyId, setHistoryId] = useState(null)
   const [filter, setFilter] = useState({})
+  const [query, setQuery] = useState('')
+  const [showRemoved, setShowRemoved] = useShowRemoved('cables')
   const [picked, setPicked] = useState(() => new Set())
   const [bulk, setBulk] = useState(false)
   const { loading, error, items: cables } = useResourceList('wiringWireRuns', reloadKey)
@@ -1233,7 +1288,10 @@ function CablesList () {
   const { items: conduits } = useResourceList('wiringConduits')
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
   const conduitNameById = new Map(conduits.map((c) => [c.id, c.name]))
-  const visible = cables.filter((c) => matchesFilter(c, filter))
+  const endNames = (c) => [deviceNameById.get(c.fromDeviceId), deviceNameById.get(c.toDeviceId)]
+  const visible = cables.filter((c) =>
+    matchesFilter(c, filter) && matchesRemoved(c, showRemoved) && matchesSearch(c, query, endNames(c)))
+  const removedCount = cables.filter((c) => c.status === 'removed').length
   const pickedCables = cables.filter((c) => picked.has(c.id))
   const allVisiblePicked = visible.length > 0 && visible.every((c) => picked.has(c.id))
   const togglePicked = (id) => setPicked((prev) => {
@@ -1324,8 +1382,9 @@ function CablesList () {
       `}
       ${form && html`
         <${CableForm}
-          key=${`${settings.defaultGaugeUnit}/${settings.defaultLengthUnit}/${form === 'create' ? 'new' : form.id}`}
-          cable=${form === 'create' ? null : form}
+          key=${`${settings.defaultGaugeUnit}/${settings.defaultLengthUnit}/${form === 'create' ? 'new' : form.duplicateOf ? 'copy-' + form.duplicateOf.id : form.id}`}
+          cable=${form === 'create' || form.duplicateOf ? null : form}
+          prefill=${form !== 'create' && form.duplicateOf ? duplicateCablePrefill(cableToValues(form.duplicateOf)) : null}
           devices=${devices}
           cables=${cables}
           circuits=${circuits}
@@ -1337,7 +1396,13 @@ function CablesList () {
       ${loading && html`<div class="empty-state">Loading cables&hellip;</div>`}
       <${ErrorBanner} message=${error} />
       ${!loading && !error && cables.length === 0 && html`<div class="empty-state">No cables recorded yet.</div>`}
-      ${cables.length > 0 && html`<${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter} />`}
+      ${cables.length > 0 && html`
+        <${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter}>
+          <${ListControls} query=${query} onQuery=${setQuery} showRemoved=${showRemoved} onShowRemoved=${setShowRemoved}
+            removedCount=${removedCount} label="Name, label, zone, tag" />
+        <//>
+      `}
+      ${cables.length > 0 && visible.length === 0 && html`<div class="empty-state">No cables match.</div>`}
       ${visible.length > 0 && html`
         <table>
           <thead>
@@ -1349,8 +1414,8 @@ function CablesList () {
               const rows = [html`
                 <tr key=${cable.id}>
                   <td><input type="checkbox" class="checkbox-input" checked=${picked.has(cable.id)} onChange=${() => togglePicked(cable.id)} /></td>
-                  <td>${deviceNameById.get(cable.fromDeviceId) || '?'}</td>
-                  <td>${deviceNameById.get(cable.toDeviceId) || '?'}</td>
+                  <td><${DeviceLink} id=${cable.fromDeviceId} names=${deviceNameById} /></td>
+                  <td><${DeviceLink} id=${cable.toDeviceId} names=${deviceNameById} /></td>
                   <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}</td>
                   <td>${cable.cableLabel || '-'}</td>
                   <td>${(cable.conduitIds || []).map((id) => conduitNameById.get(id) || '?').join(' > ') || '-'}</td>
@@ -1359,8 +1424,9 @@ function CablesList () {
                   <td>${cable.zone || '-'}${(cable.tags || []).length ? html`<div class="meta">${cable.tags.join(', ')}</div>` : ''}</td>
                   <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '-'}</td>
                   <td><${StatusBadge} status=${cable.status} /></td>
-                  <td class="row-actions">
+                  <td class="actions-cell"><div class="row-actions">
                     <${IconButton} icon="edit" label="Edit" onClick=${() => { setNotice(null); setForm(cable) }} />
+                    <${IconButton} icon="duplicate" label="Duplicate" onClick=${() => { setNotice(null); setForm({ duplicateOf: cable }) }} />
                     ${cable.status !== 'removed'
                       ? html`<${IconButton} icon="remove" label="Remove" onClick=${() => removeCable(cable)} />`
                       : html`<${IconButton} icon="purge" label="Delete permanently" onClick=${() => purgeCable(cable)} />`}
@@ -1368,7 +1434,7 @@ function CablesList () {
                       active=${attachmentsId === cable.id} onClick=${() => setAttachmentsId(attachmentsId === cable.id ? null : cable.id)} />
                     <${IconButton} icon="history" label=${historyId === cable.id ? 'Hide history' : 'History'}
                       active=${historyId === cable.id} onClick=${() => setHistoryId(historyId === cable.id ? null : cable.id)} />
-                  </td>
+                  </div></td>
                 </tr>
               `]
               if (attachmentsId === cable.id) {
@@ -1422,9 +1488,13 @@ function CircuitsList ({ onSelect }) {
   const { items: cables } = useResourceList('wiringWireRuns')
   const { items: devices } = useResourceList('wiringDevices')
   const [filter, setFilter] = useState({})
+  const [query, setQuery] = useState('')
+  const [showRemoved, setShowRemoved] = useShowRemoved('circuits')
   const nameById = new Map(devices.map((d) => [d.id, d.name]))
+  const endNames = (c) => c.derived ? [...c.derived.supplyDeviceIds, ...c.derived.endDeviceIds].map((id) => nameById.get(id)) : []
+  const removedCount = items.filter((c) => c.status === 'removed').length
   const visible = items
-    .filter((c) => circuitMatches(c, cables, filter))
+    .filter((c) => circuitMatches(c, cables, filter) && matchesRemoved(c, showRemoved) && matchesSearch(c, query, endNames(c)))
     .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'removed' ? 1 : -1))
 
   return html`
@@ -1438,7 +1508,13 @@ function CircuitsList ({ onSelect }) {
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No circuits yet. Add cables between devices and they appear here.</div>
       `}
-      ${items.length > 0 && html`<${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter} />`}
+      ${items.length > 0 && html`
+        <${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter}>
+          <${ListControls} query=${query} onQuery=${setQuery} showRemoved=${showRemoved} onShowRemoved=${setShowRemoved}
+            removedCount=${removedCount} label="Name, device" />
+        <//>
+      `}
+      ${items.length > 0 && visible.length === 0 && html`<div class="empty-state">No circuits match.</div>`}
       ${visible.map((circuit) => {
         const d = circuit.derived
         return html`
@@ -1598,7 +1674,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
   const cableById = new Map(cables.map((c) => [c.id, c]))
   const feedCables = d ? d.cableIds.map((id) => cableById.get(id)).filter(Boolean) : []
   const returnCables = d ? d.returnCableIds.map((id) => ({ ...cableById.get(id), isReturn: true })).filter((c) => c.id) : []
-  const names = (ids) => ids.map((id) => deviceNameById.get(id) || '?').join(', ') || '-'
+  const names = (ids) => ids.length === 0 ? '-' : ids.map((id, i) => html`${i > 0 ? ', ' : ''}<${DeviceLink} id=${id} names=${deviceNameById} />`)
 
   return html`
     <div>
@@ -1609,7 +1685,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
           <h2>${circuit.name} <${StatusBadge} status=${circuit.status} /></h2>
           <div class="meta">${circuitFacts(circuit)}</div>
           ${d && html`
-            <div class="meta">Protected by: ${d.protectorId ? deviceNameById.get(d.protectorId) || '?' : 'nothing (no fuse or breaker)'}</div>
+            <div class="meta">Protected by: ${d.protectorId ? html`<${DeviceLink} id=${d.protectorId} names=${deviceNameById} />` : 'nothing (no fuse or breaker)'}</div>
             <div class="meta">Supply: ${names(d.supplyDeviceIds)}</div>
             <div class="meta">Ends at: ${names(d.endDeviceIds)}</div>
             ${d.implicitReturnDeviceIds.length > 0 && html`<div class="meta">Negative assumed alongside the feed for: ${names(d.implicitReturnDeviceIds)}</div>`}
@@ -1650,10 +1726,10 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
           <tbody>
             ${[...feedCables, ...returnCables].map((c) => html`
               <tr key=${(c.isReturn ? 'r-' : 'f-') + c.id}>
-                <td>${deviceNameById.get(c.fromDeviceId) || '?'}</td>
-                <td>${deviceNameById.get(c.toDeviceId) || '?'}</td>
+                <td><${DeviceLink} id=${c.fromDeviceId} names=${deviceNameById} /></td>
+                <td><${DeviceLink} id=${c.toDeviceId} names=${deviceNameById} /></td>
                 <td>${c.isReturn ? 'Negative return' : 'Feed'}</td>
-                <td>${c.cableLabel || '-'}</td>
+                <td><${RouteLink} tab="cables">${c.cableLabel || 'Cable'}<//></td>
                 <td>${c.gauge ? `${c.gauge} ${c.gaugeUnit || ''}` : '-'}</td>
                 <td>${c.length ? `${c.length} ${c.lengthUnit || ''}` : '-'}</td>
               </tr>
@@ -1670,8 +1746,12 @@ function DevicesList ({ onSelect }) {
   const [showForm, setShowForm] = useState(false)
   const { loading, error, items } = useResourceList('wiringDevices', reloadKey)
   const [filter, setFilter] = useState({})
+  const [query, setQuery] = useState('')
+  const [showRemoved, setShowRemoved] = useShowRemoved('devices')
+  const removedCount = items.filter((d) => d.status === 'removed').length
   const visible = items.filter((d) =>
-    matchesFilter(d, filter) && (!filter.role || (d.role || 'consumer') === filter.role))
+    matchesFilter(d, filter) && (!filter.role || (d.role || 'consumer') === filter.role) &&
+    matchesRemoved(d, showRemoved) && matchesSearch(d, query))
 
   const createDevice = async (payload) => {
     await putResource('wiringDevices', newId(), payload)
@@ -1698,7 +1778,13 @@ function DevicesList ({ onSelect }) {
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No devices recorded yet.</div>
       `}
-      <${ZoneTagFilter} items=${items} filter=${filter} onChange=${setFilter} withRole=${true} />
+      ${items.length > 0 && html`
+        <${ZoneTagFilter} items=${items} filter=${filter} onChange=${setFilter} withRole=${true}>
+          <${ListControls} query=${query} onQuery=${setQuery} showRemoved=${showRemoved} onShowRemoved=${setShowRemoved}
+            removedCount=${removedCount} label="Name, type, zone, tag" />
+        <//>
+      `}
+      ${items.length > 0 && visible.length === 0 && html`<div class="empty-state">No devices match.</div>`}
       ${visible.map((device) => html`
         <div
           key=${device.id}
@@ -1719,12 +1805,16 @@ function DevicesList ({ onSelect }) {
   `
 }
 
+// Ids of freshly duplicated devices: their page opens in the edit form, so the
+// name can be changed at once. Not in the URL (forms stay out of it).
+const editOnOpen = new Set()
+
 function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
   const undo = useUndo()
   const [device, setDevice] = useState(null)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(() => editOnOpen.delete(deviceId))
   const [showHistory, setShowHistory] = useState(false)
   const [calibrating, setCalibrating] = useState(false)
   const { items: circuits } = useResourceList('wiringCircuits')
@@ -1750,6 +1840,19 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
     try {
       await putResource('wiringDevices', deviceId, { ...device, iconAttachmentId: attachmentId })
       setReloadKey((k) => k + 1)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const duplicateDevice = async () => {
+    setError(null)
+    try {
+      const names = Object.values(await fetchResourceMap('wiringDevices')).map((d) => d.name)
+      const copyId = newId()
+      await putResource('wiringDevices', copyId, duplicateDevicePayload(device, names))
+      editOnOpen.add(copyId)
+      window.location.hash = hashForState({ tab: 'devices', id: copyId })
     } catch (err) {
       setError(err.message)
     }
@@ -1806,6 +1909,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
           ${device.notes && html`<p>${device.notes}</p>`}
           <div class="row-actions">
             <button onClick=${() => setEditing(true)}>Edit</button>
+            <button onClick=${duplicateDevice} data-testid="device-duplicate">Duplicate</button>
             ${(device.role || 'consumer') === 'consumer' && device.status !== 'removed' && html`
               <button onClick=${() => setCalibrating((v) => !v)} data-testid="calibrate-open">Calibrate load</button>
             `}

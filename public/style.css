@@ -234,7 +234,14 @@ button:disabled:hover { background: var(--surface); }
 
 .list-header { margin-bottom: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
 .row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-td.row-actions { padding: 6px 8px; }
+.actions-cell { padding: 4px 8px; white-space: nowrap; width: 1%; }
+.actions-cell .row-actions { flex-wrap: nowrap; gap: 4px; }
+.actions-cell button.icon-btn { padding: 4px 6px; min-width: 30px; min-height: 30px; }
+a.route-link { color: var(--accent); text-decoration: none; }
+a.route-link:hover { text-decoration: underline; }
+.search-field input { min-width: 200px; }
+.check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; align-self: flex-end; padding-bottom: 6px; }
+.upload-row { display: flex; gap: 10px; flex-wrap: wrap; }
 button.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px; min-width: 34px; min-height: 34px; }
 button.icon-btn svg { display: block; }
 

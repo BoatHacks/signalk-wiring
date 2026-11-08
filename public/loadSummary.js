@@ -1,5 +1,6 @@
 import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { loadFigures } from './measured.js'
+import { hashForState } from './router.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 
@@ -161,7 +162,7 @@ export function LoadSummary () {
               const load = calculateCircuitLoad(circuit, deviceById)
               return html`
                 <tr key=${circuit.id}>
-                  <td>${circuit.name}</td>
+                  <td><a class="route-link" href=${hashForState({ tab: 'circuits', id: circuit.id })}>${circuit.name}</a></td>
                   <td>
                     ${load.deviceCount}
                     ${load.unknownWattageCount > 0 && html`
