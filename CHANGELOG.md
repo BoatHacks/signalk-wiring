@@ -22,6 +22,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   circuits they feed, plus warnings for uneven strings, differing voltages,
   mixed chemistries and links that cannot be reduced. A battery on its own is
   a bank of one. Served by `GET /derived`.
+- A Batteries tab (`#/batteries`): one card per bank with its batteries, layout,
+  voltage, total and usable amp-hours and energy, chemistries, monitors, the
+  protectors, its warnings, and a note naming exactly what is missing when it
+  is incomplete (no made-up totals).
 
 ### Changed
 

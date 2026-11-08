@@ -38,6 +38,9 @@ test('parseHash: ids, decoding and malformed input', () => {
   assert.deepEqual(parseHash('#/devices/'), { tab: 'devices', id: null })
   assert.deepEqual(parseHash('#/cables/x'), { tab: 'cables', id: null })
   assert.deepEqual(parseHash('#/zones'), { tab: 'zones', id: null })
+  assert.deepEqual(parseHash('#/batteries'), { tab: 'batteries', id: null })
+  assert.deepEqual(parseHash('#/batteries/x'), { tab: 'batteries', id: null })
+  assert.equal(hashForState({ tab: 'batteries', id: null }), '#/batteries')
 })
 
 test('round trip', () => {

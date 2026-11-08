@@ -193,7 +193,7 @@ These are open to change in review:
 - [x] `src/banks.js` and the richer `/derived` banks, with tests.
 - [ ] Device form and page fields with the chemistry defaults; the link type in
       the popover, the full cable form and the cables table.
-- [ ] The Batteries tab and its route.
+- [x] The Batteries tab and its route.
 - [ ] Live values for batteries on the tab, the circuit diagram, the schematic
       and the battery page.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #6.

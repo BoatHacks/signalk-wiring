@@ -758,3 +758,15 @@ main:has(.schematic-editor) { max-width: none; }
 
 .incomplete-reason { max-width: 22em; white-space: normal; }
 .load-legend span { margin-right: 12px; }
+
+/* Batteries tab */
+.bank { margin-bottom: 14px; }
+.bank-card .bank-title { margin: 0 0 6px; }
+.bank-batteries { margin: 0 0 8px; padding-left: 18px; }
+.bank-stats { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 8px 0; }
+.bank-stat-label { font-size: 12px; color: var(--text-muted); }
+.bank-stat-value { font-size: 18px; font-weight: 600; }
+.bank-line { font-size: 13px; margin-top: 4px; }
+.bank-line-label { color: var(--text-muted-strong); display: inline-block; min-width: 100px; }
+.bank-incomplete { color: var(--warn); margin-bottom: 6px; }
+.bank-live:empty { display: none; }

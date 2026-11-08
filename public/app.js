@@ -16,6 +16,7 @@ import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { SchematicsTab } from './schematicView.js'
+import { BatteriesTab } from './batteriesView.js'
 import { hashForState, parseHash } from './router.js'
 import { UndoProvider, useUndo } from './undoBar.js'
 import { deviceBox, endTerminals } from './schematic.js'
@@ -2275,7 +2276,7 @@ function AppBody () {
   const named = { circuits: 'circuit', devices: 'device', conduits: 'conduit' }
   const detailMissing = (nextTab) => () => missing(nextTab)(`That ${named[nextTab]} was not found.`)
   const nav = [
-    ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['conduits', 'Conduits'],
+    ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'],
     ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan']
   ]
   const cableForm = (props) => html`<${CableForm} ...${props} />`
@@ -2306,6 +2307,7 @@ function AppBody () {
       ${tab === 'conduits' && id && html`
         <${ConduitDetail} key=${id} conduitId=${id} onBack=${back('conduits')} onNotFound=${detailMissing('conduits')} />
       `}
+      ${tab === 'batteries' && html`<${BatteriesTab} />`}
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
       ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${cableForm}
