@@ -19,6 +19,14 @@ to someone else doesn't depend on the current owner being present.
   can be fed by more than one circuit, and can record its rated power
   draw and a SignalK path (e.g. `electrical.switches.anchorLight`) it
   corresponds to. You can name a circuit and add notes.
+- **Live view and load calibration**: a Live mode on the floorplan, the
+  circuit diagram and the schematics shows which consumers are on, switches
+  them through the relay that feeds them (a read-write SignalK login, with
+  optional confirmation and a never-remote lock per device), and shows live
+  meter readings. A Calibrate load dialog measures what a device really draws
+  by switching it on and off, or watching it run, against a meter on its
+  circuit; accepted figures sit beside the nameplate rating and feed the load
+  check.
 - **Conduits**: record the conduits, hoses, looms, trunking and cable trays
   that cables share, with an optional route on the floorplan. Add cables to
   a conduit from its page; a cable can pass through several in order. A cable
@@ -105,7 +113,9 @@ shows a clear message rather than failing silently. If you expose your
 SignalK instance beyond your own network, this is controlled by
 SignalK's own `allow_readonly` setting. See
 [ARCHITECTURE.md §6](ARCHITECTURE.md#6-security-considerations) for the
-full reasoning.
+full reasoning. **Switching and calibration** need a read-write login: the
+plugin sends the switch command, so it can refuse a never-remote device, ask
+for confirmation and log each action.
 
 ## Why Node ≥ 22
 

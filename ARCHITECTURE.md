@@ -80,6 +80,8 @@ Registered via `registerWithRouter(router)`. Owns:
 - Derivation leftovers (`GET /plugins/signalk-wiring/derived`, readonly
   access): the battery banks and the warnings that belong to no circuit.
 - Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`).
+- Live view, switching and calibration routes live in `src/liveRoutes.js`
+  (see §2.2.1), registered from `index.js` beside these.
 - Device icons (`GET /plugins/signalk-wiring/devices/:id/icon`), registered
   with `router.access('readonly')` like the plan download so drawings can
   show them to any logged-in user. It serves only the one image marked as
@@ -98,10 +100,50 @@ Except for that download, these are admin-gated by SignalK itself (see §6), whi
 since they're only ever called by this plugin's own authoring UI. The
 webapp's static assets are *not* served from here — see §2.4.
 
+### 2.2.1 Live view, switching and calibration (plan 0017)
+
+- `src/switchability.js` is pure: `deriveSwitchability({ devices, cables,
+  circuits })` reuses the positive `feeds` of `deriveCircuits` and walks
+  upstream from each consumer to the nearest in-line devices with a switch
+  path (a consumer with its own switch path switches itself), and
+  downstream from each switch to the consumers it feeds. The flags of a
+  shared switch are the strictest of the switch and every consumer behind it,
+  so a lamp that shares a relay with a never-remote bilge pump is locked too.
+  It also lists the meters upstream of a consumer, nearest first, with
+  meters on a battery or source last and marked low confidence, plus meters
+  set on the circuit record, and the circuit voltage.
+- `src/switching.js` is the command side: it plans a switch (404, 409 not
+  switchable, 403 never remote, 409 confirmation), sends the PUT with
+  `app.putSelfPath` (a 200 is done, a 202 pending, anything else or a
+  10 s timeout a failure) in the format the path holds now, and logs every
+  action on the switch device's change log. The browser never sends the PUT.
+- `src/calibrationStats.js` is pure: the delta statistics (step per cycle
+  against the baselines either side, average, spread, noise, drift and
+  warnings, with the sign of the step normalised so a negative discharge
+  current still gives a positive load), the watch statistics (average, peak,
+  duty cycle and "on" threshold), step detection, downsampling and the
+  amps-to-watts conversion.
+- `src/calibration.js` is the run state machine, over injected `read`,
+  `readSwitch`, `switchTo` and clock functions, so it is tested with fake
+  time. One run at a time; it fails a run whose meter goes silent, whose
+  switch does not respond or whose command is refused, switches the device
+  back to how it found it, and keeps going when the browser closes.
+- `src/liveRoutes.js` registers the routes with `router.access('readonly')`
+  for reads and `router.access('readwrite')` for switching and calibration.
+  On servers without `router.access` the admin-only default applies, which
+  is stricter and so safe. `index.js` marks a run still running at start as
+  failed and cancels the run when the plugin stops.
+- The webapp side is `public/live.js` (pure state helpers, plus a hook that
+  loads `/live` and subscribes to the switch and meter paths over the SignalK
+  stream), `public/liveMarks.js` (lock, reading, legend), `public/calibrate.js`
+  (the dialog) and `public/measured.js` (measured values beside the rating,
+  and the figures the load check uses).
+
 ### 2.3 Storage layer (`src/store.js`)
 
 Wraps `better-sqlite3`. Owns all reads/writes to `circuits`, `wire_runs`, `wire_run_conductors`,
 `devices`, `device_terminals`, `conduits`, `wire_run_conduits`,
+`calibration_runs`,
 `attachments`, and `change_log`
 tables, and appends a
 `change_log` row on every mutating write to an active record (SPEC.md
@@ -216,6 +258,8 @@ CREATE TABLE circuits (   -- plan 0014: a thin record kept in step with the cabl
   cable_ids TEXT,          -- JSON list of the cables at the last sync
   voltage REAL,            -- optional override of the derived voltage
   convention TEXT,         -- override; NULL = use installation default
+  meter_path TEXT,         -- a meter on the whole derived circuit -- 0017
+  meter_unit TEXT,         -- 'A' | 'W' -- 0017
   status TEXT NOT NULL,    -- 'active' | 'removed'
   notes TEXT
 );
@@ -264,6 +308,11 @@ CREATE TABLE devices (
   trip_rating_a REAL,     -- fuse or breaker rating: it protects its branch -- 0014
   nominal_voltage REAL,   -- batteries and sources -- 0014
   power_factor REAL,      -- consumers on AC circuits, optional -- 0014
+  switch_path TEXT,       -- SignalK state path this device switches by -- 0017
+  confirm_switching INTEGER NOT NULL DEFAULT 0,  -- ask before switching -- 0017
+  never_remote INTEGER NOT NULL DEFAULT 0,       -- refuse remote switching -- 0017
+  meter_path TEXT,        -- SignalK path of a current or power meter -- 0017
+  meter_unit TEXT,        -- 'A' | 'W' -- 0017
   pos_x REAL,             -- meters, any axis may be NULL -- 0009
   pos_y REAL,
   pos_z REAL,
@@ -372,7 +421,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are eight migrations (the third to eighth are described below): plan 0008's field
+every subsequent restart. There are nine migrations (the third to ninth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -433,6 +482,36 @@ are emptied is dropped. `store.js` writes the two lists with the parent in one
 transaction. Only a change in which devices are on a page is logged (a
 `devices` diff of ids); moving a device or a bend point is layout and adds no
 entry, and a cable carries its own wiring history.
+
+Plan 0017's migration (version 9) adds `switch_path`, `confirm_switching`,
+`never_remote`, `meter_path` and `meter_unit` to `devices`, `meter_path` and
+`meter_unit` to `circuits`, and the `calibration_runs` table (from
+`schema.sql`; the migration guards the version):
+
+```sql
+CREATE TABLE calibration_runs (
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL REFERENCES devices(id),  -- who the result is about
+  switch_device_id TEXT REFERENCES devices(id),    -- the switch operated, if any
+  consumer_ids TEXT,        -- JSON list: the consumers a group result covers
+  method TEXT NOT NULL,     -- 'delta' | 'watch'
+  status TEXT NOT NULL,     -- 'running' | 'done' | 'failed' | 'cancelled'
+  review TEXT NOT NULL,     -- 'pending' | 'accepted' | 'rejected'
+  meter_path TEXT, meter_unit TEXT, voltage REAL,
+  estimate INTEGER NOT NULL DEFAULT 0,   -- amps times volts, power factor 1
+  started_at TEXT NOT NULL, ended_at TEXT,
+  params TEXT, samples TEXT, details TEXT,  -- JSON; samples are downsampled
+  avg_w REAL, peak_w REAL, duty_cycle REAL, confidence TEXT, error TEXT
+);
+```
+
+Existing devices are not flagged: the flags default to 0 and only a new
+device of a critical-looking type starts with `confirm_switching` on (`src/safety.js`,
+mirrored in `public/deviceTypes.js`). The flags are 0/1 in SQLite and
+booleans in resources. Runs are written often while they execute, so they
+are not in the change log; accepting or rejecting one, and every switch
+action, is logged on the device. `latestAcceptedRun` finds a device's own run
+or a group run listing it, and the device resource carries it as `measured`.
 
 Conductors and terminals live in child tables but are written, validated
 and change-logged as part of their parent: a write that carries the list
@@ -502,6 +581,15 @@ its live, drawn conduits in order.
   the download route adds a restrictive Content-Security-Policy and
   `nosniff` in case the URL is opened directly. Files are named by plan
   id, checked against their own bytes, and capped at 15MB.
+- Switching and calibration (plan 0017) change the real boat, so they sit
+  behind the read-write access level, not the anonymous read. The plugin, not
+  the browser, sends the PUT, so it can refuse a never-remote device, demand a
+  confirmation, and log every action (refusals too) on the switch device. A
+  calibration run switches a device with the same checks, and puts it back
+  as it found it however the run ends. Which devices ask for confirmation is
+  a free-text type match plus the flags the user sets, so the device form
+  says what the flags do and a critical device with an unusual type can be
+  missed; nothing starts as never remote.
 - No user input is ever interpolated into SQL — all queries go through
   `better-sqlite3`'s parameterized statement API.
 
@@ -513,6 +601,12 @@ signalk-wiring/
   src/
     resources.js            # ResourceProvider implementation
     routes.js                # attachments, diagram data, changelog routes
+    liveRoutes.js            # live view, switching, calibration routes
+    switchability.js         # pure: what can be switched, which meter measures it
+    switching.js             # sending the switch command, flags, logging
+    calibrationStats.js      # pure: delta and watch statistics
+    calibration.js           # calibration run state machine
+    safety.js                # critical-looking device types
     store.js                 # SQLite access layer
     schema.sql                # table definitions (§3)
   public/                   # name required by the signalk-webapp keyword (§2.4)
@@ -527,6 +621,10 @@ signalk-wiring/
     roles.js                   # device roles: labels and hints
     zones.js                   # tags parsing, zone and tag filters
     floorplan.js               # pure geometry: calibration, projection, routes
+    live.js                    # Live mode: states, switching, stream subscription
+    liveMarks.js               # Live mode: lock, reading, legend
+    calibrate.js               # the Calibrate load dialog
+    measured.js                # measured values beside the rating, load figures
     schematic.js               # pure geometry: boxes, terminals, routing, stubs, hit tests
     schematicView.js           # schematics tab: pages, canvas, palette, wires, bends
     quickCable.js              # pure: values for the quick cable popover

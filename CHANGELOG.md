@@ -7,6 +7,35 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Live view: a Live tool on the floorplan, and a Live button on the circuit
+  diagram and on schematics. Consumers show on or off from the SignalK
+  state of the relay that feeds them, and clicking one switches it through
+  the plugin. A consumer nothing can switch is greyed, a never-remote one
+  shows a lock, and a live meter reading shows where one exists. Where a
+  relay feeds several consumers they all switch together and the tooltip
+  says so.
+- Switching through the plugin: `POST /switch` (read-write login) refuses
+  never-remote devices, asks for confirmation where a device is flagged,
+  sends the PUT in the format the path holds, and logs each action on the
+  switch device.
+- Device fields: switch path, "Confirm before switching", "Never switch
+  remotely", meter path and meter unit (also a meter path on a circuit).
+  New devices of critical-looking types (bilge pump, refrigerator,
+  autopilot, navigation light, windlass) start with confirmation on.
+- Load calibration: a Calibrate load dialog on a consumer. Delta mode
+  switches it on and off three times against a meter (by the plugin, or by
+  hand with prompts and automatic continue when the meter shows a clear
+  step) and gives the average with its spread and warnings for noise or
+  drift; Watch mode records a device you run yourself and gives the average,
+  peak and share of time on, with an "on" threshold you can change. A relay
+  shared by several consumers gives a group result. Runs execute in the
+  plugin, can be cancelled, and are accepted or rejected; amps meters give an
+  estimate (power factor 1), watt meters an exact figure.
+- The device page shows the latest accepted measured values beside the
+  nameplate rating, and the load check counts a measured device at its
+  measured peak (breaker check) and shows the measured average, labelled as
+  measured.
+
 - Schematics: a new tab with several named diagrams of the electrical system.
   Place existing devices or create new ones from a palette by role, drag
   them around, or Auto-arrange them left to right from the supply. Drag a

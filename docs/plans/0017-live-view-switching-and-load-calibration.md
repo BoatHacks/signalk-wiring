@@ -1,8 +1,8 @@
-# Implementation Plan: 0017 - Live view, switching and load calibration (draft)
+# Implementation Plan: 0017 - Live view, switching and load calibration
 
-This is a draft from a design discussion. Nothing is implemented. The design
-questions are all answered; two defaults chosen without asking are marked in
-the decisions so they can be changed.
+Implemented; see the decisions made during implementation at the end. The
+design questions were all answered; two defaults chosen without asking are
+marked in the decisions so they can be changed.
 
 ## Overview
 
@@ -150,7 +150,7 @@ breaker checks become based on what the boat actually draws.
   Real switching and metering need the boat, so a click-through there is
   still needed, ideally starting with a harmless light.
 
-## Implementation Steps (draft)
+## Implementation Steps
 
 - [x] Settle the open design questions.
 - [x] Schema, migration, store and resources: switch and meter fields, safety
@@ -163,7 +163,7 @@ breaker checks become based on what the boat actually draws.
 - [x] Calibrate load dialog, including hand-switched prompts and step
       detection.
 - [x] Load check uses measured values.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 - [x] Live mode on the schematic canvas once plan 0016 is built.
 
 ## Follow-ups (not in this plan)
@@ -176,4 +176,84 @@ breaker checks become based on what the boat actually draws.
 
 ## Open questions
 
-None. The design is settled; the next step is the schema and store work.
+None.
+
+## Decisions made during implementation
+
+- **Migration.** Version 9, after the schematics migration (8). New columns
+  are guarded; existing devices are not flagged, only new ones.
+- **Where the critical-type default lives.** In the store (so CSV import and
+  the resource API get it too), mirrored in `public/deviceTypes.js` so the form
+  shows it as the type is chosen until the user touches the box. The word
+  list is bilge, refrigerator, fridge, freezer, autopilot, navigation light,
+  nav light, windlass, matched as a substring ignoring case. A test keeps both
+  lists equal.
+- **A consumer with its own switch path** switches itself; a switch needs only
+  a switch path, whatever its role.
+- **Nearest switch.** With switches in series, the one nearest the consumer is
+  operated. A switch past another switch on the same branch is not listed.
+- **Shared switch flags.** A shared switch is never-remote or confirm if the
+  switch or any consumer behind it is. A lamp that shares a relay with a
+  never-remote device is therefore locked too, since switching the relay would
+  switch that device.
+- **Meters.** Nearest first by distance upstream, meters on a battery or
+  source last and marked low confidence, a converter meter counts as normal. A
+  meter on a circuit record counts at the distance of the circuit's protector.
+  A meter path without a unit counts as amps. A consumer's Live reading uses
+  its first meter that is not low confidence.
+- **Switch value format.** Follows the current value (boolean, 0/1, or on/off
+  words keeping their case); a boolean when the path holds nothing yet.
+  A 200 is success, a 202 is success marked pending, any other code or no
+  answer within 10 seconds a failure (502 or 504).
+- **Logging.** Each switch action, and each refusal, is a change-log entry on
+  the switch device (who, path, value, consumers, outcome), plus a debug line.
+- **Confirmation.** Required for every switch where a flag asks, on and off.
+  The webapp asks with a confirm dialog naming the switch and everything it
+  switches, then repeats the request with `confirmed`.
+- **Calibration baselines.** The reading after switching off is also the
+  baseline of the next cycle, so three repeats take four baselines, not six.
+  The step of a cycle is measured against the mean of the baselines either
+  side of it.
+- **Meter polarity.** A battery current is negative when discharging, so the
+  sign of the average step decides which way is "more" and the load is the
+  size of the change. The same holds for watch runs and for noticing a step.
+- **Failure rules.** A delta run whose step is not above the noise (or is
+  zero or negative) fails instead of recording a zero. A run fails when the
+  meter has no fresh reading for 15 s, when a switch whose state is readable
+  does not reach the wanted state within 10 s, or when a switch command is
+  refused. Where a switch reports nothing the run carries on. Whatever the
+  outcome, a device the plugin switched is put back as found.
+- **Hand-switched steps.** Waiting for a step times out after 300 s. A step is
+  noticed when the last three readings sit more than five times the baseline
+  noise from it, in either direction, and agree within 30 percent; automatic
+  continue is on by default and can be switched off in the dialog.
+- **Watch runs** always switch by hand and start with a short "make sure it is
+  off" resting reading. The default length is 120 s, and a watch can be
+  stopped early and keeps what it saw. The threshold is in the meter's unit
+  and can be applied to a finished run before accepting it (a recompute route
+  rather than a separate calculation in the browser).
+- **Group result.** A delta run through a shared switch is recorded on the
+  switch with its consumers listed, and is the measured value of each. It is
+  counted once per circuit by the load check. Splitting a group result by hand
+  between its consumers is not built; it stays a follow-up, since nothing is
+  split automatically either.
+- **Load check.** A measured device counts at its measured peak for the breaker
+  check and its measured average for energy (shown as an Average W column);
+  a power factor is not applied to a measured figure. Peaks are summed as if
+  simultaneous, which is cautious and said in the page text.
+- **Live data in the browser.** A SignalK stream (WebSocket, subscribing to
+  the switch and meter paths only) with exponential backoff and, after three
+  failures, REST polling every 3 s. What is switchable comes from the plugin's
+  readonly `GET /live`, so a login is needed for the Live view when the server
+  requires one for plugin routes.
+- **Status read route.** The calibration status and run list are readonly
+  routes; starting, steering and deciding a run are readwrite.
+- **Runs abandoned.** A run cannot be resumed after the plugin stops; it is
+  marked failed with a reason at the next start. A run that is simply still
+  running when the browser reopens is picked up by the dialog.
+- **Stopping the plugin** cancels a run in progress and waits for it before
+  the database closes.
+- **Schematic Live mode** was added after plan 0016 landed: a Live button on a
+  schematic page; clicking a device switches it, dragging the background pans,
+  and the connect handles are hidden while Live is on.
+

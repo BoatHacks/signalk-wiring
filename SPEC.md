@@ -139,8 +139,11 @@ A wire run or device is either:
     `cableIds` (feed cables), `returnCableIds` (negative cables serving
     it), `implicitReturnDeviceIds`, `deviceIds`, `supplyDeviceIds`,
     `endDeviceIds` and `warnings`. It is null for a removed circuit.
-  - Setting a circuit resource accepts only `name`, `notes`, `voltage` and
-    `convention`; creating or deleting one is refused.
+  - `meterPath` and `meterUnit` (optional, `A` or `W`): a SignalK path that
+    measures this whole derived circuit, used by load calibration.
+  - Setting a circuit resource accepts only `name`, `notes`, `voltage`,
+    `convention`, `meterPath` and `meterUnit`; creating or deleting one is
+    refused.
 - **WireRun** (a cable)
   - `id`, `fromDeviceId` (supply side), `toDeviceId` (load side),
     `conductors` (a list; none means a single positive conductor): each has
@@ -185,6 +188,34 @@ A wire run or device is either:
     and increasing toward the bow, with 0 at the transom (the same origin
     and direction on every plan), y athwartships with 0 on the centerline, z height; any axis may be
     unset so a device can be half-placed), `status`, `notes`.
+  - **Switching and metering** (plan 0017): `switchPath` (optional, the
+    SignalK state path of a relay, switch or breaker module the plugin may
+    turn on and off, or of a device that switches itself),
+    `confirmSwitching` and `neverRemote` (booleans, false by default),
+    `meterPath` and `meterUnit` (`A` or `W`: a SignalK path that measures
+    the current or power through this device, for example a shunt or a relay
+    channel). A new device whose type contains bilge, refrigerator, fridge,
+    freezer, autopilot, navigation light, nav light or windlass (ignoring
+    case) starts with `confirmSwitching` on; an explicit value always wins and
+    nothing starts as `neverRemote`.
+  - The resource also carries `measured`, never written: the latest
+    accepted calibration run that covers this device (its own, or a group run
+    on a shared switch that lists it), as `runId`, `method`, `at`, `avgW`,
+    `peakW`, `dutyCycle`, `confidence`, `estimate` and `group` (null, or the
+    switch device and the consumers it covers). It is null when there is none.
+- **Calibration run** (plan 0017; not a SignalK resource, served by the
+  calibration routes of §6.1)
+  - `id`, `deviceId` (the device the result is about: a consumer, or the
+    switch for a group result), `switchDeviceId`, `consumerIds` (the
+    consumers a group result covers), `method` (`delta` | `watch`), `status`
+    (`running` | `done` | `failed` | `cancelled`), `review` (`pending` |
+    `accepted` | `rejected`), `meterPath`, `meterUnit`, `voltage`, `estimate`
+    (true when worked out from amps and a voltage, power factor 1), `startedAt`,
+    `endedAt`, `params` (the timings), `samples` (downsampled, kept short),
+    `details` (warnings, spread, noise, the "on" threshold), `avgW`, `peakW`,
+    `dutyCycle`, `confidence` (high | medium | low) and `error`.
+  - Accepting or rejecting a finished run is logged on the device. Rejected
+    and unreviewed runs are kept but do not feed the load check.
 - **Plan**
   - `id`, `name`, `view` (`top` | `side`), `filename` (the uploaded
     drawing: SVG, PNG, JPEG or WebP), `zMin`/`zMax` (optional height
@@ -249,6 +280,27 @@ import is a deferred feature (see 10.2), not an MVP input source.
 - The plugin configuration (§9) is served read-only as
   `/signalk/v2/api/resources/wiringSettings/config`, so the anonymously
   loaded webapp can apply it.
+- Live view and switching (plan 0017). `GET /plugins/signalk-wiring/live`
+  (readonly access) returns, per consumer, whether anything in the wiring can
+  switch it remotely (the nearest in-line device with a switch path between
+  its supply and it), which switch, the other consumers that switch also
+  feeds, the safety flags carried over from the switch and every consumer
+  behind it, the circuit voltage, and the meters upstream of it. `POST
+  /plugins/signalk-wiring/switch` (readwrite access) takes `{ consumerId |
+  deviceId, state, confirmed }`, refuses never-remote devices (403), asks for
+  confirmation where flagged (409 with `confirmationRequired`), sends the PUT
+  through the server API in the format the path currently holds (boolean,
+  0/1 or on/off words; boolean when nothing is held), and logs each action,
+  refusals included, on the switch device.
+- Load calibration (plan 0017), all under the plugin's routes and
+  readwrite except the reads: `POST /calibration/runs` starts a run (one at a
+  time), `GET /calibration/status` (readonly) is polled for progress, live
+  reading and any prompt, `POST /calibration/continue`, `/finish` and
+  `/cancel` steer it, `GET /calibration/runs?deviceId=` (readonly) lists runs,
+  `POST /calibration/runs/:id/recompute` applies another "on" threshold to a
+  finished watch run, and `.../accept` and `.../reject` decide it. Runs
+  execute in the plugin and go on if the browser closes; a run left running
+  when the plugin stops is marked failed at the next start.
 - `GET /plugins/signalk-wiring/derived` (readonly access where the server
   supports it) returns the battery banks and the warnings of the derivation
   that belong to no single circuit, such as a cable that ends on a missing
@@ -270,8 +322,10 @@ import is a deferred feature (see 10.2), not an MVP input source.
 
 ### 6.2 Events / Streaming
 
-Not applicable — wiring documentation is not a live-updating data source;
-no deltas are published for it.
+No deltas are published for the wiring data. The webapp's Live mode (§7)
+reads switch states and meter values from the SignalK stream
+(`/signalk/v1/stream`, with REST polling as a fallback); reading needs no
+special permission. Only commands and calibration runs go through the plugin.
 
 ## 7. User Interface
 
@@ -376,13 +430,49 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   route waypoints on the plan, then Finish. The same popover asks the
   conductors, and the cable gets the drawn route and its measured length.
   Finishing with no waypoints records no route and no length.
-- A panel load summary: per derived circuit, the rated wattage of the
+- A Live mode (plan 0017) on the floorplan (a tool beside Select, Place
+  device, Draw route and Connect), on the circuit diagram and on
+  schematics (a Live button). Consumers show on or off from the SignalK
+  state of the in-line switch that feeds them, read from the SignalK stream.
+  Clicking a consumer switches it through that switch, asking for
+  confirmation where flagged and saying so when the switch feeds several
+  consumers. A consumer no switch can reach is greyed, a never-remote one is
+  greyed with a lock, a switch device is shown and clicked on its own, and a
+  live reading of the nearest trustworthy meter shows under a consumer where
+  one exists. A tooltip says which switch operates it and what else that
+  switch feeds. Needs a read-write login to switch; reading needs none.
+- A Calibrate load dialog on a consumer's page. A mode choice, delta or
+  watch. Delta switches the device on and off (by the plugin where a
+  switch reaches it, otherwise by hand with prompts such as "Turn on the
+  kettle, then press Continue") against a chosen meter, records a resting
+  reading, the load once it has settled, and the resting reading again, three
+  times by default, and gives the average step with its spread and warnings
+  for noise, drift or a step too small to trust. Watch records the meter
+  while the user runs the device, for the average, the peak and the duty
+  cycle (the share of time above the "on" threshold, by default 10 percent of
+  the peak and at least three times the resting noise, changeable before
+  accepting). Timings have defaults that can be changed. For hand-switched
+  steps the dialog shows the live reading and notices a clear step in the
+  meter and continues by itself (switchable off). Progress is polled while
+  the run executes in the plugin; the result offers Accept, Reject and
+  Repeat. A shared switch gives a group result recorded on the switch with
+  its consumers listed. A watt meter gives an exact figure; an amps meter
+  gives amps times the circuit voltage with a power factor of 1, marked as an
+  estimate. A meter that counts the load negatively (a battery discharge
+  current) is handled. The device page shows the latest accepted figures
+  beside the rated power.
+- A panel load summary: per derived circuit, the wattage of the
   consumers it ends at converted to amps via the circuit's voltage (watts
-  divided by volts; on AC circuits a consumer's power factor is applied
+  divided by volts; on AC circuits a rated consumer's power factor is applied
   when set), checked against the rating of the fuse or breaker that
-  protects it. States its own known limitation in the UI
-  (a device fed by more than one circuit counts its full wattage on
-  each) rather than presenting a number without that caveat.
+  protects it. A consumer with an accepted calibration run counts at its
+  measured peak for the breaker check, and the measured average is shown
+  for energy; the table says whether a circuit is measured, partly measured
+  or rated, and whether any figure is an estimate. A group figure is counted
+  once per circuit, and a measured figure takes no power factor. The summary
+  states its own known limitations in the UI (a device fed by more than one
+  circuit counts its full wattage on each; peaks are summed as if they
+  coincided) rather than presenting a number without that caveat.
 
 The webapp shares the stowage webapp's look and feel: a dark header bar
 with the title and a theme toggle, an underlined tab strip, warm light
@@ -512,6 +602,15 @@ configuration.
   instance beyond their own network already control this globally via
   `allow_readonly`; the README calls this out explicitly so it's an
   informed choice, not a surprise.
+- **Switching goes through the plugin, on the in-line switch (plan 0017).**
+  The control path lives on the relay, switch or breaker module in the
+  wiring, and a consumer is switchable when one sits between its supply and
+  it. The plugin sends the PUT rather than the browser so it can refuse,
+  require a confirmation and log, and the same code serves the live view and
+  calibration. A shared switch has the strictest flags of everything behind
+  it, because turning it off turns all of it off. Results of a shared switch
+  are a group figure and are never split between its consumers
+  automatically: that would present a guess as a measurement.
 - **Circuits are derived from the cables (plan 0014).** A circuit used to be
   created first, by hand, as an empty shell with free-text source, breaker
   and panel fields that overlapped with devices (a breaker is a device).
