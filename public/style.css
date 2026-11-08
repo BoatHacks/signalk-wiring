@@ -688,3 +688,14 @@ main:has(.schematic-editor) { max-width: none; }
 .diagram-wrap g.live-unknown .diagram-node { fill: var(--live-unknown); }
 .diagram-wrap g.live-fixed, .diagram-wrap g.live-locked, .diagram-wrap g.live-none { opacity: 0.4; }
 .diagram-wrap g.live-clickable { cursor: pointer; }
+
+/* Plan 0017: the Calibrate load dialog */
+.calibrate-dialog .progress { height: 10px; background: var(--border); border-radius: 5px; overflow: hidden; margin: 8px 0; }
+.calibrate-dialog .progress-bar { height: 100%; background: var(--accent); transition: width 0.4s; }
+.calibrate-dialog .prompt-box { border: 2px solid var(--accent); border-radius: 8px; padding: 10px 14px; margin: 10px 0; background: var(--surface-alt); }
+.calibrate-dialog .prompt-box p { margin: 0 0 8px; font-weight: 600; }
+.calibrate-dialog .live-reading-big { font-size: 18px; }
+.calibrate-dialog .check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 4px 0; }
+.calibrate-dialog .timing-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
+.calibrate-dialog .hint.warn { color: var(--warn); }
+.calibrate-dialog .measured-line { font-weight: 700; font-size: 16px; }

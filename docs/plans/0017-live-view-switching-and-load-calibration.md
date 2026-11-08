@@ -160,7 +160,7 @@ breaker checks become based on what the boat actually draws.
       routes to start, poll, cancel, accept and reject, with tests.
 - [x] Device forms: switch path, flags, meter path, measured values.
 - [x] Live mode on the floorplan, then on the circuit diagram.
-- [ ] Calibrate load dialog, including hand-switched prompts and step
+- [x] Calibrate load dialog, including hand-switched prompts and step
       detection.
 - [ ] Load check uses measured values.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.

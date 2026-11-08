@@ -17,6 +17,7 @@ import { useTheme } from './theme.js'
 import { typeOptions, isCriticalType } from './deviceTypes.js'
 import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
+import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
@@ -1526,6 +1527,7 @@ function DeviceDetail ({ deviceId, onBack }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [editing, setEditing] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [calibrating, setCalibrating] = useState(false)
   const { items: circuits } = useResourceList('wiringCircuits')
   const { items: allDevices } = useResourceList('wiringDevices')
   const deviceNames = new Map(allDevices.map((d) => [d.id, d.name]))
@@ -1603,12 +1605,19 @@ function DeviceDetail ({ deviceId, onBack }) {
           ${device.notes && html`<p>${device.notes}</p>`}
           <div class="row-actions">
             <button onClick=${() => setEditing(true)}>Edit</button>
+            ${(device.role || 'consumer') === 'consumer' && device.status !== 'removed' && html`
+              <button onClick=${() => setCalibrating((v) => !v)} data-testid="calibrate-open">Calibrate load</button>
+            `}
             ${device.status !== 'removed' && html`<button onClick=${removeDevice}>Remove</button>`}
             <button onClick=${() => setShowHistory((v) => !v)}>
               ${showHistory ? 'Hide history' : 'History'}
             </button>
           </div>
         </div>
+      `}
+      ${device && calibrating && html`
+        <${CalibrateDialog} device=${device} nameOf=${(id) => deviceNames.get(id) || id}
+          onChanged=${() => setReloadKey((k) => k + 1)} onClose=${() => setCalibrating(false)} />
       `}
       ${device && editing && html`
         <div class="card">

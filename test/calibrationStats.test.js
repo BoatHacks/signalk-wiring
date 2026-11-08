@@ -142,3 +142,20 @@ test('watts: a watt meter is used as is, amps need a voltage and are an estimate
   assert.deepEqual(toWatts(3, 'A', 12), { value: 36, estimate: true })
   assert.equal(toWatts(3, 'A', null).value, null)
 })
+
+test('a meter that counts the load as negative gives the same positive result', () => {
+  const up = deltaStats([cycle(10, 3, 0.02), cycle(10, 3, 0.02, 8, 5)])
+  const flip = (c) => ({ before: c.before.map((v) => -v), on: c.on.map((v) => -v), after: c.after.map((v) => -v) })
+  const down = deltaStats([flip(cycle(10, 3, 0.02)), flip(cycle(10, 3, 0.02, 8, 5))])
+  assert.equal(down.inverted, true)
+  assert.equal(up.inverted, false)
+  assert.ok(Math.abs(down.average - up.average) < 0.01)
+  assert.ok(Math.abs(down.peak - up.peak) < 0.1)
+
+  const samples = []
+  for (let t = 0; t < 60; t++) samples.push([t, t % 20 < 10 ? -105 : -5])
+  const r = watchStats(samples, { baseline: [-5, -5, -5, -5] })
+  assert.equal(r.inverted, true)
+  assert.equal(r.peak, 100)
+  assert.ok(Math.abs(r.dutyCycle - 0.5) < 0.02)
+})

@@ -34,10 +34,15 @@ function deltaStats (cycles) {
   const peaks = []
   const drifts = []
   const baselineValues = []
+  // A meter can count a load as negative (a battery current is negative when
+  // discharging). The load is the size of the change, so the sign of the
+  // average step decides which way is "more", and the result is positive.
+  const rawSteps = usable.map((c) => mean(c.on) - (mean(c.before) + mean(c.after)) / 2)
+  const sign = mean(rawSteps) < 0 ? -1 : 1
   for (const c of usable) {
     const base = (mean(c.before) + mean(c.after)) / 2
-    steps.push(mean(c.on) - base)
-    peaks.push(Math.max(...c.on) - base)
+    steps.push(sign * (mean(c.on) - base))
+    peaks.push(Math.max(...c.on.map((v) => sign * (v - base))))
     drifts.push(Math.abs(mean(c.after) - mean(c.before)))
     baselineValues.push(c.before, c.after)
   }
@@ -67,7 +72,8 @@ function deltaStats (cycles) {
     maxDrift: round(maxDrift),
     steps: steps.map((s) => round(s)),
     warnings,
-    confidence
+    confidence,
+    inverted: sign < 0
   }
 }
 
@@ -88,7 +94,12 @@ function watchStats (samples, { baseline = [], threshold = null, thresholdFracti
   if (samples.length === 0) {
     return { average: NaN, averageOn: NaN, peak: NaN, dutyCycle: NaN, threshold: NaN, noise, rest, warnings: ['no-data'], confidence: 'low' }
   }
-  const adjusted = samples.map(([t, v]) => [t, Math.max(0, v - rest)])
+  // The load is the change from the resting reading, whichever way the meter
+  // counts it: when the biggest swing is downward (a discharge current), the
+  // readings are turned over.
+  const deviations = samples.map(([, v]) => v - rest)
+  const inverted = -Math.min(...deviations) > Math.max(...deviations)
+  const adjusted = samples.map(([t], i) => [t, Math.max(0, inverted ? -deviations[i] : deviations[i])])
   const peak = Math.max(...adjusted.map((s) => s[1]))
   const floor = 3 * noise
   const level = threshold != null && Number.isFinite(threshold) ? threshold : Math.max(thresholdFraction * peak, floor)
@@ -122,7 +133,8 @@ function watchStats (samples, { baseline = [], threshold = null, thresholdFracti
     noise: round(noise),
     rest: round(rest),
     warnings,
-    confidence
+    confidence,
+    inverted
   }
 }
 

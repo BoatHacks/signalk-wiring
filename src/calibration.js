@@ -177,7 +177,7 @@ function createRunner ({ store, read, readSwitch = () => null, switchTo, clock =
         if (state.finishRequested && key === 'watch-on') break
         if (expect && v !== null) {
           const seen = detectStep(recent, expect.baseline, { minStep: expect.minStep })
-          if (seen.stepped && seen.direction === expect.direction) {
+          if (seen.stepped && (expect.direction === 'any' || seen.direction === expect.direction)) {
             st.prompt.stepDetected = true
             if (params.autoContinue !== false) break
           }
@@ -232,7 +232,7 @@ function createRunner ({ store, read, readSwitch = () => null, switchTo, clock =
           st.cycle = i
           const base = { mean: mean(before), noise: stddev(before) }
           if (auto) await setSwitch(true)
-          else await prompt('turn-on', `Turn on ${params.deviceName || 'the device'}, then press Continue.`, { baseline: base, direction: 'up' })
+          else await prompt('turn-on', `Turn on ${params.deviceName || 'the device'}, then press Continue.`, { baseline: base, direction: 'any' })
           step()
           setPhase('settling', 'Waiting for the reading to settle')
           await wait(timings.settleS)
@@ -240,8 +240,9 @@ function createRunner ({ store, read, readSwitch = () => null, switchTo, clock =
           const on = await sample(timings.measureS)
           step()
           const onBase = { mean: mean(on), noise: stddev(on) }
+          const backDirection = mean(on) > base.mean ? 'down' : 'up'
           if (auto) await setSwitch(false)
-          else await prompt('turn-off', `Turn off ${params.deviceName || 'the device'}, then press Continue.`, { baseline: onBase, direction: 'down' })
+          else await prompt('turn-off', `Turn off ${params.deviceName || 'the device'}, then press Continue.`, { baseline: onBase, direction: backDirection })
           step()
           setPhase('settling', 'Waiting for the reading to settle')
           await wait(timings.settleS)
@@ -258,7 +259,7 @@ function createRunner ({ store, read, readSwitch = () => null, switchTo, clock =
         setPhase('baseline', 'Recording the resting reading')
         const baseline = await sample(timings.baselineS, false)
         step()
-        const resting = { baseline: { mean: mean(baseline), noise: stddev(baseline) }, direction: 'up' }
+        const resting = { baseline: { mean: mean(baseline), noise: stddev(baseline) }, direction: 'any' }
         await prompt('watch-on', `Turn on ${params.deviceName || 'the device'} and use it as you normally would, then press Continue. The watch of ${timings.watchS} seconds starts then.`, resting)
         step()
         setPhase('watching', 'Watching the meter', { watchS: timings.watchS })
@@ -312,7 +313,7 @@ function createRunner ({ store, read, readSwitch = () => null, switchTo, clock =
       estimate: unit === 'A' ? 1 : 0,
       samples: downsample(allSamples, 300),
       details: {
-        unit, voltage: params.voltage || null, warnings: stats.warnings, spread: stats.spread, noise: stats.noise,
+        unit, voltage: params.voltage || null, warnings: stats.warnings, spread: stats.spread, noise: stats.noise, inverted: stats.inverted,
         maxDrift: stats.maxDrift, steps: stats.steps, repeats: timings.repeats, rawAverage: stats.average, rawPeak: stats.peak
       }
     })
@@ -372,7 +373,7 @@ function watchPatch ({ samples, baseline = [], unit, voltage, threshold = null, 
     estimate: unit === 'A' ? 1 : 0,
     details: {
       unit, voltage: voltage || null, warnings: stats.warnings, threshold: stats.threshold, noise: stats.noise,
-      rest: stats.rest, averageOnW: avgOn.value, rawAverage: stats.average, rawPeak: stats.peak
+      rest: stats.rest, inverted: stats.inverted, averageOnW: avgOn.value, rawAverage: stats.average, rawPeak: stats.peak
     }
   }
 }

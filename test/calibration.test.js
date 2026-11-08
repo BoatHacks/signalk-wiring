@@ -22,7 +22,7 @@ const wobble = (n, amp) => amp * Math.sin(n * 2.3)
 function setup (opts = {}) {
   const {
     base = 10, load = 3, amp = 0.02, kettle = false, silentAfterMs = null, switchRejects = false, deaf = false,
-    flat = false, timings = { baselineS: 3, settleS: 2, measureS: 3, repeats: 3, sampleMs: 1000, watchS: 40, responseS: 4, silentS: 5, promptS: 30 }
+    flat = false, negative = false, timings = { baselineS: 3, settleS: 2, measureS: 3, repeats: 3, sampleMs: 1000, watchS: 40, responseS: 4, silentS: 5, promptS: 30 }
   } = opts
   const store = new Store(':memory:')
   const lamp = store.create('device', { name: 'Cabin lamp' })
@@ -37,7 +37,7 @@ function setup (opts = {}) {
     if (world.on && !flat) {
       drawn = kettle ? ((Math.floor((clock.now() - startedAt) / 1000) % 20) < 10 ? load : 0) : load
     }
-    return { value: base + drawn + wobble(world.n, amp), at: clock.now() }
+    return { value: (base + drawn) * (negative ? -1 : 1) + wobble(world.n, amp), at: clock.now() }
   }
   const readSwitch = () => (deaf ? false : world.switchState)
   const switchTo = async (id, on) => {
@@ -248,4 +248,40 @@ test('recomputing a watch run with another threshold changes the duty cycle but 
   const amps = watchPatch({ samples: samples.map(([t, v]) => [t, v / 100]), unit: 'A', voltage: 12 })
   assert.equal(amps.estimate, 1)
   assert.equal(amps.peak_w, 216)
+})
+
+test('a meter that counts the load as negative (a discharge current) still gives a positive load, switched or by hand', async () => {
+  const auto = setup({ negative: true })
+  const record = auto.runner.start(auto.params())
+  await drive(auto.runner)
+  const run = auto.store.getRun(record.id)
+  assert.equal(run.status, 'done')
+  assert.ok(Math.abs(run.avg_w - 36) < 1.5, `avg ${run.avg_w}`)
+  assert.equal(run.details.inverted, true)
+
+  const hand = setup({ negative: true })
+  const second = hand.runner.start(hand.params({ switchDeviceId: null }))
+  await drive(hand.runner, (s) => {
+    if (!s.prompt) return
+    if (s.prompt.key === 'turn-off' && s.cycle === 0) hand.runner.continueRun()
+    if (s.prompt.key === 'turn-on') hand.world.on = true
+    if (s.prompt.key === 'turn-off') hand.world.on = false
+  })
+  const byHand = hand.store.getRun(second.id)
+  assert.equal(byHand.status, 'done')
+  assert.ok(Math.abs(byHand.avg_w - 36) < 2, `avg ${byHand.avg_w}`)
+
+  const watch = setup({ negative: true, kettle: true, load: 1000, base: 50 })
+  const third = watch.runner.start(watch.params({
+    method: 'watch', switchDeviceId: null, meter: { path: 'm.power', unit: 'W' }, voltage: null,
+    timings: { baselineS: 4, watchS: 60, sampleMs: 1000, promptS: 30, silentS: 5 }
+  }))
+  await drive(watch.runner, (s) => {
+    if (s.prompt && s.prompt.key === 'watch-off') watch.runner.continueRun()
+    if (s.prompt && s.prompt.key === 'watch-on') watch.world.on = true // the step is noticed by itself
+  })
+  const kettle = watch.store.getRun(third.id)
+  assert.equal(kettle.status, 'done')
+  assert.ok(Math.abs(kettle.peak_w - 1000) < 20, `peak ${kettle.peak_w}`)
+  assert.ok(Math.abs(kettle.duty_cycle - 0.5) < 0.15, `duty ${kettle.duty_cycle}`)
 })
