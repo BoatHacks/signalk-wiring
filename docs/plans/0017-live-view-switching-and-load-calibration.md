@@ -162,7 +162,7 @@ breaker checks become based on what the boat actually draws.
 - [x] Live mode on the floorplan, then on the circuit diagram.
 - [x] Calibrate load dialog, including hand-switched prompts and step
       detection.
-- [ ] Load check uses measured values.
+- [x] Load check uses measured values.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 - [ ] Live mode on the schematic canvas once plan 0016 is built.
 

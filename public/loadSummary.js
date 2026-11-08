@@ -1,4 +1,5 @@
 import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
+import { loadFigures } from './measured.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 
@@ -47,10 +48,15 @@ export function calculateCircuitLoad (circuit, deviceById) {
   const ac = Boolean(derived.ac)
 
   const seenDeviceIds = new Set()
+  const seenGroups = new Set()
   let totalWatts = 0
   let totalVa = 0
+  let averageWatts = 0
   let knownDeviceCount = 0
   let unknownWattageCount = 0
+  let measuredCount = 0
+  let estimateCount = 0
+  let groupCount = 0
 
   for (const id of derived.endDeviceIds) {
     const device = deviceById.get(id)
@@ -60,12 +66,31 @@ export function calculateCircuitLoad (circuit, deviceById) {
     if (device.role && device.role !== 'consumer') continue
     seenDeviceIds.add(device.id)
     knownDeviceCount++
-    if (device.ratedPowerW == null) {
+    // A device with an accepted calibration run counts at its measured peak
+    // (the breaker check) and measured average (energy); any other at its
+    // nameplate rating. A measured figure already includes the power factor,
+    // so none is applied to it. A group figure, measured on a switch shared
+    // by several consumers, covers all of them, so it is counted once.
+    const figures = loadFigures(device)
+    if (figures.source === null) {
       unknownWattageCount++
+    } else if (figures.source === 'measured') {
+      measuredCount++
+      if (figures.estimate) estimateCount++
+      if (figures.group) {
+        const key = figures.group.switchDeviceId
+        if (seenGroups.has(key)) continue
+        seenGroups.add(key)
+        groupCount++
+      }
+      totalWatts += figures.peakW
+      totalVa += figures.peakW
+      averageWatts += figures.avgW
     } else {
-      totalWatts += device.ratedPowerW
+      totalWatts += figures.peakW
       const pf = ac && device.powerFactor > 0 && device.powerFactor <= 1 ? device.powerFactor : 1
-      totalVa += device.ratedPowerW / pf
+      totalVa += figures.peakW / pf
+      averageWatts += figures.avgW
     }
   }
 
@@ -78,6 +103,11 @@ export function calculateCircuitLoad (circuit, deviceById) {
     deviceCount: knownDeviceCount,
     unknownWattageCount,
     totalWatts,
+    averageWatts,
+    measuredCount,
+    estimateCount,
+    groupCount,
+    source: measuredCount === 0 ? 'rated' : measuredCount === knownDeviceCount - unknownWattageCount ? 'measured' : 'mixed',
     amps,
     overRating,
     missingVoltage: !voltage,
@@ -102,7 +132,10 @@ export function LoadSummary () {
   return html`
     <div>
       <p class="meta">
-        Total wattage is summed per circuit from the rated power of the consumers it feeds, converted
+        Total wattage is summed per circuit from the consumers it feeds: a device that has an accepted
+        calibration run counts at its <em>measured</em> peak, and every other at its rated power. The
+        measured average is shown as well, for energy. Peaks are summed as if they all happened at once,
+        which is a cautious figure. Total wattage is converted
         to amps using the voltage of its supply (on AC circuits, divided by each device's power
         factor where one is set), and checked against the rating of the fuse or breaker that protects it.
         A device fed by more than one circuit has its full wattage counted on${" "}
@@ -119,7 +152,7 @@ export function LoadSummary () {
         <table>
           <thead>
             <tr>
-              <th>Circuit</th><th>Devices</th><th>Total W</th><th>Voltage</th>
+              <th>Circuit</th><th>Devices</th><th>Total W</th><th>Average W</th><th>Voltage</th>
               <th>Amps</th><th>Protection</th><th>Status</th>
             </tr>
           </thead>
@@ -135,7 +168,11 @@ export function LoadSummary () {
                       <span class="meta">(${load.unknownWattageCount} unrated)</span>
                     `}
                   </td>
-                  <td>${load.totalWatts} W</td>
+                  <td>
+                    ${Math.round(load.totalWatts * 10) / 10} W
+                    ${load.source !== 'rated' && html`<div class="meta" data-testid="load-source">${load.source === 'measured' ? 'measured' : 'partly measured'}${load.estimateCount > 0 ? ', estimate' : ''}</div>`}
+                  </td>
+                  <td>${load.source === 'rated' ? '-' : `${Math.round(load.averageWatts * 10) / 10} W`}</td>
                   <td>${load.voltage ? `${load.voltage} V${load.ac ? ' AC' : ''}` : '-'}</td>
                   <td>${formatAmps(load.amps)}</td>
                   <td>${load.ratingA ? `${load.ratingA} A` : 'none'}</td>
