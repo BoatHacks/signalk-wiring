@@ -58,3 +58,35 @@ export function describeTerminal (t) {
   return [t.name, t.conductor, t.voltage != null ? `${t.voltage} V` : null, t.port ? `port ${t.port}` : null]
     .filter(Boolean).join(', ')
 }
+
+// Standard ports and terminals for common converters, so a new device of that
+// type starts with them. Names are "<port> <pin>" and unique within a device.
+const dc = (port) => [
+  { name: `${port} +`, conductor: 'positive', port },
+  { name: `${port} -`, conductor: 'negative', port }
+]
+const ac = (port) => [
+  { name: `${port} L`, conductor: 'line', port },
+  { name: `${port} N`, conductor: 'neutral', port },
+  { name: `${port} PE`, conductor: 'earth', port }
+]
+const signal = (port) => [{ name: port, conductor: 'signal', port }]
+
+const TERMINAL_PRESETS = [
+  { match: /multi\s*plus/i, label: 'MultiPlus', terminals: () => [
+    ...dc('DC in'), ...ac('AC in'), ...ac('AC out 1'), ...ac('AC out 2'),
+    ...signal('VE.Bus'), ...signal('Relay 1'), ...signal('Relay 2')
+  ] },
+  { match: /^\s*dc-?dc( converter)?\s*$/i, label: 'DC-DC converter', terminals: () => [...dc('DC in'), ...dc('DC out')] },
+  { match: /^\s*mppt( charger)?\s*$/i, label: 'MPPT charger', terminals: () => [...dc('PV in'), ...dc('Battery')] },
+  { match: /^\s*inverter\/charger\s*$/i, label: 'Inverter/charger', terminals: () => [...dc('DC in'), ...ac('AC in'), ...ac('AC out')] },
+  { match: /^\s*inverter\s*$/i, label: 'Inverter', terminals: () => [...dc('DC in'), ...ac('AC out')] },
+  { match: /^\s*battery charger\s*$/i, label: 'Battery charger', terminals: () => [...ac('AC in'), ...dc('DC out')] }
+]
+
+// The standard terminals for a device type, or null when there is none.
+// Returned as form rows (voltage is an empty string).
+export function terminalPreset (type) {
+  const found = TERMINAL_PRESETS.find((p) => p.match.test(String(type || '')))
+  return found ? { label: found.label, terminals: found.terminals().map((t) => ({ ...t, voltage: '' })) } : null
+}

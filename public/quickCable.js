@@ -24,6 +24,13 @@ export function resolveTerminals (kind, from, fromTerminal, to, toTerminal) {
     const named = chosen && options.find((t) => t.name === chosen)
     if (named) return named.name
     if (options.length === 1) return options[0].name
+    // The other conductors of the port the wire was dropped on: the "-" of
+    // the port whose "+" was chosen.
+    const dropped = chosen && (device.terminals || []).find((t) => t.name === chosen)
+    if (dropped && dropped.port) {
+      const inPort = options.filter((t) => t.port === dropped.port)
+      if (inPort.length === 1) return inPort[0].name
+    }
     if (needsTerminal(device)) return undefined
     return ''
   }

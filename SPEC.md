@@ -180,9 +180,14 @@ A wire run or device is either:
     the branch it feeds), `nominalVoltage` (on batteries and sources),
     `powerFactor` (optional, on a consumer; applied by the load check once
     its circuit is AC, blank counts as 1), `terminals` (a list of `name`,
-    `conductor`, optional `voltage` and, on a converter, `port`; only needed
-    where they remove ambiguity: converter ports, a battery with several
-    posts, a fuse block), `signalkPath`
+    `conductor` (positive, negative, line, neutral, earth or signal),
+    optional `voltage` and, on a converter, `port`; only needed where they
+    remove ambiguity: converter ports, a battery with several posts, a fuse
+    block). Terminals sharing a port name form one port ("DC in" with "DC in +"
+    and "DC in -"); signal terminals (VE.Bus, relay contacts) are drawn but take
+    no part in circuits. A device type such as DC-DC converter, MPPT charger,
+    inverter, inverter/charger, battery charger or MultiPlus starts with its
+    standard ports and terminals), `signalkPath`
     (optional — a SignalK path this device corresponds to, e.g.
     `electrical.switches.anchorLight` or a battery's voltage/current
     sensor path; free text, not validated against the live data tree,

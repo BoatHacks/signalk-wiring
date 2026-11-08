@@ -9,7 +9,8 @@ export const CABLE_KINDS = [
   { value: 'both', label: 'Positive + negative', conductors: ['positive', 'negative'], more: false },
   { value: 'line', label: 'AC line', conductors: ['line'], more: true },
   { value: 'ac', label: 'AC line, neutral and earth', conductors: ['line', 'neutral', 'earth'], more: true },
-  { value: 'earth', label: 'Earth', conductors: ['earth'], more: true }
+  { value: 'earth', label: 'Earth', conductors: ['earth'], more: true },
+  { value: 'signal', label: 'Signal or data', conductors: ['signal'], more: true }
 ]
 
 export const CONDUCTOR_LABELS = {
@@ -17,7 +18,8 @@ export const CONDUCTOR_LABELS = {
   negative: 'Negative',
   line: 'AC line',
   neutral: 'AC neutral',
-  earth: 'Earth'
+  earth: 'Earth',
+  signal: 'Signal or data'
 }
 
 // The colour a new cable's conductors start with. A starting value only: the

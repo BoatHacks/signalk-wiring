@@ -48,31 +48,151 @@ export function terminalSides (device) {
   })
 }
 
-export function deviceBox (device, pos) {
+// ---- Ports ------------------------------------------------------------------
+//
+// A port is a named group of terminals ("DC in" with "DC in +" and "DC in -").
+// A device whose terminals name ports gets one block per port, with the port
+// name written on the box and the terminals grouped inside the block: inputs
+// on the left, outputs on the right, signal ports (data, relays) along the
+// bottom. A device without ports keeps the flat layout above.
+
+export const PORT_LABEL_H = 13
+export const PORT_GAP = 7
+export const BOTTOM_ROW_W = 16
+export const BOTTOM_H = 24
+
+const INPUT_WORDS = /\b(in|input|inputs|pv|solar|shore|supply|source|grid)\b/i
+const OUTPUT_WORDS = /\b(out|output|outputs|load|battery|bat|house)\b/i
+
+// Which side a port goes on. Signal ports (every terminal a signal) go along
+// the bottom; otherwise the name decides ("in" left, "out" or "battery"
+// right); a port the name does not place goes on the shorter side so far.
+export function portSide (name, terminals, load) {
+  if (terminals.length > 0 && terminals.every((t) => t.conductor === 'signal')) return 'bottom'
+  const input = INPUT_WORDS.test(name)
+  const output = OUTPUT_WORDS.test(name)
+  if (input && !output) return 'left'
+  if (output && !input) return 'right'
+  return load.left <= load.right ? 'left' : 'right'
+}
+
+export function hasPorts (device) {
+  return (device.terminals || []).some((t) => t.port)
+}
+
+// The ports of a device in order, each { name, side, terminals: [{ t, index }] }.
+// Terminals with no port form an unnamed group.
+export function devicePorts (device) {
+  const groups = []
+  ;(device.terminals || []).forEach((t, index) => {
+    const name = t.port || ''
+    let group = groups.find((g) => g.name === name)
+    if (!group) { group = { name, side: null, terminals: [] }; groups.push(group) }
+    group.terminals.push({ t, index })
+  })
+  const load = { left: 0, right: 0 }
+  // Named inputs and outputs first so loose ports balance around them.
+  const order = [...groups].sort((a, b) => Number(Boolean(b.name && (INPUT_WORDS.test(b.name) || OUTPUT_WORDS.test(b.name)))) -
+    Number(Boolean(a.name && (INPUT_WORDS.test(a.name) || OUTPUT_WORDS.test(a.name)))))
+  for (const g of order) {
+    g.side = portSide(g.name, g.terminals.map((x) => x.t), load)
+    if (g.side !== 'bottom') load[g.side] += g.terminals.length + (g.name ? 1 : 0)
+  }
+  return groups
+}
+
+// opts.w: the box width (default BOX_W); a box with bottom ports may grow.
+export function deviceBox (device, pos, opts = {}) {
+  if (hasPorts(device)) return portBox(device, pos, opts)
   const terminals = device.terminals || []
   const sides = terminalSides(device)
   const count = { left: 0, right: 0 }
   for (const s of sides) count[s]++
   const rows = Math.max(count.left, count.right)
   const h = Math.max(BOX_MIN_H, HEADER_H + rows * TERMINAL_ROW_H + 6)
+  const w = opts.w || BOX_W
   const seen = { left: 0, right: 0 }
   return {
     id: device.id,
     x: pos.x,
     y: pos.y,
-    w: BOX_W,
+    w,
     h,
+    ports: [],
+    bottomPorts: false,
     terminals: terminals.map((t, i) => {
       const side = sides[i]
       const row = seen[side]++
       return {
         name: t.name,
         conductor: t.conductor,
+        port: t.port || '',
         side,
-        x: side === 'left' ? pos.x : pos.x + BOX_W,
+        x: side === 'left' ? pos.x : pos.x + w,
         y: pos.y + HEADER_H + row * TERMINAL_ROW_H + TERMINAL_ROW_H / 2
       }
     })
+  }
+}
+
+function portBox (device, pos, opts) {
+  const groups = devicePorts(device)
+  const cursor = { left: HEADER_H, right: HEADER_H }
+  const placed = []
+  let bottomW = 0
+  const bottomGroups = groups.filter((g) => g.side === 'bottom')
+  for (const g of bottomGroups) bottomW += Math.max(g.terminals.length * BOTTOM_ROW_W, g.name.length * 5.4) + PORT_GAP
+  const w = Math.max(opts.w || BOX_W, Math.ceil(bottomW + PORT_GAP))
+  const hasBottom = bottomGroups.length > 0
+
+  for (const g of groups.filter((x) => x.side !== 'bottom')) {
+    const top = cursor[g.side]
+    const firstRowTop = top + (g.name ? PORT_LABEL_H : 0)
+    g.rows = g.terminals.map((x, row) => ({ ...x, y: firstRowTop + row * TERMINAL_ROW_H + TERMINAL_ROW_H / 2 }))
+    const edge = g.side === 'left' ? 0 : w
+    g.block = { x: edge - 7, y: firstRowTop + 1, w: 14, h: g.terminals.length * TERMINAL_ROW_H - 2 }
+    g.label = g.name ? { x: edge + (g.side === 'left' ? 11 : -11), y: top + 10, anchor: g.side === 'left' ? 'start' : 'end' } : null
+    cursor[g.side] = firstRowTop + g.terminals.length * TERMINAL_ROW_H + PORT_GAP
+    placed.push(g)
+  }
+  const bodyH = Math.max(BOX_MIN_H - (hasBottom ? BOTTOM_H : 0), cursor.left - PORT_GAP + 4, cursor.right - PORT_GAP + 4)
+  const h = bodyH + (hasBottom ? BOTTOM_H : 0)
+
+  let bx = (w - (bottomW - PORT_GAP)) / 2
+  for (const g of bottomGroups) {
+    const gw = Math.max(g.terminals.length * BOTTOM_ROW_W, g.name.length * 5.4)
+    const dotsW = g.terminals.length * BOTTOM_ROW_W
+    const start = bx + (gw - dotsW) / 2
+    g.rows = g.terminals.map((x, col) => ({ ...x, x: start + col * BOTTOM_ROW_W + BOTTOM_ROW_W / 2, y: h }))
+    g.block = { x: start + 1, y: h - 7, w: dotsW - 2, h: 14 }
+    g.label = g.name ? { x: bx + gw / 2, y: h - 11, anchor: 'middle' } : null
+    bx += gw + PORT_GAP
+    placed.push(g)
+  }
+
+  const terminals = []
+  for (const g of placed) {
+    for (const r of g.rows) {
+      terminals[r.index] = {
+        name: r.t.name,
+        conductor: r.t.conductor,
+        port: r.t.port || '',
+        side: g.side,
+        x: pos.x + (g.side === 'bottom' ? r.x : g.side === 'left' ? 0 : w),
+        y: pos.y + r.y
+      }
+    }
+  }
+  return {
+    id: device.id,
+    x: pos.x,
+    y: pos.y,
+    w,
+    h,
+    bottomPorts: hasBottom,
+    // Port blocks in box-relative coordinates, for drawing.
+    ports: placed.map((g) => ({ name: g.name, side: g.side, block: g.block, label: g.label })),
+    terminals
   }
 }
 
@@ -400,6 +520,7 @@ export function supplyOrder (a, b) {
 // positive; otherwise positive and negative.
 export function defaultKind (a, b) {
   const terminals = [...(a.terminals || []), ...(b.terminals || [])]
+  if (terminals.length > 0 && terminals.every((t) => t.conductor === 'signal')) return 'signal'
   const hasAc = terminals.some((t) => t.conductor === 'line')
   const hasDc = terminals.some((t) => t.conductor === 'positive')
   if (hasAc && !hasDc) return 'ac'

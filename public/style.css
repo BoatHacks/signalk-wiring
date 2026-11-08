@@ -36,6 +36,7 @@
   --wire-line: #8a5a2b;
   --wire-neutral: #2f6fb5;
   --wire-earth: #4a9a3a;
+  --wire-signal: #7d4fa3;
   --live-on: #2f8a2f;
   --live-off: #8a8a85;
   --live-unknown: #c9c4a8;
@@ -75,6 +76,7 @@
   --wire-line: #d9776a;
   --wire-neutral: #a15850;
   --wire-earth: #c06657;
+  --wire-signal: #8f6a8a;
   --wire-highlight: #ffb3a6;
   --live-on: #ff5c47;
   --live-off: #4d332e;
@@ -637,6 +639,7 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-wire-line.c-line { stroke: var(--wire-line); }
 .sch-wire-line.c-neutral { stroke: var(--wire-neutral); }
 .sch-wire-line.c-earth { stroke: var(--wire-earth); }
+.sch-wire-line.c-signal { stroke: var(--wire-signal); }
 .sch-wire-over { stroke-dasharray: 6 6; }
 .sch-wire-over.c-positive { stroke: var(--wire-positive); }
 .sch-wire-over.c-negative { stroke: var(--wire-negative); }
@@ -707,3 +710,8 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-device.live-fixed, .sch-device.live-locked, .sch-device.live-none { opacity: 0.4; }
 .sch-device.live-clickable .sch-device-box { cursor: pointer; }
 .sch-device.live-fixed .sch-device-box, .sch-device.live-locked .sch-device-box, .sch-device.live-none .sch-device-box { cursor: not-allowed; }
+
+/* Port blocks (devices whose terminals name ports) */
+.sch-port-block { fill: none; stroke: var(--border-strong); stroke-width: 1; }
+.sch-port-label { font-size: 9px; fill: var(--text-muted-strong); pointer-events: none; }
+.sch-terminal.c-signal { fill: var(--wire-signal); }

@@ -62,7 +62,7 @@ const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converte
 const ZONED_TABLES = ['devices', 'wire_runs', 'conduits']
 const ZONED_KINDS = ['device', 'wireRun', 'conduit']
 // The conductor types of a cable and of a device terminal.
-const CONDUCTOR_TYPES = ['positive', 'negative', 'line', 'neutral', 'earth']
+const CONDUCTOR_TYPES = ['positive', 'negative', 'line', 'neutral', 'earth', 'signal']
 
 // Image types a browser can draw in a small icon. HEIC is accepted as an
 // attachment but not here, since most browsers cannot display it.

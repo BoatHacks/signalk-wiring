@@ -10,6 +10,7 @@ import { circuitsOfCable, cableTitle, CONDUCTOR_LABELS } from './cableForm.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
+import { PortBlocks } from './ports.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
@@ -457,7 +458,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       }
     }
     const term = G.hitTerminal(boxes, p.x, p.y)
-    const handle = !term && boxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, b.y + b.h - p.y) <= 9)
+    const handle = !term && boxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
     if (term || handle) {
       const id = term ? term.deviceId : handle.id
       drag.current = { kind: 'wire', fromId: id, fromTerminal: term ? term.terminal : '', sx: e.clientX, sy: e.clientY, moved: false }
@@ -668,14 +669,9 @@ function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
       <text x=${box.w / 2} y="14" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
       ${device.type && html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type">${shorten(device.type, 26)}</text>`}
       ${live && live.look === 'locked' && html`<${LiveLock} x=${box.w - 10} y=${10} size=${13} />`}
-      ${live && html`<${LiveReading} x=${box.w / 2} y=${box.h - 5} size=${10} text=${live.reading} />`}
-      ${!live && html`<circle cx=${box.w / 2} cy=${box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>`}
-      ${box.terminals.map((t) => html`
-        <g key=${t.name}>
-          <circle cx=${t.x - box.x} cy=${t.y - box.y} r="4" class="sch-terminal c-${t.conductor}" />
-          <text x=${t.side === 'left' ? 9 : box.w - 9} y=${t.y - box.y + 3} text-anchor=${t.side === 'left' ? 'start' : 'end'} class="sch-terminal-label">${shorten(t.name, 14)}</text>
-        </g>
-      `)}
+      ${live && html`<${LiveReading} x=${box.w / 2} y=${box.bottomPorts ? 26 : box.h - 5} size=${10} text=${live.reading} />`}
+      ${!live && html`<circle cx=${box.w / 2} cy=${box.bottomPorts ? 0 : box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>`}
+      <${PortBlocks} box=${box} />
     </g>
   `
 }

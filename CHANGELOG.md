@@ -7,6 +7,19 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Ports. Terminals that name a port are drawn grouped as a block per port, with
+  the port name written on the device: inputs on the left, outputs on the
+  right, signal ports (data, relays) along the bottom, on schematics and on the
+  circuit diagram. A new "signal" terminal and cable type covers VE.Bus and
+  relay contacts. A device of type DC-DC converter, MPPT charger, inverter,
+  inverter/charger, battery charger or MultiPlus starts with its standard ports
+  and terminals (a button fills them in on an existing device). Dropping a wire
+  on one terminal of a port picks the matching terminal of the same port for
+  the other conductor.
+- A device with more than one terminal shows them as separate dots, coloured by
+  conductor, on schematics and on the circuit diagram. The name (and port) is
+  the hover text; the always-visible terminal labels on schematics are gone.
+  A cable that names a terminal ends on its dot.
 - New cables start with default conductor colours: red for positive, black for
   negative, brown, blue and green/yellow for AC line, neutral and earth. They
   are filled into the colour fields and can be changed or emptied. Editing an

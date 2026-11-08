@@ -300,3 +300,41 @@ test('fitView frames the boxes with a margin', () => {
   assert.equal(v.y, 60)
   assert.equal(v.w, 500 + S.BOX_W - 100 + 80)
 })
+
+test('deviceBox with ports: blocks per port, inputs left, outputs right, signal along the bottom', () => {
+  const t = (name, conductor, port) => ({ name, conductor, port })
+  const multi = S.deviceBox(dev('m', {
+    role: 'converter',
+    terminals: [
+      t('DC in +', 'positive', 'DC in'), t('DC in -', 'negative', 'DC in'),
+      t('AC out 1 L', 'line', 'AC out 1'), t('AC out 1 N', 'neutral', 'AC out 1'),
+      t('VE.Bus', 'signal', 'VE.Bus'), t('Relay 1', 'signal', 'Relay 1')
+    ]
+  }), { x: 100, y: 50 })
+  const side = (name) => multi.terminals.find((x) => x.name === name).side
+  assert.equal(side('DC in +'), 'left')
+  assert.equal(side('AC out 1 L'), 'right')
+  assert.equal(side('VE.Bus'), 'bottom')
+  assert.equal(multi.bottomPorts, true)
+  assert.deepEqual(multi.ports.map((p) => p.name), ['DC in', 'AC out 1', 'VE.Bus', 'Relay 1'])
+  // The two terminals of a port are neighbours on the same edge.
+  const [p, n] = ['DC in +', 'DC in -'].map((name) => multi.terminals.find((x) => x.name === name))
+  assert.equal(p.x, 100)
+  assert.equal(n.y - p.y, S.TERMINAL_ROW_H)
+  // Bottom terminals sit on the bottom edge, inside the box width.
+  const ve = multi.terminals.find((x) => x.name === 'VE.Bus')
+  assert.equal(ve.y, 50 + multi.h)
+  assert.ok(ve.x > 100 && ve.x < 100 + multi.w)
+  // Terminals keep their original order and are unique anchors.
+  assert.deepEqual(multi.terminals.map((x) => x.name), ['DC in +', 'DC in -', 'AC out 1 L', 'AC out 1 N', 'VE.Bus', 'Relay 1'])
+})
+
+test('deviceBox with ports: a DC-DC converter has DC in on the left and DC out on the right', () => {
+  const t = (name, conductor, port) => ({ name, conductor, port })
+  const b = S.deviceBox(dev('d', { role: 'converter', terminals: [
+    t('DC in +', 'positive', 'DC in'), t('DC in -', 'negative', 'DC in'),
+    t('DC out +', 'positive', 'DC out'), t('DC out -', 'negative', 'DC out')
+  ] }), { x: 0, y: 0 })
+  assert.deepEqual(b.terminals.map((x) => x.side), ['left', 'left', 'right', 'right'])
+  assert.equal(b.bottomPorts, false)
+})

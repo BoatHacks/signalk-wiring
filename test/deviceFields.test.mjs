@@ -54,3 +54,16 @@ test('port names are distinct and in order; terminals describe themselves', () =
   assert.deepEqual(portNames(t), ['DC in', 'AC out'])
   assert.equal(describeTerminal({ name: 'DC +', conductor: 'positive', voltage: 12, port: 'DC in' }), 'DC +, positive, 12 V, port DC in')
 })
+
+import { terminalPreset } from '../public/deviceFields.js'
+
+test('standard terminals: DC-DC converter and MultiPlus, none for a plain type', () => {
+  const dcdc = terminalPreset('DC-DC converter')
+  assert.deepEqual(dcdc.terminals.map((t) => t.name), ['DC in +', 'DC in -', 'DC out +', 'DC out -'])
+  assert.deepEqual(dcdc.terminals.map((t) => t.port), ['DC in', 'DC in', 'DC out', 'DC out'])
+  const multi = terminalPreset('Victron MultiPlus-II 48/5000')
+  assert.deepEqual([...new Set(multi.terminals.map((t) => t.port))], ['DC in', 'AC in', 'AC out 1', 'AC out 2', 'VE.Bus', 'Relay 1', 'Relay 2'])
+  assert.equal(new Set(multi.terminals.map((t) => t.name)).size, multi.terminals.length)
+  assert.equal(terminalPreset('Bilge pump'), null)
+  assert.equal(terminalPreset('MPPT charger').terminals[2].port, 'Battery')
+})

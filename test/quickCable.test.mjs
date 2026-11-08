@@ -72,3 +72,18 @@ test('startValues keepOrder keeps From and To as given', () => {
   assert.equal(kept.values.fromDeviceId, 'lamp')
   assert.equal(kept.values.toDeviceId, 'bat')
 })
+
+import { resolveTerminals as resolveT } from '../public/quickCable.js'
+
+test('dropping on one terminal of a port picks the other conductor of the same port', () => {
+  const t = (name, conductor, port) => ({ name, conductor, port })
+  const dcdc = { id: 'x', name: 'DC-DC', role: 'converter', terminals: [
+    t('DC in +', 'positive', 'DC in'), t('DC in -', 'negative', 'DC in'),
+    t('DC out +', 'positive', 'DC out'), t('DC out -', 'negative', 'DC out')
+  ] }
+  const bat = { id: 'b', name: 'Bat', role: 'storage', terminals: [] }
+  const r = resolveT('both', bat, '', dcdc, 'DC in +')
+  assert.deepEqual(r.missing, [])
+  assert.deepEqual(r.terminals.positive, { from: '', to: 'DC in +' })
+  assert.deepEqual(r.terminals.negative, { from: '', to: 'DC in -' })
+})

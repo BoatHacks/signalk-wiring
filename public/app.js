@@ -12,6 +12,8 @@ import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { SchematicsTab } from './schematicView.js'
+import { deviceBox, endTerminals } from './schematic.js'
+import { PortBlocks } from './ports.js'
 import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
 import { typeOptions, isCriticalType } from './deviceTypes.js'
@@ -19,7 +21,7 @@ import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
-import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal } from './deviceFields.js'
+import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
 
@@ -248,7 +250,8 @@ function ZoneField ({ value, onChange }) {
 
 // The terminals of a device: a name, what conductor lands there, an optional
 // voltage and, on a converter, the port (a side of it, for example DC in).
-function TerminalsEditor ({ value, role, onChange }) {
+function TerminalsEditor ({ value, role, type, onChange }) {
+  const preset = terminalPreset(type)
   const update = (index, patch) => onChange(value.map((t, i) => (i === index ? { ...t, ...patch } : t)))
   const remove = (index) => onChange(value.filter((_, i) => i !== index))
   const add = () => onChange([...value, { name: '', conductor: 'positive', voltage: '', port: '' }])
@@ -267,7 +270,10 @@ function TerminalsEditor ({ value, role, onChange }) {
           <button type="button" onClick=${() => remove(i)}>Remove</button>
         </div>
       `)}
-      <button type="button" onClick=${add}>+ Add terminal</button>
+      <div class="row-actions">
+        <button type="button" onClick=${add}>+ Add terminal</button>
+        ${preset && value.length === 0 && html`<button type="button" onClick=${() => onChange(preset.terminals)}>Use standard ports for ${preset.label}</button>`}
+      </div>
     </div>
   `
 }
@@ -337,7 +343,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
         <label class="form-field" key=${f.key}>
           <span>${f.label}${f.required ? ' *' : ''}</span>
           ${f.type === 'terminals' && html`
-            <${TerminalsEditor} value=${values[f.key]} role=${values.role} onChange=${(v) => setField(f.key, v)} />
+            <${TerminalsEditor} value=${values[f.key]} role=${values.role} type=${values.type} onChange=${(v) => setField(f.key, v)} />
           `}
           ${f.type === 'checkbox' && html`
             <input type="checkbox" class="checkbox-input" checked=${Boolean(values[f.key])}
@@ -587,8 +593,15 @@ function ChangeLog ({ kind, id }) {
 
 // A new device of a critical-looking type starts with confirm-before-switching
 // on, until the user sets the box themselves.
+// A type with standard ports (a DC-DC converter, a MultiPlus) fills in its
+// terminals while the list is still empty.
 function criticalDefault (key, value, values, touched) {
-  return key === 'type' && !touched.confirmSwitching ? { confirmSwitching: isCriticalType(value) } : null
+  if (key !== 'type') return null
+  const extra = {}
+  if (!touched.confirmSwitching) extra.confirmSwitching = isCriticalType(value)
+  const preset = terminalPreset(value)
+  if (preset && !(values.terminals || []).some((t) => t.name)) extra.terminals = preset.terminals
+  return extra
 }
 
 const DEVICE_FIELDS = [
@@ -1436,7 +1449,7 @@ function CircuitsList ({ onSelect }) {
 // Built from data already fetched through the resource API: the derived
 // circuit says which cables belong to it, and the cables say which devices
 // they join. Return (negative) cables are drawn dotted.
-function DiagramView ({ cables, deviceNameById, deviceIconById, live, onLiveError }) {
+function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new Map(), live, onLiveError }) {
   if (cables.length === 0) return null
 
   const nodes = []
@@ -1456,7 +1469,17 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, live, onLiveErro
   g.setGraph({ rankdir: 'LR', nodesep: 24, ranksep: 56, marginx: 16, marginy: 16 })
   g.setDefaultEdgeLabel(() => ({}))
   for (const n of nodes) {
-    g.setNode(n.id, { width: Math.max(90, n.label.length * 7 + 28) + (n.icon ? 36 : 0), height: n.icon ? 48 : 40 })
+    const labelW = Math.max(90, n.label.length * 7 + 28) + (n.icon ? 36 : 0)
+    // A box for the device's terminals and ports (relative to the node's corner),
+    // as wide as the label needs.
+    const hasPorts = ((deviceById.get(n.id) || {}).terminals || []).some((t) => t.port)
+    // With ports, the name sits in a header row and the port labels need room beside it.
+    n.box = deviceBox(deviceById.get(n.id) || { id: n.id, terminals: [] }, { x: 0, y: 0 }, { w: hasPorts ? Math.max(labelW, n.label.length * 7 + 120) : labelW })
+    const portless = n.box.terminals.length === 0
+    const height = portless ? (n.icon ? 48 : 40) : Math.max(n.icon ? 48 : 40, n.box.h)
+    const width = portless ? labelW : n.box.w
+    n.terminals = n.box.terminals
+    g.setNode(n.id, { width, height })
   }
   for (const wr of cables) {
     if (wr.fromDeviceId && wr.toDeviceId) g.setEdge(wr.fromDeviceId, wr.toDeviceId, { wireRun: wr }, wr.id)
@@ -1472,7 +1495,18 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, live, onLiveErro
           const edgeData = g.edge(e)
           const wr = edgeData.wireRun
           const removed = wr.status === 'removed'
-          const points = edgeData.points.map((p) => `${p.x},${p.y}`).join(' ')
+          // A cable that names a terminal ends on that dot, not on the node's edge.
+          const route = edgeData.points.map((p) => ({ x: p.x, y: p.y }))
+          const named = endTerminals(wr)
+          for (const [end, nodeId, index] of [['from', wr.fromDeviceId, 0], ['to', wr.toDeviceId, route.length - 1]]) {
+            const node = nodes.find((n) => n.id === nodeId)
+            const dot = node && named[end] ? node.terminals.find((t) => t.name === named[end]) : null
+            const pos = node ? g.node(nodeId) : null
+            if (dot && pos && route.length > 0) {
+              route[index] = { x: pos.x - pos.width / 2 + dot.x, y: pos.y - pos.height / 2 + dot.y }
+            }
+          }
+          const points = route.map((p) => `${p.x},${p.y}`).join(' ')
           const feed = (wr.conductors || []).find((c) => c.conductor !== 'negative')
           const ret = wr.isReturn
           return html`
@@ -1501,11 +1535,12 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, live, onLiveErro
               ${liveState && html`<title>${liveState.title}</title>`}
               <rect width=${pos.width} height=${pos.height} rx="6" class="diagram-node diagram-node-${n.kind}" />
               ${n.icon && html`<image href=${n.icon} x="6" y=${(pos.height - 36) / 2} width="36" height="36" preserveAspectRatio="xMidYMid meet" />`}
-              <text x=${(pos.width + (n.icon ? 36 : 0)) / 2} y=${pos.height / 2 + 4} text-anchor="middle" class="diagram-label">
+              <text x=${(pos.width + (n.icon ? 36 : 0)) / 2} y=${n.box.ports.length > 0 ? 18 : pos.height / 2 + 4} text-anchor="middle" class="diagram-label">
                 ${n.label}
               </text>
+              <${PortBlocks} box=${n.box} originX=${0} originY=${0} />
               ${liveState && liveState.look === 'locked' && html`<${LiveLock} x=${pos.width - 12} y=${12} size=${14} />`}
-              ${liveState && html`<${LiveReading} x=${pos.width / 2} y=${pos.height - 4} size=${10} text=${liveState.reading} />`}
+              ${liveState && html`<${LiveReading} x=${pos.width / 2} y=${n.box.bottomPorts ? 24 : pos.height - 4} size=${10} text=${liveState.reading} />`}
             </g>
           `
         })}
@@ -1586,7 +1621,7 @@ function CircuitDetail ({ circuitId, onBack }) {
         </div>
         ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
         ${liveError && html`<div class="error-banner">${liveError}</div>`}
-        <${DiagramView} cables=${[...feedCables, ...returnCables]} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById}
+        <${DiagramView} cables=${[...feedCables, ...returnCables]} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById} deviceById=${new Map(devices.map((d) => [d.id, d]))}
           live=${liveOn ? live : null} onLiveError=${setLiveError} />
       `}
 
