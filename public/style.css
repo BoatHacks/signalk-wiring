@@ -699,3 +699,9 @@ main:has(.schematic-editor) { max-width: none; }
 .calibrate-dialog .timing-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
 .calibrate-dialog .hint.warn { color: var(--warn); }
 .calibrate-dialog .measured-line { font-weight: 700; font-size: 16px; }
+.sch-device.live-on .sch-device-box { fill: var(--live-on); fill-opacity: 0.8; }
+.sch-device.live-off .sch-device-box { fill: var(--live-off); fill-opacity: 0.7; }
+.sch-device.live-unknown .sch-device-box { fill: var(--live-unknown); }
+.sch-device.live-fixed, .sch-device.live-locked, .sch-device.live-none { opacity: 0.4; }
+.sch-device.live-clickable .sch-device-box { cursor: pointer; }
+.sch-device.live-fixed .sch-device-box, .sch-device.live-locked .sch-device-box, .sch-device.live-none .sch-device-box { cursor: not-allowed; }

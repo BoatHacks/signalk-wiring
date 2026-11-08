@@ -164,7 +164,7 @@ breaker checks become based on what the boat actually draws.
       detection.
 - [x] Load check uses measured values.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
-- [ ] Live mode on the schematic canvas once plan 0016 is built.
+- [x] Live mode on the schematic canvas once plan 0016 is built.
 
 ## Follow-ups (not in this plan)
 

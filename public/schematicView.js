@@ -8,6 +8,8 @@ import { startValues } from './quickCable.js'
 import { CablePopover } from './cablePopover.js'
 import { circuitsOfCable, cableTitle, CONDUCTOR_LABELS } from './cableForm.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
+import { useLive } from './live.js'
+import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
@@ -192,6 +194,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const { devices, cables, circuits, schematics } = data
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const deviceName = (id) => (deviceById.get(id) || {}).name
+  // Live mode (plan 0017): states and meter readings on the devices, and a
+  // click switches a consumer through the relay that feeds it.
+  const [liveOn, setLiveOn] = useState(false)
+  const live = useLive(liveOn, 0, (id) => deviceName(id) || id)
+  const liveToggle = async (id) => {
+    onError(null)
+    try { await live.toggle(id) } catch (err) { onError(err.message) }
+  }
 
   // Layout lives in local state while it is being dragged and is written
   // when the drag ends. It is reset from the record whenever that changes.
@@ -411,6 +421,12 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const tab = stubs.find((s) => p.x >= s.tab.x && p.x <= s.tab.x + s.tab.w && p.y >= s.tab.y && p.y <= s.tab.y + s.tab.h)
     if (tab) { setTabMenu({ stub: tab }); return }
     try { svgRef.current.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointers cannot be captured */ }
+    if (liveOn) {
+      const hit = G.hitDevice(boxes, p.x, p.y)
+      if (hit) { liveToggle(hit.id); return }
+      drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, view: { ...view }, moved: false }
+      return
+    }
     // Bend handles of the selected wire come first, since they sit on the wire.
     const sel = selectedWireId && wires.find((w) => w.id === selectedWireId)
     if (sel) {
@@ -541,6 +557,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           <option value="">Add existing device…</option>
           ${addable.map((d) => html`<option value=${d.id} key=${d.id}>${d.name} (${roleLabel(d.role)})</option>`)}
         </select>
+        <button type="button" class=${liveOn ? 'active' : ''} data-testid="schematic-live" onClick=${() => { setLiveOn((v) => !v); onError(null) }}>${liveOn ? 'Live: on' : 'Live'}</button>
         <button type="button" data-testid="auto-arrange" onClick=${autoArrange} disabled=${busy || boxes.length === 0}>Auto-arrange</button>
         <button type="button" onClick=${() => zoomAt(ZOOM_STEP)}>＋</button>
         <button type="button" onClick=${() => zoomAt(1 / ZOOM_STEP)}>－</button>
@@ -550,6 +567,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${pageCircuits.map((c) => html`<option value=${c.id} key=${c.id}>${c.name}</option>`)}
         </select>
       </div>
+      ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
       ${notice && html`<div class="meta schematic-notice" data-testid="notice">${notice}</div>`}
       ${moreForm && html`
         <div class="schematic-moreform">
@@ -592,6 +610,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             ${boxes.map((b) => html`<${DeviceShape} key=${b.id} box=${b} device=${deviceById.get(b.id)}
               selected=${!!selection && selection.type === 'device' && selection.id === b.id}
               target=${!!preview && preview.targetId === b.id}
+              live=${liveOn ? (live.info(b.id) || { look: 'none' }) : null}
               dim=${dimming && !hl.deviceIds.has(b.id)} lit=${dimming && hl.deviceIds.has(b.id)} />`)}
             ${preview && html`<path class="sch-preview" d=${G.pathToD([preview.a, preview.b])} />`}
           </svg>
@@ -639,14 +658,18 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
 // ---- Shapes ----------------------------------------------------------------
 
-function DeviceShape ({ box, device, selected, dim, lit, target }) {
-  const cls = `sch-device role-${device.role || 'consumer'}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
+function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
+  const liveClass = live ? ` live-${live.look}${live.clickable ? ' live-clickable' : ''}` : ''
+  const cls = `sch-device role-${device.role || 'consumer'}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}${liveClass}`
   return html`
-    <g class=${cls} transform="translate(${box.x}, ${box.y})" data-device=${box.id}>
+    <g class=${cls} transform="translate(${box.x}, ${box.y})" data-device=${box.id} data-live=${live ? live.look : undefined}>
+      ${live && live.title && html`<title>${live.title}</title>`}
       <rect width=${box.w} height=${box.h} rx="5" class="sch-device-box" />
       <text x=${box.w / 2} y="14" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
       ${device.type && html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type">${shorten(device.type, 26)}</text>`}
-      <circle cx=${box.w / 2} cy=${box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>
+      ${live && live.look === 'locked' && html`<${LiveLock} x=${box.w - 10} y=${10} size=${13} />`}
+      ${live && html`<${LiveReading} x=${box.w / 2} y=${box.h - 5} size=${10} text=${live.reading} />`}
+      ${!live && html`<circle cx=${box.w / 2} cy=${box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>`}
       ${box.terminals.map((t) => html`
         <g key=${t.name}>
           <circle cx=${t.x - box.x} cy=${t.y - box.y} r="4" class="sch-terminal c-${t.conductor}" />
