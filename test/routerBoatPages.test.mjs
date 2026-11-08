@@ -6,6 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as S from '../public/schematic.js'
 import * as R from '../public/wireRouter.js'
+import { readFileSync } from 'node:fs'
 import { routeBoatPage, pageNames, pageInput } from './helpers/boatPages.mjs'
 import { checkPage, linesOf, MIN_CLEAR, LINE_W } from './helpers/routeCheck.mjs'
 
@@ -82,4 +83,28 @@ test('router: the page is routed the same way whatever the order of the input', 
   const rb = R.routePage(b)
   for (const [id, w] of ra.wires) assert.deepEqual(rb.wires.get(id).points, w.points)
   for (const [id, s] of ra.stubs) assert.deepEqual(rb.stubs.get(id).path, s.path)
+})
+
+test('a line to a tab is drawn like its cable: conductor colours, DC solid or AC dashed, normal width', () => {
+  const view = readFileSync(new URL('../public/schematicView.js', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../public/style.css', import.meta.url), 'utf8')
+  const shape = view.slice(view.indexOf('function StubShape'), view.indexOf('function TabMenu'))
+  assert.match(shape, /conductorTypes\(stub\.cable\)/)
+  assert.match(shape, /wireLineStyle\(stub\.cable\)/)
+  assert.match(shape, /sch-wire-line sch-stub-line c-/)
+  assert.match(shape, /sch-wire-pair/)
+  assert.match(shape, /WireMarker/)
+  assert.match(shape, /class="sch-tab"/)
+  // no override of the colour, dash or width for the stub line in the stylesheet
+  const rules = css.split('}').filter((r) => /\.sch-stub-line\s*\{/.test(r.replace(/,\s*/g, ' ')) && !/\.sch-wire-line/.test(r))
+  assert.deepEqual(rules, [])
+  assert.match(css, /\.sch-wire-line, \.sch-wire-pair, \.sch-stub-line \{ fill: none; stroke-width: 3;/)
+  // every cable of a stub has a style, so DC is solid and AC dashed
+  const { input } = routeBoatPage('48V System')
+  const data = JSON.parse(readFileSync(new URL('./fixtures/boat-pages.json', import.meta.url), 'utf8'))
+  for (const s of input.stubs) {
+    const c = data.cables.find((x) => x.id === s.cableId)
+    const st = S.wireLineStyle(c)
+    assert.equal(st.dasharray, st.current === 'ac' ? '10 6' : null)
+  }
 })

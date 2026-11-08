@@ -681,7 +681,6 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-wire.selected .sch-wire-pair, .sch-wire.lit .sch-wire-pair { stroke-width: 2.5; }
 .sch-wire.dim { opacity: 0.2; }
 .sch-wire.lit .sch-wire-line { stroke-width: 5; }
-.sch-stub-line { stroke: var(--text-muted-strong); stroke-dasharray: 4 3; stroke-width: 2; }
 .sch-tab { fill: var(--surface); stroke: var(--text-muted-strong); cursor: pointer; }
 .sch-tab-label { font-size: 11px; fill: var(--text); pointer-events: none; }
 .sch-bend { fill: var(--surface); stroke: var(--text); stroke-width: 2; cursor: move; }

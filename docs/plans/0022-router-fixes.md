@@ -1,6 +1,6 @@
 # Implementation Plan: 0022 - Router fixes (issue #14, found testing 0.6.0)
 
-Tracks the five open schematic items of GitHub issue #14. The new router
+Tracks the open schematic items of GitHub issue #14 (the five of 0.6.0, then the follow-up below). The new router
 (`public/wireRouter.js`, plan 0021 section 4) stays; it is improved.
 
 ## Overview
@@ -58,3 +58,45 @@ tab. The router now treats these as hard rules instead of costs.
 - Store and resource tests for the saved stub positions; pure tests for the
   drag, Tidy and Auto-arrange behaviour; a browser check against a read-only
   copy of the live data in the light and night themes.
+
+## Follow-up: stub lines and the MultiPlus DC in (issue #14, found testing 0.6.1)
+
+- [x] 6. The line from a device to a tab is drawn like the cable it stands for: conductor colours (a second conductor as a thin second line), DC solid or AC dashed with the same marker, the normal line width. The tab stays the off-page marker.
+- [ ] 7. The MultiPlus DC in on the 48V page:
+  - [ ] a. Wires reaching a port block do not cross just before the port.
+  - [ ] b. A conduit band ends clear of port blocks, and its label sits where no line passes.
+  - [ ] c. A line to a tab keeps a wide gap from other wires.
+
+Choices:
+
+- **Item 6.** `StubShape` uses `conductorTypes`, `wireLineStyle`, `offsetPath` and
+  `WireMarker` like `WireShape`; the grey dashed `.sch-stub-line` style is gone
+  (the class stays for the shared width rule). The view hands each stub its
+  `cable`.
+- **Item 7a.** A crossing within `PORT_CLEAR` (90) of a port, along either of the
+  two lines, costs `PORT_CROSS_COST` (150) extra in the search. It is a cost, not a
+  ban: a few spots on the boat's pages (a wire across a fan of legs of one
+  device) have no other way. At the MultiPlus the red wire now comes in above the
+  black one and the crossing is moved about 100 away, with a bridge. A node
+  near the end of a recorded line is marked in `zone` when the line is committed.
+- **Rip-up budget.** The extra rounds were limited by time, so the result changed
+  with the speed of the machine (a cold first route cut the rounds short). The
+  limit is now a count of search steps (`ROUND_BUDGET`), the same on every machine.
+- **Item 7b.** `conduitBands` stops a band `BAND_END` (36) short of the port where
+  a stretch reaches the end of its wire, so no rounded end wraps the port blocks.
+  A band too short for that keeps a short piece in the middle. The label is placed
+  by `placeLabels`: above or below a horizontal stretch (up to 24 away), or beside a
+  vertical one, at the first spot where its text box meets no line, device, tab,
+  other band or other label (`labelPos`). The view passes these as `avoid`. The
+  label has a halo in the surface colour.
+- **Item 7c.** Lines to tabs are committed with `STUB_PITCH` (24) instead of 16, so
+  later wires keep 24 from them, and spread anchors keep 24 from a terminal that
+  has a stub. The CAN stub next to the red positive wire is now 29 away.
+
+Tests: `test/routerBoatPages.test.mjs` (no crossing within `PORT_CLEAR` at the
+MultiPlus; crossings near ports not above the present count; stubs keep
+`STUB_PITCH`; bands clear of port blocks and labels clear of lines; stub line
+style), helpers `crossingsNearPorts` and `portDistance` in
+`test/helpers/routeCheck.mjs`, band trimming in `test/wireRouter.test.mjs`. The
+boat's pages route in about 200 to 400 ms cold (the first route after loading),
+about 150 to 250 ms warm.

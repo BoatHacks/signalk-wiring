@@ -288,7 +288,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const liveCables = cables.filter(isLive)
   const onPage = liveCables.filter((c) => boxById.has(c.fromDeviceId) && boxById.has(c.toDeviceId))
   const lanes = G.assignLanes(onPage.map((c) => ({ id: c.id, a: c.fromDeviceId, b: c.toDeviceId })))
-  const stubsBase = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName }).map((st) => (stubPos[st.cableId] ? { ...st, pos: stubPos[st.cableId] } : st))
+  const stubsBase = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName }).map((st) => ({ ...st, cable: liveCables.find((c) => c.id === st.cableId), ...(stubPos[st.cableId] ? { pos: stubPos[st.cableId] } : {}) }))
   // Routing runs when the page's layout, wires or conduits change, not on
   // every pointer move: while a device or a bend point is being dragged the
   // old cheap routes are drawn and the full routing follows the drop.
@@ -945,11 +945,18 @@ function ConduitBand ({ band }) {
   `
 }
 
+// The line to a tab is drawn like the wire it stands for (conductor colours,
+// a second conductor line, DC solid or AC dashed, the same marker); the tab
+// stays the off-page marker.
 function StubShape ({ stub }) {
-  const end = stub.path[stub.path.length - 1]
+  const types = G.conductorTypes(stub.cable)
+  const style = G.wireLineStyle(stub.cable)
+  const paired = types.length > 1 ? G.pathToD(G.offsetPath(stub.path, 4)) : null
   return html`
-    <g class="sch-stub" data-stub=${stub.cableId}>
-      <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class="sch-stub-line" />
+    <g class="sch-stub" data-stub=${stub.cableId} data-current=${style.current || ''}>
+      <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line c-' + types[0]} stroke-dasharray=${style.dasharray || undefined} />
+      ${paired && html`<path d=${paired} class=${'sch-wire-pair c-' + types[1]} stroke-dasharray=${style.dasharray || undefined} />`}
+      ${style.marker && stub.path.length > 1 && html`<${WireMarker} kind=${style.marker} at=${G.pathMidpoint(stub.path)} />`}
       <rect x=${stub.tab.x} y=${stub.tab.y} width=${stub.tab.w} height=${stub.tab.h} rx="3" class="sch-tab" />
       <text x=${stub.tab.x + stub.tab.w / 2} y=${stub.tab.y + 14} text-anchor="middle" class="sch-tab-label">${shorten(stub.label, 20)}</text>
     </g>
