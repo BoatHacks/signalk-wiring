@@ -447,7 +447,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are nine migrations (the third to ninth are described below): plan 0008's field
+every subsequent restart. There are ten migrations (the third to tenth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -508,6 +508,14 @@ are emptied is dropped. `store.js` writes the two lists with the parent in one
 transaction. Only a change in which devices are on a page is logged (a
 `devices` diff of ids); moving a device or a bend point is layout and adds no
 entry, and a cable carries its own wiring history.
+
+Plan 0019's migration (version 10) adds `devices.current` (`ac`, `dc` or
+null) and fills it once for existing devices: from the type (the same table
+`src/current.js` and `public/deviceTypes.js` hold), then from terminals (all
+positive and negative gives `dc`, all line, neutral and earth gives `ac`). It
+never changes a device that already has a mark. The store also rejects a
+mixed AC and DC conductor list in `_checkChildren` (`mixesAcAndDc` in
+`src/current.js`), so the API, the forms and the CSV import share the rule.
 
 Plan 0017's migration (version 9) adds `switch_path`, `confirm_switching`,
 `never_remote`, `meter_path` and `meter_unit` to `devices`, `meter_path` and
@@ -655,6 +663,8 @@ signalk-wiring/
     measured.js                # measured values beside the rating, load figures
     schematic.js               # pure geometry: boxes, terminals, routing, stubs, hit tests
     schematicView.js           # schematics tab: pages, canvas, palette, wires, bends
+    current.js                 # pure: AC or DC of an end, the cable type suggestion,
+                               # the mixed cable rule, the conduit AC/DC mix
     quickCable.js              # pure: values for the quick cable popover
     cablePopover.js            # the quick cable popover shared by both tools
     connectTool.js             # pure state machine of the floorplan connect tool

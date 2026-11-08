@@ -228,7 +228,7 @@ These are open to change in review:
       floorplan, thinner paired second conductor, night theme check.
 - [x] Conduit warning: `conduitCurrentMix`, the conduit page, the Conduits list
       and the assign notice, with tests.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #5.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #5.
 
 ## Files to Create/Modify
 

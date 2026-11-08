@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-08
+
 ### Added
 
 - A "Current" field on every device (Either, AC or DC), with presets from the
@@ -34,7 +36,6 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 - The second conductor of a cable on the schematic is now a thin paired line
   drawn beside the first instead of a dashed overlay, so dashes mean AC only.
-
 - A cable can no longer carry both AC and DC conductors (line or neutral with
   positive or negative). The store refuses it with "A cable cannot carry both
   AC and DC" on create and update, through the API, the forms and the quick

@@ -66,6 +66,10 @@ to someone else doesn't depend on the current owner being present.
   strip, and a red-shifted **night theme** that protects night vision,
   switched by a button or, with the `autoTheme` option, by the vessel's
   `environment.sun` or `environment.mode`.
+- **AC and DC aware**: mark devices AC or DC (new devices get it from their
+  type) and a new cable's type is chosen from its two ends, with a warning when
+  they disagree. A cable cannot carry both AC and DC, a conduit holding both
+  gets a warning, and AC cables are drawn dashed and DC solid.
 - **Schematics**: several named diagrams of the electrical system. Place
   devices (or create them from a palette by role), drag a wire from one to
   another and the cable and its circuit exist; wires are right-angled and

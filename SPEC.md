@@ -54,7 +54,11 @@ constraint enforced on the data model.
 - **Conduit**: a physical path several cables share: a conduit, hose, loom,
   trunking or cable tray. It has its own optional route on the plans, and
   cables are assigned to it, so "which cables are in the conduit behind the
-  galley panel?" has an answer. A cable is a wire run.
+  galley panel?" has an answer. A cable is a wire run. A conduit that holds
+  both AC and DC cables shows a warning (not a block): the standards restrict
+  sharing rather than forbid it, so the advice is separate conduits where
+  possible, and otherwise the AC in its own sheathed cable, all insulation rated
+  for the highest voltage present, and ideally a partition.
 - **Role**: what a device does with power: consumer (uses it), source
   (supplies it: solar, shore power, generator, hydro, wind, alternator),
   storage (batteries), distribution (switches, breakers, fuses, bus bars,
@@ -167,7 +171,14 @@ A wire run or device is either:
     that is not the cable's end, for example a negative landing on a
     negative bus bar at the supply end) and optional `fromTerminal` /
     `toTerminal` (a terminal name on that device). Written and logged with
-    the cable.
+    the cable. A cable is AC or DC, never both: a list that has a line or
+    neutral conductor together with a positive or negative one is refused with
+    "A cable cannot carry both AC and DC" (earth and signal conductors are
+    allowed in either kind). This follows the usual marine requirement that AC
+    conductors running with DC ones are sheathed, bundled or kept apart (ABYC
+    E-11, cited from a reprint of the 2003 edition and not checked against the
+    current one; the ISO 13297 clause wording was not confirmed), so it is a
+    design rule of this plugin and not a quotation of the standard.
   - `gauge` + `gaugeUnit` (AWG | mm²; one gauge per cable), `length` +
     `lengthUnit` (m | ft), `zoneId`
     (optional, a Zone; the response also carries the zone's name as
@@ -183,7 +194,11 @@ A wire run or device is either:
     (optional: one of the device's own JPEG, PNG or WebP attachments, used as
     its icon), `role`
     (consumer | source | storage | distribution | converter; consumer by
-    default, so devices recorded before roles existed stay valid),
+    default, so devices recorded before roles existed stay valid), `current`
+    (ac | dc, or unset for either: whether the device works on AC or DC, used
+    to choose the type of a new cable; a new device gets it from its type, for
+    example a shore power inlet is AC and a battery DC, and the AC or DC of a
+    port always comes from its terminals' conductor types),
     `zoneId` and `tags` (as on
     a wire run; `zone` carries the name),
     `ratedPowerW` (nameplate/rated power draw, optional), `tripRatingA`
@@ -454,7 +469,15 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   ones from a palette by role (battery or source, consumer, fuse or switch,
   converter) by clicking or dragging a type onto the canvas; a new device is
   named in place. Drag devices to arrange them, or Auto-arrange them left to
-  right from the supply. Devices show their terminals as dots. Drag from a
+  right from the supply. Devices show their terminals as dots; a device whose
+  terminals name ports shows one block per port (see the ports section).
+  AC and DC cables are drawn differently: DC is a solid line and AC a long-dash
+  line, so they differ in the red night theme too, and each wire carries a
+  marker at its midpoint, a tilde for AC and the DC symbol for DC (IEC 60617).
+  A cable's second conductor is a thin line beside the first. No public
+  standard prescribes a line style for AC against DC on boats, so the
+  pattern is this plugin's own convention; only the symbols follow IEC 60617.
+  Floorplan routes use the same dash pattern for AC without markers. Drag from a
   terminal or from a device's connect handle to another device or terminal
   to draw a wire: the cable exists as soon as it is dropped, a popover asks
   Positive, Negative or Positive + negative with an optional gauge and
