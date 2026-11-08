@@ -171,7 +171,7 @@ export function LoadSummary () {
         actually just a backup path — treat this as a starting point, not a certified
         calculation.
       </p>
-      ${circuitsLoading && html`<div class="empty-state">Loading&hellip;</div>`}
+      ${circuitsLoading && html`<div class="empty-state">Loading…</div>`}
       <${ErrorBannerLocal} message=${circuitsError} />
       ${!circuitsLoading && !circuitsError && activeCircuits.length === 0 && html`
         <div class="empty-state">No circuits yet. They appear once cables join devices.</div>

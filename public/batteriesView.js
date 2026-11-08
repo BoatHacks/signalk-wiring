@@ -97,7 +97,7 @@ export function BatteriesTab () {
         ${liveOn && html`<span class="meta live-status" data-testid="live-status">${live.error ? live.error : !live.live ? 'Loading…' : live.connected ? 'Connected to the SignalK stream.' : 'Connecting to the SignalK stream…'}</span>`}
       </div>
       <p class="meta">One card per battery bank. Batteries joined by a link on a cable form a bank; a battery with no links is a bank of one.</p>
-      ${loading && html`<div class="empty-state">Loading&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading…</div>`}
       ${error && html`<div class="error-banner">${error}</div>`}
       ${!loading && !error && cards.length === 0 && html`<div class="empty-state">No batteries yet. Add a device with the Storage role.</div>`}
       ${cards.map((bank) => html`<${BankCard} key=${bank.batteryIds.join(',')} bank=${bank} deviceById=${deviceById} live=${liveOn ? live : null} />`)}

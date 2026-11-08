@@ -628,7 +628,7 @@ export function CsvImport ({ onDone, onCancel }) {
         </div>
       `}
 
-      ${step === 'importing' && html`<div class="empty-state">Importing&hellip;</div>`}
+      ${step === 'importing' && html`<div class="empty-state">Importing…</div>`}
 
       ${step === 'done' && result && html`
         <div class="card">

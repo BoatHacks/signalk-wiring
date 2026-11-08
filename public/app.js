@@ -549,7 +549,7 @@ function AttachmentList ({ ownerType, ownerId, iconAttachmentId, onIconChange })
   return html`
     <div class="attachments">
       <${ErrorBanner} message=${error} />
-      ${loading && html`<div class="empty-state">Loading attachments&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading attachments…</div>`}
       ${!loading && attachments.length === 0 && !error && html`
         <div class="empty-state">No attachments yet.</div>
       `}
@@ -656,7 +656,7 @@ function ChangeLog ({ kind, id }) {
   return html`
     <div class="changelog">
       <${ErrorBanner} message=${error} />
-      ${loading && html`<div class="empty-state">Loading history&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading history…</div>`}
       ${!loading && entriesNewestFirst.length === 0 && !error && html`
         <div class="empty-state">No history yet.</div>
       `}
@@ -1029,7 +1029,7 @@ function ZonesManager () {
         Renaming a zone renames it everywhere.
       </p>
       <${ErrorBanner} message=${error} />
-      ${loading && html`<div class="empty-state">Loading zones&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading zones…</div>`}
       ${!loading && zones.length === 0 && html`<div class="empty-state">No zones yet. Add one below, or from a device form.</div>`}
       ${zones.map((zone) => {
         const u = usage(zone.id)
@@ -1553,7 +1553,7 @@ function CablesList () {
       ${pickedCables.length > 0 && !bulk && html`
         <div class="list-header">
           <span>${pickedCables.length} selected</span>
-          <button onClick=${() => { setNotice(null); setForm(null); setBulk(true) }}>Change selected&hellip;</button>
+          <button onClick=${() => { setNotice(null); setForm(null); setBulk(true) }}>Change selected…</button>
           <button onClick=${() => setPicked(new Set())}>Clear selection</button>
         </div>
       `}
@@ -1578,7 +1578,7 @@ function CablesList () {
           onCancel=${() => setForm(null)}
         />
       `}
-      ${loading && html`<div class="empty-state">Loading cables&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading cables…</div>`}
       <${ErrorBanner} message=${error} />
       ${!loading && !error && cables.length === 0 && html`<div class="empty-state">No cables recorded yet.</div>`}
       ${cables.length > 0 && html`
@@ -1688,7 +1688,7 @@ function CircuitsList ({ onSelect }) {
         Circuits are worked out from the cables: what one fuse or breaker protects, from the supply
         to the loads. Add or change cables on the Cables tab. Here you can name a circuit and add notes.
       </p>
-      ${loading && html`<div class="empty-state">Loading circuits&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading circuits…</div>`}
       <${ErrorBanner} message=${error} />
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No circuits yet. Add cables between devices and they appear here.</div>
@@ -1961,7 +1961,7 @@ function DevicesList ({ onSelect }) {
           submitLabel="Create device"
         />
       `}
-      ${loading && html`<div class="empty-state">Loading devices&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading devices…</div>`}
       <${ErrorBanner} message=${error} />
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No devices recorded yet.</div>
@@ -2234,7 +2234,7 @@ function ConduitsList ({ onSelect }) {
           submitLabel="Create conduit"
         />
       `}
-      ${loading && html`<div class="empty-state">Loading conduits&hellip;</div>`}
+      ${loading && html`<div class="empty-state">Loading conduits…</div>`}
       <${ErrorBanner} message=${error} />
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No conduits recorded yet.</div>

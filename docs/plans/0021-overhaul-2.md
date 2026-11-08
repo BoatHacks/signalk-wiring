@@ -260,7 +260,7 @@ These are open to change in review:
 
 ## Implementation Steps
 
-- [ ] Loading text: the entities and the scan test.
+- [x] Loading text: the entities and the scan test.
 - [ ] Gauge: `gauge.js`, the three forms, display everywhere, the zero gauge
       audit, store rule, CSV import.
 - [ ] Ratings: migration 12, store, resource, device form and page.
