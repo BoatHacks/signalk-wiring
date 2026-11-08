@@ -1460,6 +1460,85 @@ class Store {
     return attachments
   }
 
+  // The three purges below follow purgeCable: only for a record already marked
+  // removed (two deliberate steps), in one transaction, history included. They
+  // return the attachment rows so the caller can delete the files.
+  _purgeCheck (kind, id, label) {
+    const record = this.get(kind, id)
+    if (!record) throw Object.assign(new Error(`${kind} not found: ${id}`), { notFound: true })
+    if (record.status !== REMOVED_STATUS) throw new Error(`only a removed ${label} can be deleted permanently`)
+    return record
+  }
+
+  _purgeOwned (kind, id) {
+    const attachments = this.listAttachmentsByOwner(kind, id)
+    this.db.prepare('DELETE FROM attachments WHERE owner_type = ? AND owner_id = ?').run(kind, id)
+    this.db.prepare('DELETE FROM change_log WHERE record_type = ? AND record_id = ?').run(kind, id)
+    return attachments
+  }
+
+  // The cables, live or removed, that end on a device: as the cable's own ends
+  // or as the landing of one of its conductors.
+  cablesEndingOn (deviceId) {
+    return this.db.prepare(
+      `SELECT DISTINCT w.id FROM wire_runs w
+         LEFT JOIN wire_run_conductors c ON c.wire_run_id = w.id
+        WHERE w.from_device_id = @d OR w.to_device_id = @d OR c.from_device_id = @d OR c.to_device_id = @d
+        ORDER BY w.rowid`
+    ).all({ d: deviceId }).map((r) => this.get('wireRun', r.id))
+  }
+
+  // Erases a removed device: refused while any cable still ends on it. Its
+  // terminals, schematic placements, calibration runs, attachments and change
+  // log go. A battery it monitored loses the link, logged on that battery.
+  purgeDevice (id) {
+    this._purgeCheck('device', id, 'device')
+    const blocking = this.cablesEndingOn(id)
+    if (blocking.length > 0) {
+      const names = new Map(this.list('device').map((d) => [d.id, d.name]))
+      const title = (c) => c.cable_label || `${names.get(c.from_device_id) || '?'} to ${names.get(c.to_device_id) || '?'}`
+      throw new Error(`Delete these cables first: ${blocking.map(title).join('; ')}`)
+    }
+    let attachments = []
+    this.db.transaction(() => {
+      for (const battery of this.db.prepare('SELECT id FROM devices WHERE monitor_device_id = ?').all(id)) {
+        this.update('device', battery.id, { monitor_device_id: null })
+      }
+      this.db.prepare('DELETE FROM device_terminals WHERE device_id = ?').run(id)
+      this.db.prepare('DELETE FROM schematic_devices WHERE device_id = ?').run(id)
+      this.db.prepare('DELETE FROM calibration_runs WHERE device_id = ? OR switch_device_id = ?').run(id, id)
+      attachments = this._purgeOwned('device', id)
+      this.db.prepare('DELETE FROM devices WHERE id = ?').run(id)
+    })()
+    this._afterWrite('device')
+    return attachments
+  }
+
+  // Erases a removed conduit with its cable assignments, attachments and history.
+  purgeConduit (id) {
+    this._purgeCheck('conduit', id, 'conduit')
+    let attachments = []
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM wire_run_conduits WHERE conduit_id = ?').run(id)
+      attachments = this._purgeOwned('conduit', id)
+      this.db.prepare('DELETE FROM conduits WHERE id = ?').run(id)
+    })()
+    return attachments
+  }
+
+  // Erases a removed schematic page with its devices, wires and history.
+  purgeSchematic (id) {
+    this._purgeCheck('schematic', id, 'schematic')
+    let attachments = []
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
+      this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
+      attachments = this._purgeOwned('schematic', id)
+      this.db.prepare('DELETE FROM schematics WHERE id = ?').run(id)
+    })()
+    return attachments
+  }
+
   changeLog (kind, id) {
     return this.db
       .prepare('SELECT * FROM change_log WHERE record_type = ? AND record_id = ? ORDER BY timestamp ASC')

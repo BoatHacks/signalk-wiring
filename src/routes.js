@@ -220,6 +220,21 @@ function registerRoutes (router, getStore, dataDir) {
     }
   })
 
+  // The same for devices, conduits and schematic pages: 204 when erased, 404
+  // for an unknown record, 409 when it is not removed or something blocks it.
+  const purgeRoutes = { devices: 'purgeDevice', conduits: 'purgeConduit', schematics: 'purgeSchematic' }
+  for (const [path, method] of Object.entries(purgeRoutes)) {
+    router.delete(`/${path}/:id/purge`, requireStore, (req, res) => {
+      try {
+        const attachments = req.wiringStore[method](req.params.id)
+        for (const attachment of attachments) fs.rmSync(storedFilePath(dataDir, attachment), { force: true })
+        res.status(204).end()
+      } catch (err) {
+        res.status(err.notFound ? 404 : 409).json({ error: err.message })
+      }
+    })
+  }
+
   router.post('/plans/:id/image', requireStore, (req, res) => {
     const plan = req.wiringStore.get('plan', req.params.id)
     if (!plan) {

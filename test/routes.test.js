@@ -619,3 +619,50 @@ test('DELETE /cables/:id/purge refuses a live cable and erases a removed one wit
   assert.equal(res.statusCode, 404)
   cleanup()
 })
+
+for (const [segment, kind, make] of [
+  ['devices', 'device', (store) => store.create('device', { name: 'Lamp' })],
+  ['conduits', 'conduit', (store) => store.create('conduit', { name: 'Hose' })],
+  ['schematics', 'schematic', (store) => store.create('schematic', { name: 'Page' })]
+]) {
+  test(`DELETE /${segment}/:id/purge: 404 unknown, 409 not removed, 204 erased with its files`, () => {
+    const { store, router, dataDir, cleanup } = setup()
+    const record = make(store)
+    const call = (id) => {
+      const res = new FakeResponse()
+      router.invoke('delete', `/${segment}/:id/purge`, new FakeRequest({ params: { id } }), res)
+      return res
+    }
+    assert.equal(call('missing').statusCode, 404)
+    assert.equal(call(record.id).statusCode, 409)
+    assert.ok(store.get(kind, record.id))
+    let file = null
+    if (kind !== 'schematic') {
+      const attachment = store.createAttachment({
+        owner_type: kind, owner_id: record.id, filename: 'p.jpg', mime_type: 'image/jpeg', uploaded_at: new Date().toISOString()
+      })
+      fs.mkdirSync(path.join(dataDir, 'attachments'), { recursive: true })
+      file = path.join(dataDir, 'attachments', `${attachment.id}.jpg`)
+      fs.writeFileSync(file, 'x')
+    }
+    store.remove(kind, record.id)
+    assert.equal(call(record.id).statusCode, 204)
+    assert.equal(store.get(kind, record.id), null)
+    if (file) assert.equal(fs.existsSync(file), false)
+    assert.equal(call(record.id).statusCode, 404)
+    cleanup()
+  })
+}
+
+test('DELETE /devices/:id/purge is 409 with the cable names while a cable still ends on the device', () => {
+  const { store, router, cleanup } = setup()
+  const a = store.create('device', { name: 'Battery', role: 'storage' })
+  const b = store.create('device', { name: 'Lamp' })
+  store.create('wireRun', { from_device_id: a.id, to_device_id: b.id, cable_label: 'lamp feed' })
+  store.remove('device', b.id)
+  const res = new FakeResponse()
+  router.invoke('delete', '/devices/:id/purge', new FakeRequest({ params: { id: b.id } }), res)
+  assert.equal(res.statusCode, 409)
+  assert.match(res.body.error, /Delete these cables first: lamp feed/)
+  cleanup()
+})

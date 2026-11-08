@@ -12,7 +12,9 @@ import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { PortBlocks } from './ports.js'
 import { useUndo } from './undoBar.js'
-import { offerCableUndo } from './canvasRemoval.js'
+import { offerCableUndo, toast } from './canvasRemoval.js'
+import { matchesRemoved, readShowRemoved, writeShowRemoved } from './zones.js'
+import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
@@ -128,7 +130,7 @@ export function SchematicsTab ({ renderCableForm, selectedId = null, onSelect = 
         ? html`<${SchematicEditor} key=${schematic.id} schematic=${schematic} data=${data}
             reload=${reload} onBack=${() => setSelectedId(null)} onOpen=${setSelectedId}
             onError=${setError} renderCableForm=${renderCableForm} />`
-        : html`<${SchematicList} schematics=${data.schematics.filter(isLive)} reload=${reload}
+        : html`<${SchematicList} schematics=${data.schematics} reload=${reload}
             onOpen=${setSelectedId} onError=${setError} />`}
     </div>
   `
@@ -165,6 +167,23 @@ function SchematicList ({ schematics, reload, onOpen, onError }) {
     try { await deleteResource('wiringSchematics', s.id); onError(null); reload() } catch (err) { onError(err.message) }
   }
 
+  // Erases a removed page for good, after saying what goes with it.
+  const purge = async (s) => {
+    try {
+      if (!window.confirm(purgeConfirmText('schematic', s.name, await purgeFacts('schematic', s.id)))) return
+      const failure = await purgeRecord('schematic', s.id, s.name)
+      if (failure) { onError(failure); return }
+      onError(null)
+      toast(`Deleted "${s.name}" permanently.`)
+      reload()
+    } catch (err) { onError(err.message) }
+  }
+
+  const [showRemoved, setShowRemovedState] = useState(() => readShowRemoved('schematics'))
+  const setShowRemoved = (value) => { setShowRemovedState(value); writeShowRemoved('schematics', value) }
+  const removedCount = schematics.filter((s) => !isLive(s)).length
+  const shown = schematics.filter((s) => matchesRemoved(s, showRemoved))
+
   return html`
     <div>
       <form class="inline-form" onSubmit=${create}>
@@ -174,9 +193,22 @@ function SchematicList ({ schematics, reload, onOpen, onError }) {
           <button type="submit" data-testid="new-schematic">Add schematic</button>
         </div>
       </form>
-      ${schematics.length === 0 && html`<p class="meta">No schematics yet. A schematic is a diagram of part of the electrical system, for example "12 V system" or "Shore power and inverter". A device can be on several.</p>`}
+      ${removedCount > 0 && html`
+        <label class="check-inline">
+          <input type="checkbox" class="checkbox-input" data-testid="show-removed-schematics" checked=${showRemoved}
+            onChange=${(e) => setShowRemoved(e.target.checked)} />
+          Show removed (${removedCount})
+        </label>
+      `}
+      ${schematics.filter(isLive).length === 0 && removedCount === 0 && html`<p class="meta">No schematics yet. A schematic is a diagram of part of the electrical system, for example "12 V system" or "Shore power and inverter". A device can be on several.</p>`}
       <ul class="plain-list">
-        ${schematics.map((s) => html`
+        ${shown.map((s) => !isLive(s) ? html`
+          <li key=${s.id} class="list-row removed" data-testid="removed-schematic">
+            <span class="row-title">${s.name}</span>
+            <span class="meta">removed</span>
+            <button type="button" class="link-btn" data-testid="schematic-purge" onClick=${() => purge(s)}>Delete permanently</button>
+          </li>
+        ` : html`
           <li key=${s.id} class="list-row">
             ${renaming === s.id
               ? html`<input type="text" value=${renameText} autofocus

@@ -20,6 +20,8 @@ import { SchematicsTab } from './schematicView.js'
 import { BatteriesTab } from './batteriesView.js'
 import { GaugeField } from './gaugeField.js'
 import { formatGauge } from './gauge.js'
+import { toast } from './canvasRemoval.js'
+import { cablesEndingOn, blockedText, purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import { hashForState, parseHash } from './router.js'
 import { UndoProvider, useUndo } from './undoBar.js'
 import { deviceBox, endTerminals } from './schematic.js'
@@ -2123,6 +2125,26 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
     }
   }
 
+  // Erases a removed device for good: refused, with the cables named, while a
+  // cable still ends on it.
+  const purgeDevice = async () => {
+    setError(null)
+    try {
+      const cables = cablesEndingOn(deviceId, await fetchResourceMap('wiringWireRuns'))
+      if (cables.length > 0) {
+        setError(blockedText(device.name, cables.map((c) => cableTitle(c, deviceNames))))
+        return
+      }
+      if (!window.confirm(purgeConfirmText('device', device.name, await purgeFacts('device', deviceId)))) return
+      const failure = await purgeRecord('device', deviceId, device.name)
+      if (failure) { setError(failure); return }
+      onBack()
+      toast(`Deleted "${device.name}" permanently.`)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const removeDevice = async () => {
     if (!device || !confirmRemove(device.name)) return
     const name = device.name
@@ -2182,6 +2204,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
               <button onClick=${() => setCalibrating((v) => !v)} data-testid="calibrate-open">Calibrate load</button>
             `}
             ${device.status !== 'removed' && html`<button onClick=${removeDevice}>Remove</button>`}
+            ${device.status === 'removed' && html`<button onClick=${purgeDevice} data-testid="device-purge">Delete permanently</button>`}
             <button onClick=${() => setShowHistory((v) => !v)}>
               ${showHistory ? 'Hide history' : 'History'}
             </button>
@@ -2222,8 +2245,10 @@ function ConduitsList ({ onSelect }) {
   const runById = new Map(allRuns.map((r) => [r.id, r]))
   const mixesOf = (conduit) => conduitCurrentMix((conduit.cableIds || []).map((id) => runById.get(id)).filter(Boolean)).mixed
   const [filter, setFilter] = useState({})
+  const [showRemoved, setShowRemoved] = useShowRemoved('conduits')
+  const removedCount = items.filter((c) => c.status === 'removed').length
   const { suggested, used } = kindOptions(items.map((c) => c.kind), '')
-  const visible = filterConduits(items, filter)
+  const visible = filterConduits(items, filter).filter((c) => matchesRemoved(c, showRemoved))
 
   const createConduit = async (payload) => {
     await putResource('wiringConduits', newId(), payload)
@@ -2253,6 +2278,7 @@ function ConduitsList ({ onSelect }) {
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No conduits recorded yet.</div>
       `}
+      ${items.length > 0 && visible.length === 0 && html`<div class="empty-state">No conduits match.</div>`}
       ${items.length > 0 && html`
         <${ZoneTagFilter} items=${[]} filter=${filter} onChange=${setFilter}>
           <label class="form-field compact"><span>Kind</span>
@@ -2260,6 +2286,10 @@ function ConduitsList ({ onSelect }) {
               <option value="">All kinds</option>
               ${[...suggested, ...used].map((k) => html`<option value=${k} key=${k}>${k}</option>`)}
             </select>
+          </label>
+          <label class="check-inline">
+            <input type="checkbox" class="checkbox-input" checked=${showRemoved} onChange=${(e) => setShowRemoved(e.target.checked)} />
+            Show removed${removedCount > 0 ? ` (${removedCount})` : ''}
           </label>
         <//>
       `}
@@ -2322,6 +2352,18 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
     onBack() // leaving the page first: it would otherwise finish the message below
     undo.offer({ message: `Conduit "${name}" removed.`, onUndo: () => restoreResource('wiringConduits', conduitId) })
   }
+  const purgeConduit = async () => {
+    setError(null)
+    try {
+      if (!window.confirm(purgeConfirmText('conduit', conduit.name, await purgeFacts('conduit', conduitId)))) return
+      const failure = await purgeRecord('conduit', conduitId, conduit.name)
+      if (failure) { setError(failure); return }
+      onBack()
+      toast(`Deleted "${conduit.name}" permanently.`)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
   const setCables = (cableIds) => { setMixNotice(null); return guard(() => putResource('wiringConduits', conduitId, { cableIds })) }
   const addCable = () => {
     if (!toAdd) return
@@ -2357,6 +2399,7 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
           <div class="row-actions">
             <button onClick=${() => setEditing(true)}>Edit</button>
             ${conduit.status !== 'removed' && html`<button onClick=${removeConduit}>Remove</button>`}
+            ${conduit.status === 'removed' && html`<button onClick=${purgeConduit} data-testid="conduit-purge">Delete permanently</button>`}
             <button onClick=${() => setShowHistory((v) => !v)}>
               ${showHistory ? 'Hide history' : 'History'}
             </button>
