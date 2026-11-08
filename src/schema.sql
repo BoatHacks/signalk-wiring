@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS devices (
   trip_rating_a REAL,
   nominal_voltage REAL,
   power_factor REAL,
+  current TEXT,
   switch_path TEXT,
   confirm_switching INTEGER NOT NULL DEFAULT 0,
   never_remote INTEGER NOT NULL DEFAULT 0,

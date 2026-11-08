@@ -20,6 +20,8 @@ function rowToResource (row) {
   if (!row) return row
   const out = {}
   for (const [k, v] of Object.entries(row)) {
+    // An unset current is absent, not null (plan 0019).
+    if (k === 'current' && (v === null || v === undefined)) continue
     out[toCamelKey(k)] = JSON_COLUMNS.has(k) && typeof v === 'string'
       ? JSON.parse(v)
       : BOOLEAN_COLUMNS.has(k) && v !== null && v !== undefined ? Boolean(v) : v

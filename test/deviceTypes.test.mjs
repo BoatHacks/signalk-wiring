@@ -36,3 +36,15 @@ test('the current value stays selectable even when it is in neither list', () =>
   const again = typeOptions('consumer', [], 'solar PANEL'.replace('solar PANEL', TYPE_SUGGESTIONS.consumer[0].toUpperCase()))
   assert.deepEqual(again.used, [])
 })
+
+test('the current presets match the server table', async () => {
+  const { createRequire } = await import('node:module')
+  const server = createRequire(import.meta.url)('../src/current.js')
+  const web = await import('../public/deviceTypes.js')
+  assert.deepEqual(web.AC_TYPES, server.AC_TYPES)
+  assert.deepEqual(web.DC_TYPES, server.DC_TYPES)
+  assert.equal(web.typeCurrent(' generator '), 'ac')
+  assert.equal(web.typeCurrent('AGM battery'), 'dc')
+  assert.equal(web.typeCurrent('Inverter'), null)
+  assert.equal(web.typeCurrent(undefined), null)
+})

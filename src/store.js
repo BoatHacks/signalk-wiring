@@ -6,6 +6,7 @@ const crypto = require('crypto')
 const Database = require('better-sqlite3')
 const { deriveCircuits } = require('./circuits')
 const { isCriticalType } = require('./safety')
+const { CURRENTS, typeCurrent, terminalsCurrent, mixesAcAndDc } = require('./current')
 const { deriveSwitchability } = require('./switchability')
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
@@ -27,7 +28,7 @@ const TABLES = {
     table: 'devices',
     columns: [
       'id', 'name', 'type', 'role', 'icon_attachment_id', 'zone', 'rated_power_w', 'signalk_path',
-      'trip_rating_a', 'nominal_voltage', 'power_factor', 'switch_path', 'confirm_switching', 'never_remote',
+      'trip_rating_a', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
       'meter_path', 'meter_unit', 'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
@@ -372,6 +373,21 @@ const MIGRATIONS = [
         avg_w REAL, peak_w REAL, duty_cycle REAL, confidence TEXT, error TEXT)`)
       db.exec('CREATE INDEX IF NOT EXISTS idx_calibration_runs_device ON calibration_runs (device_id)')
     }
+  },
+  {
+    version: 10,
+    description: 'plan 0019: devices + current (ac, dc or null), filled once from the type and terminals',
+    apply (db) {
+      const hasColumn = db.prepare('PRAGMA table_info(devices)').all().some((c) => c.name === 'current')
+      if (!hasColumn) db.exec('ALTER TABLE devices ADD COLUMN current TEXT')
+      // The one-time fill: only where nothing is set, never over a mark.
+      const terminals = db.prepare('SELECT conductor FROM device_terminals WHERE device_id = ?')
+      const set = db.prepare('UPDATE devices SET current = ? WHERE id = ? AND current IS NULL')
+      for (const d of db.prepare('SELECT id, type FROM devices WHERE current IS NULL').all()) {
+        const value = typeCurrent(d.type) || terminalsCurrent(terminals.all(d.id))
+        if (value) set.run(value, d.id)
+      }
+    }
   }
 ]
 
@@ -698,7 +714,9 @@ class Store {
   _checkChildren (kind, children, value, owner) {
     if (value === undefined) return null
     if (!Array.isArray(value)) throw new Error(`${children.field} must be a list`)
-    return value.map((item) => children.check(item || {}, this, owner))
+    const list = value.map((item) => children.check(item || {}, this, owner))
+    if (kind === 'wireRun' && mixesAcAndDc(list)) throw new Error('A cable cannot carry both AC and DC')
+    return list
   }
 
   _checkWireRunEnds (fields) {
@@ -1024,6 +1042,14 @@ class Store {
       const unit = out.meter_unit === '' || out.meter_unit === undefined ? null : out.meter_unit
       if (unit !== null && !METER_UNITS.includes(unit)) throw new Error(`meter_unit must be one of: ${METER_UNITS.join(', ')}`)
       out = { ...out, meter_unit: unit }
+    }
+    if ('current' in out) {
+      const c = out.current === '' || out.current === undefined ? null : out.current
+      if (c !== null && !CURRENTS.includes(c)) throw new Error('current must be one of: ac, dc')
+      out = { ...out, current: c }
+    } else if (creating) {
+      const c = typeCurrent(out.type)
+      if (c) out = { ...out, current: c }
     }
     for (const key of ['confirm_switching', 'never_remote']) {
       if (key in out) out = { ...out, [key]: out[key] && out[key] !== '0' ? 1 : 0 }

@@ -54,3 +54,23 @@ export function isCriticalType (type) {
   const text = type.trim().toLowerCase()
   return text !== '' && CRITICAL_TYPE_WORDS.some((word) => text.includes(word))
 }
+
+// Device types that are plainly AC or DC (plan 0019), matched ignoring case on
+// the whole type name. Converters, distribution devices and consumers are not
+// listed: their ports or the supply side decide. The same table is in
+// src/current.js (the store applies it too); a test keeps both equal.
+export const AC_TYPES = ['Shore power inlet', 'Generator', 'Isolation transformer']
+export const DC_TYPES = [
+  'Solar panel', 'Alternator', 'Wind generator', 'Hydro generator', 'Fuel cell',
+  'Battery', 'Battery bank', 'Lead-acid battery', 'AGM battery', 'LiFePO4 battery',
+  'Starter battery', 'House battery', 'Shunt', 'Battery isolator', 'Battery switch'
+]
+
+// 'ac', 'dc' or null for a type name.
+export function typeCurrent (type) {
+  if (typeof type !== 'string') return null
+  const text = type.trim().toLowerCase()
+  if (AC_TYPES.some((t) => t.toLowerCase() === text)) return 'ac'
+  if (DC_TYPES.some((t) => t.toLowerCase() === text)) return 'dc'
+  return null
+}
