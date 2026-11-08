@@ -120,9 +120,14 @@ A wire run or device is either:
 - Editing an active record's attributes (gauge, color, routing, etc.)
   appends a **change log entry** rather than silently overwriting history.
 - `removed → gone`: a removed cable can be deleted permanently on a second,
-  confirmed step. This erases the cable with its conductors, conduit
-  assignments, schematic bends, attachments and change log. Nothing else is
-  deleted this way.
+  confirmed step (the Cables tab). This erases the cable with its conductors,
+  conduit assignments, schematic bends, attachments and change log. On the
+  schematic canvas and the floorplan, removing a cable shows the undo message
+  and, when it ends without an Undo, deletes the cable the same way, with no
+  confirm dialog and no second step. Nothing else is deleted this way. A
+  device removed from a canvas is only taken off that page or plan (it
+  becomes "not placed"); devices are removed on the Devices tab or through
+  the API.
 - There is no `removed → active` transition, with one exception: **undo**.
   Right after a cable, device or conduit is removed in the web app, an
   "X removed. Undo" message is shown for about eight seconds. Undo sets the

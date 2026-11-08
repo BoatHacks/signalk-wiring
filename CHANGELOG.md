@@ -5,8 +5,19 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-08
+
 ### Added
 
+- Hash routing. The address bar follows the tab and the open circuit, device,
+  conduit, schematic or floorplan plan, so reload, back, forward and pasted
+  links keep the view. An unknown tab falls back to Circuits, and an unknown
+  or removed id opens the list with a short "not found" notice.
+- Undo for removals. Removing a cable, device or conduit shows an "X removed.
+  Undo" message at the top for about eight seconds (it waits while the pointer
+  is on it). Undo puts the record back to active and the change log records it
+  as "restored (undo)". This is the one allowed way from removed back to
+  active.
 - Search box on the devices, cables and circuits lists (name, label, type,
   zone, tags, and the device names at the ends), combined with the zone and tag
   filter, and a "Show removed" toggle, off by default and remembered per list.
@@ -21,24 +32,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Load summary: an "incomplete" circuit now says what is missing and what to do
   right under the badge, the badges have tooltips, and a legend sits under the
   table.
-
-### Changed
-
-- The row icons on the Cables table stay on one line, so rows are one line high.
-- Removed cables, devices and circuits are hidden from the lists until "Show
-  removed" is turned on.
-
-- Undo for removals. Removing a cable, device or conduit shows an "X removed.
-  Undo" message at the top for about eight seconds (it waits while the pointer
-  is on it). Undo puts the record back to active and the change log records it
-  as "restored (undo)". This is the one allowed way from removed back to
-  active.
 - Schematic: Delete wire (button or Delete key) removes the cable with no
   confirmation, shows Undo, and deletes it for good when the message ends;
   "Remove from this page" (or the Delete key) takes a device off the page only,
   with Undo. Escape cancels a drag, popover or selection.
-- Floorplan: the bow and up arrows are smaller and fixed in the top right
-  corner of the plan view, not drawn at the origin.
 - Floorplan: in the Draw route tool, clicking a wire run's To device ends the
   route there; clicking another device shows "This route ends at <device>".
 - Floorplan: continuation marks, a stub labelled "continues on <plan>" that
@@ -46,10 +43,14 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Floorplan: "Delete wire run" in the route panel (Undo, then deleted for good).
 - Floorplan: Escape cancels the tool or route; Delete removes the selected
   waypoint or clears a device's placement (with Undo).
-- Hash routing. The address bar follows the tab and the open circuit, device,
-  conduit, schematic or floorplan plan, so reload, back, forward and pasted
-  links keep the view. An unknown tab falls back to Circuits, and an unknown
-  or removed id opens the list with a short "not found" notice.
+
+### Changed
+
+- The row icons on the Cables table stay on one line, so rows are one line high.
+- Removed cables, devices and circuits are hidden from the lists until "Show
+  removed" is turned on.
+- Floorplan: the bow and up arrows are smaller and fixed in the top right
+  corner of the plan view, not drawn at the origin.
 
 ## [0.4.4] - 2026-11-08
 

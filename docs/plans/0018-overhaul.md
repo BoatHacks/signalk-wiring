@@ -221,7 +221,7 @@ because they use it.
       window ends, take a device off the page with Undo, keyboard handling.
 - [x] Floorplan: smaller corner arrows, route tool ending on the To device,
       continuation marks, cable removal with Undo, keyboard handling.
-- [ ] SPEC.md (§3.2: the undo exception, and that a cable removed on the
+- [x] SPEC.md (§3.2: the undo exception, and that a cable removed on the
       canvas is deleted when the undo window ends), ARCHITECTURE.md, README,
       CHANGELOG, and tick the boxes in issue #1.
 

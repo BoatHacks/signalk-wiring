@@ -236,6 +236,14 @@ record back to active and logs "restored (undo)"; a plain write of `status:
 active` over a removed record is logged the same way, so the resource API
 needs no new route.
 
+**Removing a cable on a canvas** (plan 0018). `public/canvasRemoval.js` is
+shared by the schematic and the floorplan: it marks the cable removed (the
+normal DELETE on the resource), offers Undo, and on expiry calls the admin
+route `DELETE /cables/:id/purge` (`Store.purgeCable`, which only accepts a
+removed cable), so a cable removed on a canvas is erased unless undone. If the
+page closes inside the window the cable simply stays removed. A device taken
+off a page or plan only loses its placement; no canvas removes a device.
+
 **Schematic canvas** (plan 0016). `public/schematic.js` is pure geometry
 (device boxes and terminal anchors, right-angle routing with lane offsets,
 wires through bend points, off-page stubs, hit testing, default conductors,
