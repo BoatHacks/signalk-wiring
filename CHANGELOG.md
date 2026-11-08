@@ -5,6 +5,31 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-08
+
+### Added
+
+- Cable gauge is picked from a list of standard sizes (metric 0.75 to 95 mm2,
+  AWG 18 to 4/0) in the quick cable popover, the cable form and bulk edit.
+  Aught sizes are stored as 0, -1, -2 and -3 and shown as 1/0 to 4/0.
+- AC and DC ratings (current and voltage) on switches, breakers and fuses
+  (database migration 12).
+- Removed devices, conduits and schematics can be deleted permanently, with a
+  confirmation. A device is refused while a cable still ends on it.
+- Version stamps on the packed webapp and an update hint ("A new version is
+  available") that checks every 10 minutes and when the tab becomes visible.
+- Schematic wires are routed around every device box, with bridges at
+  crossings, lanes for off-page stubs and wires of one conduit running together.
+- Devices on a schematic no longer overlap; opening a page with overlaps offers
+  Tidy. Auto-arrange spaces devices by cable length.
+- Conduit bands drawn around the stretches where wires share a conduit, with a
+  label; "Highlight a circuit" also lists conduits.
+
+### Fixed
+
+- Loading texts showed a literal `&hellip;`.
+- Gauges of 1/0 and larger no longer display as 0 on the schematic.
+
 ## [0.5.1] - 2026-11-08
 
 ### Fixed

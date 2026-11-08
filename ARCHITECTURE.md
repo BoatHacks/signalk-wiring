@@ -447,7 +447,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are eleven migrations (the third to eleventh are described below): plan 0008's field
+every subsequent restart. There are twelve migrations (the third to twelfth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -509,7 +509,9 @@ transaction. Only a change in which devices are on a page is logged (a
 `devices` diff of ids); moving a device or a bend point is layout and adds no
 entry, and a cable carries its own wiring history.
 
-Plan 0020's migration (version 11) adds the battery columns to `devices`
+Plan 0021's migration (version 12) adds the rating columns `rated_ac_a`,
+`rated_ac_v`, `rated_dc_a` and `rated_dc_v` to `devices`; they never affect
+circuit derivation. Plan 0020's migration (version 11) adds the battery columns to `devices`
 (`chemistry`, `purpose`, `capacity_ah`, `usable_fraction`, `make_model`,
 `installed_on`, `monitor_device_id`, `voltage_path`, `current_path`,
 `soc_path`, `time_remaining_path`) and `wire_runs.link`, and fills `chemistry`
@@ -740,3 +742,8 @@ No external services or network dependencies at runtime.
   it may require moving reads behind `registerWithRouter` instead —
   worth deciding before other tooling comes to depend on the current
   anonymous-read contract.
+
+
+## Schematic routing and layout (plan 0021)
+
+`public/wireRouter.js` routes every wire on a grid around all device boxes, with bridges at crossings, stub lanes and shared stretches for wires in one conduit; `USE_NEW_ROUTER = false` restores the old elbow routes. `public/schematicLayout.js` holds `autoLayout` (rank gaps scaled by the median cable length, `clamp(60+60*sqrt(L), 80, 420)`) and `resolveOverlaps` (24 unit margin). Conduit bands are drawn from the shared stretches.

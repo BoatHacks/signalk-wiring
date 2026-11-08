@@ -128,10 +128,12 @@ A wire run or device is either:
   conduit assignments, schematic bends, attachments and change log. On the
   schematic canvas and the floorplan, removing a cable shows the undo message
   and, when it ends without an Undo, deletes the cable the same way, with no
-  confirm dialog and no second step. Nothing else is deleted this way. A
-  device removed from a canvas is only taken off that page or plan (it
-  becomes "not placed"); devices are removed on the Devices tab or through
-  the API.
+  confirm dialog and no second step. A removed device, conduit or schematic can also be deleted permanently
+  on a confirmed step (the device page, the Conduits and Schematics lists
+  with "Show removed"). A device is refused while any cable, live or
+  removed, still ends on it. A device removed from a canvas is only taken
+  off that page or plan (it becomes "not placed"); devices are removed on
+  the Devices tab or through the API.
 - There is no `removed → active` transition, with one exception: **undo**.
   Right after a cable, device or conduit is removed in the web app, an
   "X removed. Undo" message is shown for about eight seconds. Undo sets the

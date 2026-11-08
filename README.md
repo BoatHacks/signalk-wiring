@@ -7,6 +7,9 @@ to someone else doesn't depend on the current owner being present.
 
 ## Features
 
+- **Schematic routing**: wires are routed around device boxes with bridges at
+  crossings, devices never overlap, spacing follows cable length, and conduit
+  bands show wires that run together.
 - **Cables between devices, circuits worked out for you**: you record
   cables from the supply side to the load side of devices (battery, fuse,
   switch, lamp) and the circuits follow. A circuit is what one fuse or

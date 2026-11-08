@@ -1,4 +1,5 @@
 import { html, useState, useEffect, useRef, useMemo } from './vendor/preact-standalone.module.js'
+import { formatGauge } from './gauge.js'
 import dagre from './vendor/dagre.esm.js'
 import { newId } from './ids.js'
 import { TYPE_SUGGESTIONS } from './deviceTypes.js'
@@ -829,7 +830,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       ${selectedWire && html`
         <div class="schematic-inspector" data-testid="wire-inspector">
           <strong>${cableTitle(selectedWire.cable, new Map(devices.map((d) => [d.id, d.name])))}</strong>
-          <span class="meta">${selectedWire.cable.conductors.length ? selectedWire.cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] || c.conductor).join(' + ') : 'Positive'}${selectedWire.cable.gauge != null ? ', ' + selectedWire.cable.gauge + ' ' + (selectedWire.cable.gaugeUnit || '') : ''}${selectedWire.cable.length != null ? ', ' + selectedWire.cable.length + ' ' + (selectedWire.cable.lengthUnit || '') : ''}</span>
+          <span class="meta">${selectedWire.cable.conductors.length ? selectedWire.cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] || c.conductor).join(' + ') : 'Positive'}${selectedWire.cable.gauge != null ? ', ' + formatGauge(selectedWire.cable.gauge, selectedWire.cable.gaugeUnit) : ''}${selectedWire.cable.length != null ? ', ' + selectedWire.cable.length + ' ' + (selectedWire.cable.lengthUnit || '') : ''}</span>
           <span class="meta" data-testid="wire-circuits">${wireCircuits.length ? wireCircuits.map(circuitLine).join('; ') : 'Not part of a circuit yet.'}</span>
           <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.cable })}>Edit cable</button>
           ${(bends[selectedWire.id] || []).length > 0 && html`<button type="button" class="link-btn" onClick=${() => straighten(selectedWire.id)}>Straighten</button>`}
@@ -869,7 +870,7 @@ function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
 
 function cableLine (cable, deviceName) {
   const parts = [cable.cableLabel || `${deviceName(cable.fromDeviceId) || '?'} to ${deviceName(cable.toDeviceId) || '?'}`]
-  if (cable.gauge != null) parts.push(`${cable.gauge} ${cable.gaugeUnit || ''}`.trim())
+  if (cable.gauge != null) parts.push(formatGauge(cable.gauge, cable.gaugeUnit))
   if (cable.length != null) parts.push(`${cable.length} ${cable.lengthUnit || ''}`.trim())
   return parts.join(', ')
 }
