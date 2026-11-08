@@ -5,6 +5,13 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Hash routing. The address bar follows the tab and the open circuit, device,
+  conduit, schematic or floorplan plan, so reload, back, forward and pasted
+  links keep the view. An unknown tab falls back to Circuits, and an unknown
+  or removed id opens the list with a short "not found" notice.
+
 ## [0.4.4] - 2026-11-08
 
 ### Added

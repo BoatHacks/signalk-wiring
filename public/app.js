@@ -12,6 +12,7 @@ import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { SchematicsTab } from './schematicView.js'
+import { hashForState, parseHash } from './router.js'
 import { deviceBox, endTerminals } from './schematic.js'
 import { PortBlocks } from './ports.js'
 import { useSettings, colorPlaceholder } from './settings.js'
@@ -45,7 +46,11 @@ async function fetchResourceMap (type) {
 
 async function fetchResource (type, id) {
   const res = await fetch(`${RESOURCE_BASE}/${type}/${id}`)
-  if (!res.ok) throw new Error(`failed to load ${type}/${id}: ${res.status}`)
+  if (!res.ok) {
+    const err = new Error(`failed to load ${type}/${id}: ${res.status}`)
+    err.status = res.status
+    throw err
+  }
   return res.json()
 }
 
@@ -1549,7 +1554,7 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new
   `
 }
 
-function CircuitDetail ({ circuitId, onBack }) {
+function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
   const [circuit, setCircuit] = useState(null)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -1567,7 +1572,7 @@ function CircuitDetail ({ circuitId, onBack }) {
     let cancelled = false
     fetchResource('wiringCircuits', circuitId)
       .then((data) => { if (!cancelled) setCircuit(data) })
-      .catch((err) => { if (!cancelled) setError(err.message) })
+      .catch((err) => { if (cancelled) return; if (err.status) onNotFound(); else setError(err.message) })
     return () => { cancelled = true }
   }, [circuitId, reloadKey])
 
@@ -1702,7 +1707,7 @@ function DevicesList ({ onSelect }) {
   `
 }
 
-function DeviceDetail ({ deviceId, onBack }) {
+function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
   const [device, setDevice] = useState(null)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -1717,7 +1722,7 @@ function DeviceDetail ({ deviceId, onBack }) {
     let cancelled = false
     fetchResource('wiringDevices', deviceId)
       .then((data) => { if (!cancelled) setDevice(data) })
-      .catch((err) => { if (!cancelled) setError(err.message) })
+      .catch((err) => { if (cancelled) return; if (err.status) onNotFound(); else setError(err.message) })
     return () => { cancelled = true }
   }, [deviceId, reloadKey])
 
@@ -1884,7 +1889,7 @@ function ConduitsList ({ onSelect }) {
   `
 }
 
-function ConduitDetail ({ conduitId, onBack }) {
+function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
   const [conduit, setConduit] = useState(null)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -1899,7 +1904,7 @@ function ConduitDetail ({ conduitId, onBack }) {
     let cancelled = false
     fetchResource('wiringConduits', conduitId)
       .then((data) => { if (!cancelled) setConduit(data) })
-      .catch((err) => { if (!cancelled) setError(err.message) })
+      .catch((err) => { if (cancelled) return; if (err.status) onNotFound(); else setError(err.message) })
     return () => { cancelled = true }
   }, [conduitId, reloadKey])
 
@@ -2025,20 +2030,68 @@ function ThemeToggle ({ theme, onToggle }) {
   `
 }
 
-function App () {
+// The route lives in the address bar (see router.js). `route` mirrors it;
+// navigate writes the hash only when it differs from the current one, so
+// history is not spammed, and a hashchange (back, forward, a pasted link)
+// parses it back.
+function useRoute (onExternalChange) {
+  const [route, setRoute] = useState(() => parseHash(window.location.hash))
+  useEffect(() => {
+    // An unknown tab falls back to the default; the address bar follows.
+    const settle = () => {
+      const parsed = parseHash(window.location.hash)
+      const hash = hashForState(parsed)
+      if (window.location.hash && window.location.hash !== hash) window.history.replaceState(null, '', hash)
+      setRoute(parsed)
+    }
+    settle()
+    const onHash = () => { if (onExternalChange) onExternalChange(); settle() }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  const navigate = (next, { replace = false } = {}) => {
+    const hash = hashForState(next)
+    const current = hashForState(parseHash(window.location.hash))
+    if (hash !== current) {
+      if (replace) window.history.replaceState(null, '', hash)
+      else window.location.hash = hash
+    }
+    setRoute(parseHash(hash))
+  }
+  return [route, navigate]
+}
+
+function NotFoundNotice ({ message, onClose }) {
+  return html`
+    <div class="error-banner" role="status" data-testid="not-found">
+      ${message} <button type="button" class="link-btn" onClick=${onClose}>Dismiss</button>
+    </div>
+  `
+}
+
+function AppBody () {
   const settings = useSettings()
   const [theme, toggleTheme] = useTheme(settings.autoTheme)
-  const [tab, setTab] = useState('circuits')
-  const [selectedCircuitId, setSelectedCircuitId] = useState(null)
-  const [selectedDeviceId, setSelectedDeviceId] = useState(null)
-  const [selectedConduitId, setSelectedConduitId] = useState(null)
+  const [notFound, setNotFound] = useState(null)
+  const [route, navigate] = useRoute(() => setNotFound(null))
+  const { tab, id } = route
 
-  const switchTab = (nextTab) => {
-    setTab(nextTab)
-    setSelectedCircuitId(null)
-    setSelectedDeviceId(null)
-    setSelectedConduitId(null)
+  const go = (next, opts) => { setNotFound(null); navigate(next, opts) }
+  const switchTab = (nextTab) => go({ tab: nextTab, id: null })
+  const open = (nextTab) => (nextId) => go({ tab: nextTab, id: nextId })
+  const back = (nextTab) => () => go({ tab: nextTab, id: null })
+  // An unknown or removed id shows the list with a short notice.
+  const missing = (nextTab) => (message) => {
+    navigate({ tab: nextTab, id: null }, { replace: true })
+    setNotFound(message)
   }
+  const named = { circuits: 'circuit', devices: 'device', conduits: 'conduit' }
+  const detailMissing = (nextTab) => () => missing(nextTab)(`That ${named[nextTab]} was not found.`)
+  const nav = [
+    ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['conduits', 'Conduits'],
+    ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan']
+  ]
+  const cableForm = (props) => html`<${CableForm} ...${props} />`
 
   return html`
     <div>
@@ -2047,36 +2100,38 @@ function App () {
         <${ThemeToggle} theme=${theme} onToggle=${toggleTheme} />
       </header>
       <nav class="tabs">
-        <button class=${tab === 'circuits' ? 'active' : ''} onClick=${() => switchTab('circuits')}>Circuits</button>
-        <button class=${tab === 'cables' ? 'active' : ''} onClick=${() => switchTab('cables')}>Cables</button>
-        <button class=${tab === 'devices' ? 'active' : ''} onClick=${() => switchTab('devices')}>Devices</button>
-        <button class=${tab === 'conduits' ? 'active' : ''} onClick=${() => switchTab('conduits')}>Conduits</button>
-        <button class=${tab === 'load' ? 'active' : ''} onClick=${() => switchTab('load')}>Load Summary</button>
-        <button class=${tab === 'zones' ? 'active' : ''} onClick=${() => switchTab('zones')}>Zones</button>
-        <button class=${tab === 'schematics' ? 'active' : ''} onClick=${() => switchTab('schematics')}>Schematics</button>
-        <button class=${tab === 'floorplan' ? 'active' : ''} onClick=${() => switchTab('floorplan')}>Floorplan</button>
+        ${nav.map(([key, label]) => html`
+          <button key=${key} class=${tab === key ? 'active' : ''} onClick=${() => switchTab(key)}>${label}</button>
+        `)}
       </nav>
       <main>
-      ${tab === 'circuits' && !selectedCircuitId && html`<${CircuitsList} onSelect=${setSelectedCircuitId} />`}
-      ${tab === 'circuits' && selectedCircuitId && html`
-        <${CircuitDetail} circuitId=${selectedCircuitId} onBack=${() => setSelectedCircuitId(null)} />
+      ${notFound && html`<${NotFoundNotice} message=${notFound} onClose=${() => setNotFound(null)} />`}
+      ${tab === 'circuits' && !id && html`<${CircuitsList} onSelect=${open('circuits')} />`}
+      ${tab === 'circuits' && id && html`
+        <${CircuitDetail} key=${id} circuitId=${id} onBack=${back('circuits')} onNotFound=${detailMissing('circuits')} />
       `}
       ${tab === 'cables' && html`<${CablesList} />`}
-      ${tab === 'devices' && !selectedDeviceId && html`<${DevicesList} onSelect=${setSelectedDeviceId} />`}
-      ${tab === 'devices' && selectedDeviceId && html`
-        <${DeviceDetail} deviceId=${selectedDeviceId} onBack=${() => setSelectedDeviceId(null)} />
+      ${tab === 'devices' && !id && html`<${DevicesList} onSelect=${open('devices')} />`}
+      ${tab === 'devices' && id && html`
+        <${DeviceDetail} key=${id} deviceId=${id} onBack=${back('devices')} onNotFound=${detailMissing('devices')} />
       `}
-      ${tab === 'conduits' && !selectedConduitId && html`<${ConduitsList} onSelect=${setSelectedConduitId} />`}
-      ${tab === 'conduits' && selectedConduitId && html`
-        <${ConduitDetail} conduitId=${selectedConduitId} onBack=${() => setSelectedConduitId(null)} />
+      ${tab === 'conduits' && !id && html`<${ConduitsList} onSelect=${open('conduits')} />`}
+      ${tab === 'conduits' && id && html`
+        <${ConduitDetail} key=${id} conduitId=${id} onBack=${back('conduits')} onNotFound=${detailMissing('conduits')} />
       `}
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
-      ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${(props) => html`<${CableForm} ...${props} />`} />`}
-      ${tab === 'floorplan' && html`<${FloorplanTab} renderCableForm=${(props) => html`<${CableForm} ...${props} />`} />`}
+      ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${cableForm}
+        selectedId=${id} onSelect=${open('schematics')} onNotFound=${missing('schematics')} />`}
+      ${tab === 'floorplan' && html`<${FloorplanTab} renderCableForm=${cableForm}
+        planId=${id} onPlanChange=${(planId) => go({ tab: 'floorplan', id: planId })} onNotFound=${missing('floorplan')} />`}
       </main>
     </div>
   `
+}
+
+function App () {
+  return html`<${AppBody} />`
 }
 
 // index.html's "Loading…" placeholder is static markup, not something

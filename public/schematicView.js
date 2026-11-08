@@ -77,11 +77,14 @@ function isLive (record) {
 
 // ---- The tab ---------------------------------------------------------------
 
-export function SchematicsTab ({ renderCableForm }) {
+export function SchematicsTab ({ renderCableForm, selectedId = null, onSelect = () => {}, onNotFound = () => {} }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
-  const [selectedId, setSelectedId] = useState(null)
+  // A schematic opened right after creating it is not in the loaded list
+  // yet: the first check after that open is skipped, the reload follows.
+  const openedHere = useRef(null)
+  const setSelectedId = (id) => { openedHere.current = id; onSelect(id) }
 
   useEffect(() => {
     let cancelled = false
@@ -95,9 +98,15 @@ export function SchematicsTab ({ renderCableForm }) {
   }, [reloadKey])
 
   const reload = () => setReloadKey((k) => k + 1)
+  const schematic = data && selectedId && data.schematics.find((s) => s.id === selectedId && isLive(s))
+  const missing = !!(data && selectedId && !schematic)
+  useEffect(() => {
+    if (!missing) return
+    if (openedHere.current === selectedId) { openedHere.current = null; return }
+    onNotFound(`The schematic "${selectedId}" was not found.`)
+  }, [missing, selectedId, data])
   if (!data) return html`<p class="meta">${error || 'Loading…'}</p>`
 
-  const schematic = selectedId && data.schematics.find((s) => s.id === selectedId && isLive(s))
   return html`
     <div>
       ${error && html`<div class="error-banner">${error}</div>`}

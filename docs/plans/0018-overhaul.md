@@ -209,7 +209,7 @@ These are open to change in review of this plan:
 Each step is committed and pushed. The routing step lands before the others
 because they use it.
 
-- [ ] Hash routing: `public/router.js` with tests, App and the schematic and
+- [x] Hash routing: `public/router.js` with tests, App and the schematic and
       floorplan tabs wired to it, not-found handling.
 - [ ] Undo: store `restore`, `UndoBar`, wired into the lists and the canvases,
       SPEC §3.2 updated with the exception.

@@ -218,6 +218,15 @@ Talks only to the two API surfaces in §2.1/§2.2 over `fetch`. Owns all UI
 described in SPEC.md §7, including the diagram rendering (client-side,
 via `dagre` for layout + hand-rolled SVG, per §4).
 
+**Routing** (plan 0018). The address bar holds the tab and whatever is open:
+`#/`, `#/<tab>`, `#/circuits/<id>`, `#/devices/<id>`, `#/conduits/<id>`,
+`#/schematics/<id>`, `#/floorplan/<plan id>`. `public/router.js` has the pure
+`hashForState` and `parseHash`; only `App` touches `window.location`. A state
+change writes the hash only when it differs from the current one, and a
+`hashchange` parses it back. An unknown tab falls back to Circuits; an unknown
+id opens the list with a short notice. Tools, forms, selected wires and zoom
+are not in the URL.
+
 **Schematic canvas** (plan 0016). `public/schematic.js` is pure geometry
 (device boxes and terminal anchors, right-angle routing with lane offsets,
 wires through bend points, off-page stubs, hit testing, default conductors,
@@ -612,6 +621,8 @@ signalk-wiring/
   public/                   # name required by the signalk-webapp keyword (§2.4)
     index.html
     app.js                   # UI: browse/search, forms, diagram, changelog view
+    router.js                # pure: hash routes (tab and open item) <-> state
+    undoBar.js               # the Undo message, shared by lists and canvases
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
     deviceTypes.js             # popular device types per role, dropdown options

@@ -577,7 +577,7 @@ function useFloorplanData (reloadKey, onError) {
   return state
 }
 
-export function FloorplanTab ({ renderCableForm }) {
+export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = () => {}, onNotFound = () => {} }) {
   const settings = useSettings()
   const [error, setError] = useState(null)
   const [connect, setConnect] = useState(initialConnect)
@@ -599,6 +599,19 @@ export function FloorplanTab ({ renderCableForm }) {
   const active = plans.filter((p) => p.status !== 'removed' && p.filename)
   const topPlans = active.filter((p) => p.view === 'top')
   const sidePlans = active.filter((p) => p.view === 'side')
+  // The route's plan id picks the plan in its own view; the other view keeps
+  // its own choice. A plan id that no longer exists is reported once loaded.
+  const openedHere = useRef(null) // a just created plan is not in the loaded list yet
+  useEffect(() => {
+    if (loading || !planId) return
+    const target = plans.find((p) => p.id === planId && p.status !== 'removed')
+    if (!target && openedHere.current === planId) { openedHere.current = null; return }
+    if (!target) { onNotFound(`The floorplan "${planId}" was not found.`); return }
+    if (target.view === 'top') setTopId(planId)
+    else setSideId(planId)
+  }, [planId, loading, plans])
+  const pickTop = (id) => { setTopId(id); onPlanChange(id) }
+  const pickSide = (id) => { setSideId(id); onPlanChange(id) }
   const topPlan = topPlans.find((p) => p.id === topId) || topPlans[0] || null
   const sidePlan = sidePlans.find((p) => p.id === sideId) || sidePlans[0] || null
 
@@ -878,8 +891,8 @@ export function FloorplanTab ({ renderCableForm }) {
           </details>
         `}
 
-        ${planButtons(topPlans, topPlan, setTopId)}
-        ${planButtons(sidePlans, sidePlan, setSideId)}
+        ${planButtons(topPlans, topPlan, pickTop)}
+        ${planButtons(sidePlans, sidePlan, pickSide)}
 
         <div class="floorplan-pair">
           ${topPlan && html`<${PlanViewer} key=${topPlan.id} plan=${topPlan} data=${data} ctx=${ctx}
@@ -891,7 +904,7 @@ export function FloorplanTab ({ renderCableForm }) {
 
       <${NewPlanForm} onCreated=${(id) => {
         const created = { id }
-        setTopId(id); setSideId(id); reload(); return created
+        setTopId(id); setSideId(id); openedHere.current = id; onPlanChange(id); reload(); return created
       }} onError=${setError} />
     </div>
   `
