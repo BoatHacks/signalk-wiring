@@ -784,7 +784,7 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-conduit-outline, .sch-conduit-fill { fill: none; stroke-linejoin: round; stroke-linecap: round; }
 .sch-conduit-outline { stroke: var(--text-muted-strong); }
 .sch-conduit-fill { stroke: var(--surface); }
-.sch-conduit-label { font-size: 9px; fill: var(--text-muted-strong); }
+.sch-conduit-label { font-size: 9px; fill: var(--text-muted-strong); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
 
 .update-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 16px; background: var(--warn-bg); border-bottom: 1px solid var(--warn); font-size: 14px; }
 .update-hint .link-btn { margin-left: auto; }

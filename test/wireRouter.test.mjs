@@ -115,9 +115,9 @@ test('router: 40 devices and 60 wires route well inside half a second', () => {
 test('conduit bands: shared stretches, a lone wire, two conduits, the label', () => {
   const conduits = new Map([['k1', { kind: 'Hose', name: 'MPPT DC hose', innerDiameter: 16, diameterUnit: 'mm' }], ['k2', { kind: 'Conduit', name: 'Arch' }]])
   const paths = new Map([
-    ['a', [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }]],
-    ['b', [{ x: 0, y: 5 }, { x: 60, y: 5 }, { x: 60, y: 40 }]],
-    ['c', [{ x: 0, y: 200 }, { x: 100, y: 200 }]]
+    ['a', [{ x: 0, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 300 }]],
+    ['b', [{ x: 0, y: 5 }, { x: 200, y: 5 }, { x: 200, y: 140 }]],
+    ['c', [{ x: 0, y: 400 }, { x: 100, y: 400 }]]
   ])
   const bands = R.conduitBands({
     wires: [{ id: 'a', conduitIds: ['k1', 'k2'] }, { id: 'b', conduitIds: ['k1'] }, { id: 'c', conduitIds: [] }],
@@ -129,7 +129,9 @@ test('conduit bands: shared stretches, a lone wire, two conduits, the label', ()
   assert.ok(k1.stretches.length >= 1)
   assert.equal(k1.stretches.length, 2) // only the shared first segment of a and b
   const k2 = bands.find((b) => b.conduitId === 'k2')
-  assert.deepEqual(k2.stretches, [paths.get('a')])
+  // a band stops short of the ports at both ends of its wire (plan 0022)
+  assert.deepEqual(k2.stretches, [[{ x: R.BAND_END, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 300 - R.BAND_END }]])
+  assert.ok(k1.stretches.every((st) => st[0].x >= R.BAND_END))
   assert.equal(bands.length, 2)
   assert.equal(R.conduitLabel({ kind: 'Conduit', name: '' }), 'Conduit')
 })

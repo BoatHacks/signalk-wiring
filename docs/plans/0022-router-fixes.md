@@ -62,10 +62,10 @@ tab. The router now treats these as hard rules instead of costs.
 ## Follow-up: stub lines and the MultiPlus DC in (issue #14, found testing 0.6.1)
 
 - [x] 6. The line from a device to a tab is drawn like the cable it stands for: conductor colours (a second conductor as a thin second line), DC solid or AC dashed with the same marker, the normal line width. The tab stays the off-page marker.
-- [ ] 7. The MultiPlus DC in on the 48V page:
-  - [ ] a. Wires reaching a port block do not cross just before the port.
-  - [ ] b. A conduit band ends clear of port blocks, and its label sits where no line passes.
-  - [ ] c. A line to a tab keeps a wide gap from other wires.
+- [x] 7. The MultiPlus DC in on the 48V page:
+  - [x] a. Wires reaching a port block do not cross just before the port.
+  - [x] b. A conduit band ends clear of port blocks, and its label sits where no line passes.
+  - [x] c. A line to a tab keeps a wide gap from other wires.
 
 Choices:
 

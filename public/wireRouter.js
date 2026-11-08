@@ -17,11 +17,19 @@ export const NEAR_COST = 0.5
 export const CONDUIT_FACTOR = 0.25
 export const HEURISTIC_WEIGHT = 1.6 // greedy A*: a little off the shortest, much faster
 export const BRIDGE_R = 4
-export const ROUND_BUDGET_MS = 220 // no new rip-up round after this long
+export const ROUND_BUDGET = 500000 // no new rip-up round after this many search steps (not time: same result on every machine)
 // Centre to centre distance between parallel lines: two line widths of clear
 // space (the line is 3 wide) plus the second conductor of a pair, drawn 4 beside.
 export const PITCH = 16
 export const ANCHOR_SPACING = PITCH
+// Plan 0022, port rule: a crossing within this path distance of a port (it
+// hides which wire goes where) costs PORT_CROSS_COST, so it only happens when
+// there is no other way.
+// A line to a tab keeps more room from other lines than wires do from each
+// other, so it never looks like it runs with them.
+export const STUB_PITCH = 24
+export const PORT_CLEAR = 90
+export const PORT_CROSS_COST = 150
 
 const DIRS = [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }]
 const dirOf = (n) => DIRS.findIndex((d) => d.x === n.x && d.y === n.y)
@@ -148,7 +156,10 @@ function computeAnchors (wires, boxById, stubs) {
     const c = boxCenter(g.box)
     const lo = (horiz ? g.box.y : g.box.x) + 6
     const hi = (horiz ? g.box.y + g.box.h : g.box.x + g.box.w) - 6
-    const taken = g.box.terminals.filter((t) => t.side === g.side).map((t) => (horiz ? t.y : t.x))
+    const wide = [...stubAnchors.values()].filter((q) => q.side === g.side)
+    const isWide = (t) => wide.some((q) => q.x === t.x && q.y === t.y)
+    const wideTaken = g.box.terminals.filter((t) => t.side === g.side && isWide(t)).map((t) => (horiz ? t.y : t.x))
+    const taken = g.box.terminals.filter((t) => t.side === g.side && !isWide(t)).map((t) => (horiz ? t.y : t.x))
     // anchors on an edge that faces this one across a gap too narrow for both legs
     const edge = horiz ? (g.side === 'left' ? g.box.x : g.box.x + g.box.w) : (g.side === 'top' ? g.box.y : g.box.y + g.box.h)
     const facing = (o) => (g.side === 'left' ? o.x <= edge : g.side === 'right' ? o.x >= edge : g.side === 'top' ? o.y <= edge : o.y >= edge)
@@ -167,7 +178,7 @@ function computeAnchors (wires, boxById, stubs) {
         let ok = false
         for (const cand of m === 0 ? [ideal] : [ideal + m * 2, ideal - m * 2]) {
           if (cand < lo || cand > hi) continue
-          if (taken.every((p) => Math.abs(p - cand) >= PITCH - 0.01)) { pos = cand; ok = true; break }
+          if (taken.every((p) => Math.abs(p - cand) >= PITCH - 0.01) && wideTaken.every((p) => Math.abs(p - cand) >= STUB_PITCH - 0.01)) { pos = cand; ok = true; break }
         }
         if (ok) break
       }
@@ -246,7 +257,10 @@ function makeSearch (grid) {
   const parent = new Int32Array(N * 4)
   const runLen = new Float32Array(N * 4) // straight distance since the last bend
   const pend = new Float32Array(N * 4) // distance since the last crossing
+  const sd = new Float32Array(N * 4) // path length since the start
+  const zone = new Uint8Array(N) // node within PORT_CLEAR of a port end of a recorded line
   let run = 0
+  let work = 0 // search steps so far
   // hard0: edge on a used line; hard1: edge on a line closer than the pitch.
   // Index: node to the east (H) or to the south (V).
   const same = [new Uint8Array(N), new Uint8Array(N)] // [H, V]
@@ -265,7 +279,7 @@ function makeSearch (grid) {
     run++
     const heap = new Heap()
     const start = (sj * nx + si) * 4 + sdir
-    g[start] = 0; stamp[start] = run; parent[start] = -1; runLen[start] = STUB; pend[start] = 1e9
+    g[start] = 0; stamp[start] = run; parent[start] = -1; runLen[start] = STUB; pend[start] = 1e9; sd[start] = 0
     heap.push(0, start)
     const goalNode = gj * nx + gi
     const startNode = sj * nx + si
@@ -279,6 +293,7 @@ function makeSearch (grid) {
       if (node === goalNode) {
         const out = []
         for (let c = s; c !== -1; c = parent[c]) out.push(c >> 2)
+        work += maxStates - limit
         return out.reverse().map((n) => ({ x: xs[n % nx], y: ys[(n / nx) | 0] }))
       }
       const i = node % nx
@@ -300,6 +315,7 @@ function makeSearch (grid) {
         const o = horizontal ? 0 : 1
         const newRun = nd === d ? rl + len : len
         let crossing = false
+        let portPenalty = 0
         let cost = len
         const isEnd = nn === goalNode
         if (level < 2) {
@@ -313,6 +329,9 @@ function makeSearch (grid) {
               // a crossing: over the middle of the other line, with room for a bridge
               if (horizontal ? p & 1 : p & 2) continue
               if (newRun < BRIDGE_R + 3) continue
+              // not close to a port: neither of this line's own ends, nor of the crossed line
+              // (a heavy cost rather than a ban: tight pages may have no other way)
+              if (zone[nn] || sd[s] + len + STUB < PORT_CLEAR || Math.abs(xs[gi] - xs[ni]) + Math.abs(ys[gj] - ys[nj]) + STUB < PORT_CLEAR) portPenalty = PORT_CROSS_COST
               crossing = true
             }
           }
@@ -323,6 +342,7 @@ function makeSearch (grid) {
         }
         const used = edgeConduits.size ? conduitShare((horizontal ? 0 : N) + ekey, conduitIds) : false
         if (used) cost = len * CONDUIT_FACTOR
+        cost += portPenalty
         if (near[nn]) cost += len * NEAR_COST
         if (pass[nn] && (horizontal ? pass[nn] & 2 : pass[nn] & 1)) cost += CROSS_COST
         if (nd !== d) cost += BEND_COST
@@ -330,11 +350,12 @@ function makeSearch (grid) {
         const ns = nn * 4 + nd
         const ng = cg + cost
         if (stamp[ns] === run && g[ns] <= ng) continue
-        stamp[ns] = run; g[ns] = ng; parent[ns] = s; runLen[ns] = newRun; pend[ns] = crossing ? 0 : pd + len
+        stamp[ns] = run; g[ns] = ng; parent[ns] = s; runLen[ns] = newRun; pend[ns] = crossing ? 0 : pd + len; sd[ns] = sd[s] + len
         const h = Math.abs(xs[gi] - xs[ni]) + Math.abs(ys[gj] - ys[nj])
         heap.push(ng + h * HEURISTIC_WEIGHT, ns)
       }
     }
+    work += maxStates - limit
     if (globalThis.DBG) console.log('search failed', xs[si], ys[sj], '->', xs[gi], ys[gj], 'expanded', maxStates - limit, 'level', level, 'goal occ', occ[goalNode], 'pass', pass[goalNode], 'blocked', blocked[goalNode])
     return null
   }
@@ -346,8 +367,35 @@ function makeSearch (grid) {
     return l
   }
 
+  // Marks the nodes within PORT_CLEAR (along the line) of either end of a
+  // whole wire, where no later wire may cross it.
+  function markZone (points) {
+    for (const pts of [points, [...points].reverse()]) {
+      let left = PORT_CLEAR
+      for (let k = 1; k < pts.length && left > 0; k++) {
+        const a = pts[k - 1]
+        const b = pts[k]
+        if (a.x !== b.x && a.y !== b.y) continue
+        const horizontal = a.y === b.y
+        const A = horizontal ? xs : ys
+        const B = horizontal ? ys : xs
+        const c0 = horizontal ? a.y : a.x
+        const from = horizontal ? a.x : a.y
+        const to = horizontal ? b.x : b.y
+        const cb = lower(B, c0)
+        if (cb < B.length && Math.abs(B[cb] - c0) < 0.01) {
+          for (let ia = lower(A, Math.min(from, to)); ia < A.length && A[ia] <= Math.max(from, to) + 0.01; ia++) {
+            if (Math.abs(A[ia] - from) <= left) zone[horizontal ? cb * nx + ia : ia * nx + cb] = 1
+          }
+        }
+        left -= Math.abs(to - from)
+      }
+    }
+  }
+
   // Records an orthogonal polyline (anchor to anchor) so later wires see it.
-  function commit (points, conduitIds) {
+  function commit (points, conduitIds, full = false, pitch = PITCH) {
+    if (full) markZone(points)
     for (let k = 1; k < points.length; k++) {
       const a = points[k - 1]
       const b = points[k]
@@ -373,9 +421,9 @@ function makeSearch (grid) {
       }
       // edges on this line and on lines closer than the pitch
       const markList = []
-      for (let ib = Math.max(0, lower(B, c0 - PITCH) - 1); ib < B.length && B[ib] < c0 + PITCH; ib++) {
+      for (let ib = Math.max(0, lower(B, c0 - pitch) - 1); ib < B.length && B[ib] < c0 + pitch; ib++) {
         const dist = Math.abs(B[ib] - c0)
-        if (dist >= PITCH) continue
+        if (dist >= pitch) continue
         const sameLine = dist < 0.01
         for (let ia = Math.max(0, lower(A, lo) - 1); ia < A.length - 1 && A[ia] < hi; ia++) {
           if (A[ia + 1] <= lo) continue
@@ -399,7 +447,7 @@ function makeSearch (grid) {
       markList.length = 0
     }
   }
-  return { search, commit, grid }
+  return { search, commit, grid, work: () => work }
 }
 
 
@@ -612,12 +660,12 @@ function routeAll (grid, items, committed, legs, rounds = 4) {
   }]))
   let queue = items
   let result = null
-  const t0 = performance.now()
+  let spent = 0
   for (let round = 0; round < rounds; round++) {
     const s = makeSearch(grid)
-    for (const f of committed) s.commit(f.points, f.conduitIds)
+    for (const f of committed) s.commit(f.points, f.conduitIds, true)
     for (const l of legs) s.commit(l.points)
-    for (const it of items) { s.commit([it.from, it.ea]); s.commit([it.to, it.eb]) }
+    for (const it of items) { s.commit([it.from, it.ea], undefined, false, it.stub ? STUB_PITCH : PITCH); s.commit([it.to, it.eb]) }
     const res = new Map()
     const failed = []
     for (const it of queue) {
@@ -625,11 +673,12 @@ function routeAll (grid, items, committed, legs, rounds = 4) {
       const nodes = it.self ? null : s.search(p.si, p.sj, p.sdir, p.gi, p.gj, p.gdir, it.conduitIds, 0)
       if (!nodes) { failed.push(it); continue }
       const pts = simplify([it.from, ...nodes, it.to])
-      s.commit(pts, it.conduitIds)
+      s.commit(pts, it.conduitIds, true, it.stub ? STUB_PITCH : PITCH)
       res.set(it.id, { points: pts, level: 0 })
     }
     result = { s, res, failed }
-    if (failed.length === 0 || failed.length > 4 || performance.now() - t0 > ROUND_BUDGET_MS) break
+    if (failed.length === 0 || failed.length > 4 || spent + s.work() > ROUND_BUDGET) break
+    spent += s.work()
     queue = [...failed, ...queue.filter((it) => !failed.includes(it))]
   }
   const { s, res, failed } = result
@@ -643,7 +692,7 @@ function routeAll (grid, items, committed, legs, rounds = 4) {
       continue
     }
     const pts = simplify([it.from, ...nodes, it.to])
-    s.commit(pts, it.conduitIds)
+    s.commit(pts, it.conduitIds, true, it.stub ? STUB_PITCH : PITCH)
     res.set(it.id, { points: pts, level: level - 1 })
   }
   return res
@@ -668,7 +717,7 @@ export function stubAt (stub, pos) {
 // conduit has only one wire on the page (or its wires never run together).
 // Returns [{ conduitId, label, stretches: [points], layer }], layer being the
 // stacking index of this conduit on its wires.
-export function conduitBands ({ wires, paths, conduits }) {
+export function conduitBands ({ wires, paths, conduits, avoid = null }) {
   const byConduit = new Map()
   for (const w of wires) for (const c of w.conduitIds || []) { if (!byConduit.has(c)) byConduit.set(c, []); byConduit.get(c).push(w.id) }
   const layerOf = (wireId, conduitId) => (wires.find((w) => w.id === wireId).conduitIds || []).indexOf(conduitId)
@@ -691,15 +740,122 @@ export function conduitBands ({ wires, paths, conduits }) {
       }
     }
     if (stretches.length === 0) stretches = usable.map((id) => ({ points: paths.get(id), wireId: id }))
-    out.push({
-      conduitId: cid,
-      label: conduitLabel(info),
-      stretches: stretches.map((s) => s.points),
-      layer: Math.max(0, ...usable.map((id) => layerOf(id, cid))),
-      labelAt: stretches[0].points[0]
-    })
+    // a band ends clear of the ports: where a stretch reaches the end of its
+    // wire, it stops BAND_END short of the port
+    const trimmed = []
+    for (const st of stretches) {
+      const full = paths.get(st.wireId)
+      const first = full[0]
+      const last = full[full.length - 1]
+      const pts = st.points
+      const t = trimPath(pts, same2(pts[0], first) ? BAND_END : 0, same2(pts[pts.length - 1], last) ? BAND_END : 0)
+      if (t) trimmed.push({ points: t, wireId: st.wireId })
+    }
+    if (trimmed.length === 0) {
+      // too short to leave the ports clear: a short piece in the middle
+      const longest = stretches.reduce((a, b) => (pathLength(b.points) > pathLength(a.points) ? b : a))
+      const m = pathLength(longest.points) / 2
+      trimmed.push({ points: trimPath(longest.points, Math.max(0, m - 8), Math.max(0, m - 8), 1) || longest.points, wireId: longest.wireId })
+    }
+    stretches = trimmed
+    const layer = Math.max(0, ...usable.map((id) => layerOf(id, cid)))
+    const label = conduitLabel(info)
+    out.push({ conduitId: cid, label, stretches: stretches.map((s) => s.points), layer, labelAt: stretches[0].points[0] })
   }
+  placeLabels(out, avoid)
   return out
+}
+
+export const BAND_END = 36 // a band stops this far from the port
+export const bandWidth = (layer) => 16 + layer * 8
+const same2 = (p, q) => p.x === q.x && p.y === q.y
+function pathLength (pts) {
+  let l = 0
+  for (let k = 1; k < pts.length; k++) l += Math.abs(pts[k].x - pts[k - 1].x) + Math.abs(pts[k].y - pts[k - 1].y)
+  return l
+}
+
+// A polyline with `a` taken off its start and `b` off its end; null when less
+// than `min` (default 12) is left.
+function trimPath (pts, a, b, min = 12) {
+  const total = pathLength(pts)
+  if (total - a - b < min) return null
+  const cut = (points, d) => {
+    let left = d
+    let k = 0
+    while (k < points.length - 1) {
+      const len = Math.abs(points[k + 1].x - points[k].x) + Math.abs(points[k + 1].y - points[k].y)
+      if (len > left) {
+        const f = left / len
+        return [{ x: points[k].x + (points[k + 1].x - points[k].x) * f, y: points[k].y + (points[k + 1].y - points[k].y) * f }, ...points.slice(k + 1).map((q) => ({ x: q.x, y: q.y }))]
+      }
+      left -= len
+      k++
+    }
+    return points.slice(-1).map((q) => ({ x: q.x, y: q.y }))
+  }
+  const front = a > 0 ? cut(pts, a) : pts.map((q) => ({ x: q.x, y: q.y }))
+  const back = b > 0 ? cut([...front].reverse(), b) : [...front].reverse()
+  return back.reverse()
+}
+
+const LABEL_CHAR_W = 4.8
+const LABEL_MAX = 40
+
+// Puts each conduit's label where no wire, tab, device, band or other label
+// is: above or below a horizontal stretch (or beside a vertical one). Sets
+// `labelPos` { x, y } (text start and baseline). Without `avoid` the label
+// stays at the start of the band.
+function placeLabels (bands, avoid) {
+  for (const b of bands) {
+    const w = bandWidth(b.layer)
+    b.labelPos = { x: b.labelAt.x + 4, y: b.labelAt.y - w / 2 - 3 }
+  }
+  if (!avoid) return
+  const taken = []
+  const hit = (r, band) => {
+    for (const rect of avoid.rects || []) if (rectsOverlap(r, { x0: rect.x0 - 2, y0: rect.y0 - 2, x1: rect.x1 + 2, y1: rect.y1 + 2 })) return true
+    for (const pts of avoid.paths || []) for (let k = 1; k < pts.length; k++) if (segHitsRect(pts[k - 1], pts[k], { x0: r.x0 - 3, y0: r.y0 - 3, x1: r.x1 + 3, y1: r.y1 + 3 })) return true
+    for (const o of bands) {
+      if (o === band) continue
+      const ow = bandWidth(o.layer) / 2 + 2
+      for (const pts of o.stretches) for (let k = 1; k < pts.length; k++) if (segHitsRect(pts[k - 1], pts[k], { x0: r.x0 - ow, y0: r.y0 - ow, x1: r.x1 + ow, y1: r.y1 + ow })) return true
+    }
+    for (const t of taken) if (rectsOverlap(r, t)) return true
+    return false
+  }
+  for (const b of bands) {
+    const w = bandWidth(b.layer)
+    const text = Math.min(b.label.length, LABEL_MAX) * LABEL_CHAR_W
+    const cands = []
+    const segs = []
+    for (const pts of b.stretches) for (let k = 1; k < pts.length; k++) segs.push([pts[k - 1], pts[k]])
+    segs.sort((p, q) => Math.abs(q[1].x - q[0].x) + Math.abs(q[1].y - q[0].y) - Math.abs(p[1].x - p[0].x) - Math.abs(p[1].y - p[0].y))
+    for (const [p, q] of segs) {
+      if (p.y === q.y) {
+        const x0 = Math.min(p.x, q.x)
+        const x1 = Math.max(p.x, q.x)
+        for (const off of [0, 12, 24]) {
+          for (let x = x0 + 4; x + text <= x1 - 4 || x === x0 + 4; x += 12) {
+            cands.push({ x, y: p.y - w / 2 - 4 - off, r: { x0: x, y0: p.y - w / 2 - 14 - off, x1: x + text, y1: p.y - w / 2 - off } })
+            cands.push({ x, y: p.y + w / 2 + 11 + off, r: { x0: x, y0: p.y + w / 2 + 1 + off, x1: x + text, y1: p.y + w / 2 + 14 + off } })
+          }
+        }
+      }
+    }
+    for (const [p, q] of segs) {
+      if (p.x === q.x) {
+        const y0 = Math.min(p.y, q.y)
+        const y1 = Math.max(p.y, q.y)
+        for (let y = y0 + 12; y <= y1 - 4; y += 12) {
+          cands.push({ x: p.x + w / 2 + 5, y: y + 3, r: { x0: p.x + w / 2 + 1, y0: y - 8, x1: p.x + w / 2 + 5 + text, y1: y + 5 } })
+          cands.push({ x: p.x - w / 2 - 5 - text, y: y + 3, r: { x0: p.x - w / 2 - 5 - text, y0: y - 8, x1: p.x - w / 2 - 1, y1: y + 5 } })
+        }
+      }
+    }
+    const best = cands.find((c) => !hit(c.r, b))
+    if (best) { b.labelPos = { x: best.x, y: best.y }; taken.push(best.r) }
+  }
 }
 
 function runsBeside (a, b, other) {

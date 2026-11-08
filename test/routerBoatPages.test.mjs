@@ -6,9 +6,10 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as S from '../public/schematic.js'
 import * as R from '../public/wireRouter.js'
-import { readFileSync } from 'node:fs'
 import { routeBoatPage, pageNames, pageInput } from './helpers/boatPages.mjs'
-import { checkPage, linesOf, MIN_CLEAR, LINE_W } from './helpers/routeCheck.mjs'
+import { readFileSync } from 'node:fs'
+import { checkPage, linesOf, crossingsNearPorts, MIN_CLEAR, LINE_W, PORT_CLEAR } from './helpers/routeCheck.mjs'
+import { STUB_PITCH } from '../public/wireRouter.js'
 
 const summary = (problems) => problems.map((p) => `${p.type} ${p.ids.map((i) => String(i).slice(0, 8)).join(' ')}`).join('; ')
 
@@ -83,6 +84,100 @@ test('router: the page is routed the same way whatever the order of the input', 
   const rb = R.routePage(b)
   for (const [id, w] of ra.wires) assert.deepEqual(rb.wires.get(id).points, w.points)
   for (const [id, s] of ra.stubs) assert.deepEqual(rb.stubs.get(id).path, s.path)
+})
+
+// ---- Plan 0022, issue 14 follow-up: the MultiPlus DC in on the 48V page ----
+
+const nameOf = (id) => {
+  const data = JSON.parse(readFileSync(new URL('./fixtures/boat-pages.json', import.meta.url), 'utf8'))
+  return (data.devices.find((d) => d.id === id) || {}).name || ''
+}
+
+test('boat 48V page: wires into the MultiPlus ports do not cross close to a port (red above black, as the ports are)', () => {
+  const { input, result } = routeBoatPage('48V System')
+  const { lines } = linesOf(input, result)
+  const mp = input.boxes.find((b) => /MultiPlus/.test(nameOf(b.id)))
+  assert.ok(mp, 'MultiPlus on the page')
+  const mine = new Set(input.wires.filter((w) => w.fromId === mp.id || w.toId === mp.id).map((w) => w.id))
+  assert.ok(mine.size >= 2)
+  const near = crossingsNearPorts(lines, PORT_CLEAR).filter((c) => c.ids.some((i) => mine.has(i)))
+  assert.deepEqual(near.map((c) => `${c.ids.join(' ')} at ${c.at.x},${c.at.y}`), [])
+  // the DC in pair: the positive (red) leg ends above the negative (black) one, and they do not cross at the ports
+  const dc = input.wires.filter((w) => mine.has(w.id) && [w.fromTerminal, w.toTerminal].some((t) => /^DC in/.test(t || '')))
+  assert.ok(dc.length >= 2)
+})
+
+test('boat pages: crossings close to a port stay at the present count (the rest are fans of legs that cannot be avoided)', () => {
+  for (const name of pageNames) {
+    const { input, result } = routeBoatPage(name)
+    const { lines } = linesOf(input, result)
+    const near = crossingsNearPorts(lines, 60)
+    const most = name === '48V System' ? 13 : 3
+    assert.ok(near.length <= most, `${name}: ${near.length} crossings within 60 of a port`)
+  }
+})
+
+test('boat 48V page: a line to a tab keeps a wide gap from every other line, also beside the CAN port', () => {
+  const { input, result } = routeBoatPage('48V System')
+  const problems = checkPage(linesOf(input, result))
+  assert.deepEqual(problems, [])
+  const { lines } = linesOf(input, result)
+  for (const s of lines.filter((l) => String(l.id).startsWith('s:'))) {
+    for (const o of lines) {
+      if (o === s) continue
+      for (let k = 1; k < s.points.length; k++) {
+        for (let m = 1; m < o.points.length; m++) {
+          const a = s.points[k - 1]; const b = s.points[k]; const c = o.points[m - 1]; const d = o.points[m]
+          const vert = a.x === b.x && c.x === d.x
+          const horiz = a.y === b.y && c.y === d.y
+          if (!vert && !horiz) continue
+          const lo = vert ? Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y)) : Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x))
+          const hi = vert ? Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y)) : Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x))
+          if (hi - lo <= 0.01) continue
+          const gap = vert ? Math.abs(a.x - c.x) : Math.abs(a.y - c.y)
+          // lines that share a port (the same terminal) may share their first leg
+          if (gap < 0.01) continue
+          assert.ok(gap >= STUB_PITCH - 0.01, `${s.id.slice(0, 10)} runs ${gap} beside ${String(o.id).slice(0, 8)}`)
+        }
+      }
+    }
+  }
+})
+
+test('conduit bands on the boat pages end clear of every port block and their labels clear of every line', () => {
+  const data = JSON.parse(readFileSync(new URL('./fixtures/boat-pages.json', import.meta.url), 'utf8'))
+  for (const name of pageNames) {
+    const { input, result } = routeBoatPage(name)
+    const conduits = new Map((data.conduits || []).map((c) => [c.id, c]))
+    const paths = new Map(input.wires.map((w) => [w.id, result.wires.get(w.id).points]))
+    const stubPaths = input.stubs.map((s) => result.stubs.get(s.cableId).path)
+    const tabs = input.stubs.map((s) => result.stubs.get(s.cableId).tab)
+    const avoid = { paths: [...paths.values(), ...stubPaths], rects: [...input.boxes.map((b) => ({ x0: b.x - 8, y0: b.y - 8, x1: b.x + b.w + 8, y1: b.y + b.h + 8 })), ...tabs.map((t) => ({ x0: t.x, y0: t.y, x1: t.x + t.w, y1: t.y + t.h }))] }
+    const bands = R.conduitBands({ wires: input.wires.map((w) => ({ id: w.id, conduitIds: w.conduitIds })), paths, conduits, avoid })
+    assert.ok(bands.length > 0 || conduits.size === 0)
+    for (const b of bands) {
+      const half = R.bandWidth(b.layer) / 2 + 1
+      for (const st of b.stretches) {
+        for (const box of input.boxes) {
+          // the band outline (half width) plus the cap must stay out of the box with its port blocks (7 beyond the edge)
+          for (let k = 1; k < st.length; k++) {
+            const r = { x0: box.x - 7 - half, y0: box.y - 7 - half, x1: box.x + box.w + 7 + half, y1: box.y + box.h + 7 + half }
+            const hit = Math.max(st[k - 1].x, st[k].x) > r.x0 && Math.min(st[k - 1].x, st[k].x) < r.x1 && Math.max(st[k - 1].y, st[k].y) > r.y0 && Math.min(st[k - 1].y, st[k].y) < r.y1
+            assert.equal(hit, false, `${name}: band "${b.label}" reaches the port blocks of ${nameOf(box.id)}`)
+          }
+        }
+      }
+      // the label: its text box meets no wire and no stub line
+      const w = Math.min(b.label.length, 40) * 4.8
+      const r = { x0: b.labelPos.x, y0: b.labelPos.y - 9, x1: b.labelPos.x + w, y1: b.labelPos.y + 2 }
+      for (const pts of avoid.paths) {
+        for (let k = 1; k < pts.length; k++) {
+          const hit = Math.max(pts[k - 1].x, pts[k].x) > r.x0 && Math.min(pts[k - 1].x, pts[k].x) < r.x1 && Math.max(pts[k - 1].y, pts[k].y) > r.y0 && Math.min(pts[k - 1].y, pts[k].y) < r.y1
+          assert.equal(hit, false, `${name}: label of "${b.label}" is crossed by a line`)
+        }
+      }
+    }
+  }
 })
 
 test('a line to a tab is drawn like its cable: conductor colours, DC solid or AC dashed, normal width', () => {

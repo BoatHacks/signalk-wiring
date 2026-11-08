@@ -330,7 +330,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const bands = G.conduitBands({
     wires: onPage.map((c) => ({ id: c.id, conduitIds: (c.conduitIds || []).filter((x) => conduitInfo.has(x)) })),
     paths: new Map(wires.map((w) => [w.id, w.path])),
-    conduits: conduitInfo
+    conduits: conduitInfo,
+    avoid: { paths: [...wires.map((w) => w.path), ...stubs.map((s) => s.path).filter(Boolean)], rects: [...boxes.map((b) => ({ x0: b.x - 8, y0: b.y - 8, x1: b.x + b.w + 8, y1: b.y + b.h + 8 })), ...stubs.filter((s) => s.tab).map((s) => ({ x0: s.tab.x, y0: s.tab.y, x1: s.tab.x + s.tab.w, y1: s.tab.y + s.tab.h }))] }
   })
 
   const overlapping = G.findOverlaps(boxes).length > 0
@@ -935,12 +936,12 @@ function WireShape ({ wire, deviceName, selected, dim, lit }) {
 function ConduitBand ({ band }) {
   const w = 16 + band.layer * 8
   const ds = band.stretches.map((p) => G.pathToD(p))
-  const at = band.labelAt
+  const at = band.labelPos
   return html`
     <g class="sch-conduit" data-conduit=${band.conduitId}>
       ${ds.map((d, i) => html`<path key=${'o' + i} d=${d} class="sch-conduit-outline" stroke-width=${w + 2} />`)}
       ${ds.map((d, i) => html`<path key=${'f' + i} d=${d} class="sch-conduit-fill" stroke-width=${w} />`)}
-      <text x=${at.x + 4} y=${at.y - w / 2 - 3} class="sch-conduit-label">${shorten(band.label, 40)}</text>
+      <text x=${at.x} y=${at.y} class="sch-conduit-label">${shorten(band.label, 40)}</text>
     </g>
   `
 }

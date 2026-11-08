@@ -3,11 +3,13 @@
 // leg at every port, and no line through a device or a tab. Returns a list of
 // problems (empty when the page is clean).
 import { sideNormal, PORT_GAP } from '../../public/schematic.js'
+import { STUB_PITCH, PORT_CLEAR } from '../../public/wireRouter.js'
 
 export const LINE_W = 3
 export const MIN_CLEAR = 2 * LINE_W // two line widths, edge to edge
 export const PAIR_EXTRA = 3.25 // a two-conductor wire's second line reaches this far past its first
 export const MIN_OUT = 16
+export { PORT_CLEAR }
 
 const segs = (pts) => {
   const out = []
@@ -26,7 +28,44 @@ const same = (p, q) => Math.abs(p.x - q.x) < 0.01 && Math.abs(p.y - q.y) < 0.01
 
 // lines: [{ id, points, bridges, paired, kind }]; boxes: deviceBox results;
 // tabs: [{ id, rect, deviceId }]
-export function checkPage ({ lines, boxes, tabs = [] }) {
+// Path distance from the ends of a line (its ports; for a line to a tab only
+// the device end) to the point (x, y) on it, the smaller of the two.
+export function portDistance (l, x, y) {
+  const pts = l.points
+  const along = (list) => {
+    let d = 0
+    for (let k = 1; k < list.length; k++) {
+      const a = list[k - 1]
+      const b = list[k]
+      const onSeg = (a.x === b.x ? Math.abs(x - a.x) < 0.01 && y >= Math.min(a.y, b.y) - 0.01 && y <= Math.max(a.y, b.y) + 0.01 : Math.abs(y - a.y) < 0.01 && x >= Math.min(a.x, b.x) - 0.01 && x <= Math.max(a.x, b.x) + 0.01)
+      if (onSeg) return d + Math.abs(x - a.x) + Math.abs(y - a.y)
+      d += Math.abs(b.x - a.x) + Math.abs(b.y - a.y)
+    }
+    return Infinity
+  }
+  const fromStart = along(pts)
+  return l.endSide ? Math.min(fromStart, along([...pts].reverse())) : fromStart
+}
+
+// The bridges (crossing points) that lie closer than `dist` to a port of
+// either line: [{ ids: [over, under], at: { x, y }, d }].
+export function crossingsNearPorts (lines, dist) {
+  const out = []
+  for (const l of lines) {
+    for (const p of l.bridges || []) {
+      for (const m of lines) {
+        if (m === l) continue
+        const crosses = segs(m.points).some((s) => !s.h && Math.abs(s.a.x - p.x) < 0.01 && p.y >= lo(s) && p.y <= hi(s))
+        if (!crosses) continue
+        const d = Math.min(portDistance(l, p.x, p.y), portDistance(m, p.x, p.y))
+        if (d < dist) out.push({ ids: [l.id, m.id], at: p, d })
+      }
+    }
+  }
+  return out
+}
+
+export function checkPage ({ lines, boxes, tabs = [], portClear = 0 }) {
   const problems = []
   const bad = (type, ...ids) => problems.push({ type, ids })
   const S = lines.map((l) => ({ l, s: segs(l.points) }))
@@ -48,7 +87,9 @@ export function checkPage ({ lines, boxes, tabs = [] }) {
               if (!(shared && startsAtShared)) bad('overlap', A.l.id, B.l.id)
               continue
             }
-            const need = MIN_CLEAR + LINE_W + (A.l.paired ? PAIR_EXTRA : 0) + (B.l.paired ? PAIR_EXTRA : 0)
+            let need = MIN_CLEAR + LINE_W + (A.l.paired ? PAIR_EXTRA : 0) + (B.l.paired ? PAIR_EXTRA : 0)
+            // a line to a tab keeps more room from every other line
+            if (String(A.l.id).startsWith('s:') !== String(B.l.id).startsWith('s:')) need = Math.max(need, STUB_PITCH)
             if (d < need - 0.01) bad('separation', A.l.id, B.l.id)
           } else {
             const hs = a.h ? a : b
@@ -92,6 +133,7 @@ export function checkPage ({ lines, boxes, tabs = [] }) {
     for (const b of boxes) if (ov(rr(t.rect), rr(b))) bad('tab-on-device', t.id, b.id)
     for (const u of tabs) if (u.id > t.id && ov(rr(t.rect), rr(u.rect))) bad('tab-on-tab', t.id, u.id)
   }
+  if (portClear > 0) for (const c of crossingsNearPorts(lines, portClear)) bad('port-crossing', ...c.ids)
   // a visible straight leg out of every port
   for (const l of lines) {
     for (const [end, side] of [['first', l.startSide], ['last', l.endSide]]) {
@@ -129,7 +171,7 @@ export function linesOf (input, result) {
   const tabs = []
   for (const s of input.stubs) {
     const r = result.stubs.get(s.cableId)
-    lines.push({ id: 's:' + s.cableId, points: r.path, bridges: r.bridges || [], paired: false, boxIds: [s.deviceId], startSide: sideAt(s.deviceId, r.path[0]), endSide: null, tabId: s.cableId })
+    lines.push({ id: 's:' + s.cableId, points: r.path, bridges: r.bridges || [], paired: !!s.paired, boxIds: [s.deviceId], startSide: sideAt(s.deviceId, r.path[0]), endSide: null, tabId: s.cableId })
     tabs.push({ id: s.cableId, rect: r.tab, deviceId: s.deviceId })
   }
   return { lines: lines.filter((l) => !l.fixed), boxes: input.boxes, tabs }
