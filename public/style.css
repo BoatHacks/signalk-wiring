@@ -717,6 +717,7 @@ main:has(.schematic-editor) { max-width: none; }
 .floorplan-canvas .device-marker.live-fixed circle, .floorplan-canvas .device-marker.live-locked circle, .floorplan-canvas .device-marker.live-none circle { cursor: not-allowed; }
 .live-lock rect { fill: var(--text); }
 .live-lock path { stroke: var(--text); }
+.live-reading.stale { fill: var(--text-muted-strong); font-style: italic; }
 .live-reading { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 0.5; pointer-events: none; }
 .diagram-wrap g.live-on .diagram-node { fill: var(--live-on); fill-opacity: 0.85; }
 .diagram-wrap g.live-off .diagram-node { fill: var(--live-off); fill-opacity: 0.8; }
@@ -769,7 +770,11 @@ main:has(.schematic-editor) { max-width: none; }
 .bank-line { font-size: 13px; margin-top: 4px; }
 .bank-line-label { color: var(--text-muted-strong); display: inline-block; min-width: 100px; }
 .bank-incomplete { color: var(--warn); margin-bottom: 6px; }
+.battery-live { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.live-stale { font-style: italic; }
 .bank-live:empty { display: none; }
+.bank-live { font-size: 13px; margin-top: 4px; }
+.bank-live.stale { color: var(--text-muted-strong); font-style: italic; }
 .link-badge { margin-left: 4px; text-transform: none; }
 .battery-details .bank-summary { margin-top: 6px; }
 .battery-details .warning-banner { margin: 4px 0; }

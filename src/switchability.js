@@ -23,6 +23,7 @@
 //   consumers: { [consumerId]: { switchable, switchDeviceId, switchDeviceIds, sharedWith,
 //                neverRemote, confirm, reason, voltage, meters } }
 //   switches:  { [switchDeviceId]: { deviceId, switchPath, consumerIds, neverRemote, confirm } }
+//   batteries: { [storageId]: { voltagePath, currentPath, socPath, timeRemainingPath, monitorDeviceId } }
 // `reason` is null, 'no-switch' or 'never-remote'. A meter is
 //   { source: 'device' | 'circuit', deviceId?, circuitId?, path, unit, distance, lowConfidence }
 // nearest and most trustworthy first; a meter on a battery or source also
@@ -34,6 +35,30 @@ const SUPPLY_ROLES = new Set(['storage', 'source', 'converter'])
 const LOW_CONFIDENCE_ROLES = new Set(['storage', 'source'])
 const byString = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 const roleOf = (device) => device.role || 'consumer'
+
+// The SignalK paths of every live storage device (plan 0020): its own voltage,
+// current, state of charge and time remaining paths, each one filled from the
+// device named by monitorDeviceId when the battery has none of its own.
+// A metric with no path anywhere is null. Returns { [id]: { voltagePath,
+// currentPath, socPath, timeRemainingPath, monitorDeviceId } }, only for
+// storage devices that have at least one path.
+const BATTERY_PATH_KEYS = ['voltagePath', 'currentPath', 'socPath', 'timeRemainingPath']
+function resolveBatteryPaths (devices = []) {
+  const byId = new Map(devices.filter((d) => d.status !== 'removed').map((d) => [d.id, d]))
+  const out = {}
+  for (const device of byId.values()) {
+    if (roleOf(device) !== 'storage') continue
+    const monitor = device.monitorDeviceId ? byId.get(device.monitorDeviceId) : null
+    const paths = { monitorDeviceId: monitor ? monitor.id : null }
+    let any = false
+    for (const key of BATTERY_PATH_KEYS) {
+      paths[key] = device[key] || (monitor && monitor[key]) || null
+      if (paths[key]) any = true
+    }
+    if (any) out[device.id] = paths
+  }
+  return out
+}
 
 function deriveSwitchability ({ devices = [], cables = [], circuits = [] }) {
   const derived = deriveCircuits({ devices, cables })
@@ -164,7 +189,7 @@ function deriveSwitchability ({ devices = [], cables = [], circuits = [] }) {
       meters: allMeters
     }
   }
-  return { consumers: out, switches }
+  return { consumers: out, switches, batteries: resolveBatteryPaths(devices) }
 }
 
-module.exports = { deriveSwitchability }
+module.exports = { deriveSwitchability, resolveBatteryPaths }

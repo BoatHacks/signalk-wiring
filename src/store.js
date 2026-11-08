@@ -808,7 +808,12 @@ class Store {
       // A shunt's own SignalK path is where its readings come from, unless a
       // separate meter path is set.
       meterPath: d.meter_path || (/^\s*shunt\s*$/i.test(d.type || '') ? d.signalk_path : null) || null,
-      meterUnit: d.meter_unit
+      meterUnit: d.meter_unit,
+      monitorDeviceId: d.monitor_device_id,
+      voltagePath: d.voltage_path,
+      currentPath: d.current_path,
+      socPath: d.soc_path,
+      timeRemainingPath: d.time_remaining_path
     }))
     const cables = this.list('wireRun').map((w) => ({
       id: w.id,

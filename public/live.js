@@ -8,6 +8,7 @@
 // browser plumbing (a hook, a WebSocket with REST polling as a fallback).
 
 import { useState, useEffect, useRef } from './vendor/preact-standalone.module.js'
+import { batteryInputs, batteryReading, batteryPathsToWatch, STALE_MS } from './liveBattery.js'
 
 const ROUTES_BASE = '/plugins/signalk-wiring'
 const ON_WORDS = new Set(['on', 'true', '1', 'enabled', 'closed', 'high', 'yes'])
@@ -43,7 +44,7 @@ export function formatReading (value, unit) {
 //   live:   the answer of GET /live ({ consumers, switches })
 //   values: Map of SignalK path (without vessels.self.) -> value
 // look is what to draw: 'on' | 'off' | 'unknown' | 'locked' | 'fixed'.
-export function liveInfo (deviceId, live, values, nameOf = (id) => id) {
+export function liveInfo (deviceId, live, values, nameOf = (id) => id, stamps = new Map(), now = Date.now()) {
   if (!live) return null
   const consumer = live.consumers && live.consumers[deviceId]
   const own = live.switches && live.switches[deviceId]
@@ -78,6 +79,16 @@ export function liveInfo (deviceId, live, values, nameOf = (id) => id) {
     else if (others.length > 0) title += `. Feeds ${others.join(', ')}`
     return { kind: 'switch', look, state, clickable, reading: null, via: null, shared: others, title, confirm: own.confirm }
   }
+  const battery = live.batteries && live.batteries[deviceId]
+  if (battery) {
+    const inputs = batteryInputs(battery, values, stamps, now)
+    const reading = batteryReading(inputs)
+    return {
+      kind: 'battery', look: 'battery', state: 'unknown', clickable: false, reading, stale: inputs.stale, inputs,
+      via: null, shared: [], confirm: false,
+      title: reading ? `${nameOf(deviceId)}: ${reading}` : `${nameOf(deviceId)}: no values yet`
+    }
+  }
   return null
 }
 
@@ -99,12 +110,13 @@ export function pathsToWatch (live) {
     const meter = (c.meters || []).find((m) => !m.lowConfidence)
     if (meter) paths.add(stripSelf(meter.path))
   }
+  for (const p of batteryPathsToWatch(live)) paths.add(p)
   return [...paths].sort()
 }
 
 // Applies the updates of a SignalK delta message to a map of values.
 // Returns true when anything changed.
-export function applyDelta (values, message, watching) {
+export function applyDelta (values, message, watching, stamps, now = Date.now()) {
   if (!message || !Array.isArray(message.updates)) return false
   if (message.context && message.context !== 'vessels.self') return false
   let changed = false
@@ -113,6 +125,13 @@ export function applyDelta (values, message, watching) {
       if (!item.path || item.value === undefined) continue
       if (watching && !watching.has(item.path)) continue
       if (values.get(item.path) !== item.value) { values.set(item.path, item.value); changed = true }
+      if (stamps) {
+        const at = Date.parse(update.timestamp)
+        const stamp = Number.isFinite(at) ? at : now
+        const before = stamps.get(item.path)
+        stamps.set(item.path, stamp)
+        if (typeof before === 'number' && now - before > STALE_MS) changed = true
+      }
     }
   }
   return changed
@@ -149,6 +168,8 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState(null)
   const valuesRef = useRef(new Map())
+  const stampsRef = useRef(new Map())
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     if (!active) return undefined
@@ -158,6 +179,13 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
       .catch((err) => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }
   }, [active, reloadKey])
+
+  // Re-render now and then so values that stop arriving turn stale.
+  useEffect(() => {
+    if (!active) return undefined
+    const timer = setInterval(() => setNow(Date.now()), 15000)
+    return () => clearInterval(timer)
+  }, [active])
 
   const watchKey = pathsToWatch(live).join('|')
   useEffect(() => {
@@ -181,6 +209,8 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
             if (!res.ok) return
             const leaf = await res.json()
             const v = leaf && typeof leaf === 'object' && 'value' in leaf ? leaf.value : leaf
+            const at = leaf && typeof leaf === 'object' && leaf.timestamp ? Date.parse(leaf.timestamp) : NaN
+            stampsRef.current.set(p, Number.isFinite(at) ? at : Date.now())
             if (valuesRef.current.get(p) !== v) { valuesRef.current.set(p, v); changed = true }
           } catch (e) { /* try again next time */ }
         }))
@@ -208,7 +238,7 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
       ws.onmessage = (event) => {
         let message
         try { message = JSON.parse(event.data) } catch (e) { return }
-        if (applyDelta(valuesRef.current, message, watching)) publish()
+        if (applyDelta(valuesRef.current, message, watching, stampsRef.current)) publish()
       }
       ws.onclose = () => {
         setConnected(false)
@@ -229,7 +259,7 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
     }
   }, [active, watchKey])
 
-  const info = (deviceId) => liveInfo(deviceId, live, values, nameOf)
+  const info = (deviceId) => liveInfo(deviceId, live, values, nameOf, stampsRef.current, now)
 
   const toggle = async (deviceId) => {
     const current = liveInfo(deviceId, live, values, nameOf)

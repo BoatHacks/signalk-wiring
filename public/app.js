@@ -1747,7 +1747,9 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new
   g.setGraph({ rankdir: 'LR', nodesep: 24, ranksep: 56, marginx: 16, marginy: 16 })
   g.setDefaultEdgeLabel(() => ({}))
   for (const n of nodes) {
-    const labelW = Math.max(90, n.label.length * 7 + 28) + (n.icon ? 36 : 0)
+    // A live battery reading is drawn inside the box, so the box grows to fit it.
+    const liveReadingW = live && live.info(n.id) && live.info(n.id).reading ? live.info(n.id).reading.length * 5.4 + 16 : 0
+    const labelW = Math.max(90, n.label.length * 7 + 28, liveReadingW) + (n.icon ? 36 : 0)
     // A box for the device's terminals and ports (relative to the node's corner),
     // as wide as the label needs.
     const hasPorts = ((deviceById.get(n.id) || {}).terminals || []).some((t) => t.port)
@@ -1818,7 +1820,7 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new
               </text>
               <${PortBlocks} box=${n.box} originX=${0} originY=${0} />
               ${liveState && liveState.look === 'locked' && html`<${LiveLock} x=${pos.width - 12} y=${12} size=${14} />`}
-              ${liveState && html`<${LiveReading} x=${pos.width / 2} y=${n.box.bottomPorts ? 24 : pos.height - 4} size=${10} text=${liveState.reading} />`}
+              ${liveState && html`<${LiveReading} x=${pos.width / 2} y=${n.box.bottomPorts ? 24 : pos.height - 4} size=${10} text=${liveState.reading} stale=${liveState.stale} />`}
             </g>
           `
         })}
@@ -1999,6 +2001,8 @@ const editOnOpen = new Set()
 // and the bank the battery belongs to (from /derived).
 function BatteryDetails ({ device, deviceNames }) {
   const [banks, setBanks] = useState(null)
+  const [liveOn, setLiveOn] = useState(false)
+  const live = useLive(liveOn, 0, (id) => deviceNames.get(id) || id)
   const isBattery = (device.role || 'consumer') === 'storage'
   useEffect(() => {
     if (!isBattery) return undefined
@@ -2037,6 +2041,16 @@ function BatteryDetails ({ device, deviceNames }) {
         <div class="meta">Monitored by: <${DeviceLink} id=${device.monitorDeviceId} names=${deviceNames} /></div>
       `}
       ${paths.map(([label, p]) => html`<div class="meta" key=${label}>${label}: <code>${p}</code></div>`)}
+      ${isBattery && html`
+        <div class="battery-live">
+          <button type="button" class=${liveOn ? 'active' : ''} data-testid="battery-live-toggle" onClick=${() => setLiveOn((v) => !v)}>${liveOn ? 'Live: on' : 'Live'}</button>
+          ${liveOn && (() => {
+            const info = live.info(device.id)
+            const text = info && info.reading
+            return html`<span class=${'meta' + (info && info.stale ? ' live-stale' : '')} data-testid="battery-live">${live.error ? live.error : !live.live ? 'Loading…' : text || 'no values yet (set a voltage, state of charge or time remaining path, or a monitor)'}</span>`
+          })()}
+        </div>
+      `}
       ${isBattery && bank && html`
         <div class="meta bank-summary" data-testid="battery-bank">
           ${bankLines.map((line, i) => html`<div key=${i}>${i === 0 ? html`<strong>${line}</strong>` : line}</div>`)}

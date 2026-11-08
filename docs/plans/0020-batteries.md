@@ -194,7 +194,7 @@ These are open to change in review:
 - [x] Device form and page fields with the chemistry defaults; the link type in
       the popover, the full cable form and the cables table.
 - [x] The Batteries tab and its route.
-- [ ] Live values for batteries on the tab, the circuit diagram, the schematic
+- [x] Live values for batteries on the tab, the circuit diagram, the schematic
       and the battery page.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #6.
 

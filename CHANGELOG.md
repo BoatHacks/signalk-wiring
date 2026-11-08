@@ -7,6 +7,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Live voltage, state of charge and time remaining for batteries, on the
+  Batteries tab, the circuit diagram, the schematic and the battery page. A
+  battery with no paths of its own uses those of its monitoring device, a bank
+  shows the first value found in it, a missing time remaining shows "not
+  discharging" when the current says so, and values that stop arriving are
+  marked stale. The time remaining is the monitor's own value, never computed.
 - The battery fields in the device form and on the device page: chemistry and
   purpose, capacity, usable percent, make and model, install date (with its
   age), the monitoring device and the four SignalK paths. Choosing a chemistry

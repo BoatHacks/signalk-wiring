@@ -21,9 +21,9 @@ export function LiveLock ({ x, y, size }) {
 }
 
 // The reading under a marker, for example "36 W".
-export function LiveReading ({ x, y, size, text }) {
+export function LiveReading ({ x, y, size, text, stale }) {
   if (!text) return null
-  return html`<text class="live-reading" x=${x} y=${y} font-size=${size} text-anchor="middle">${text}</text>`
+  return html`<text class=${stale ? 'live-reading stale' : 'live-reading'} x=${x} y=${y} font-size=${size} text-anchor="middle">${text}</text>`
 }
 
 // What the colours mean, and the connection state, above a Live view.
