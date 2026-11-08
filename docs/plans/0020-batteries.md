@@ -26,11 +26,21 @@ their monitors.
   editable on the device. A bank shows both total and usable amp-hours. The
   existing chemistry type names fill the field for existing batteries.
 - **Monitoring: a link, paths and live values.** A battery gets an optional
-  "Monitored by" link to a shunt or battery monitor device and three optional
-  SignalK path fields (voltage, current, state of charge). With Live mode on, a
-  battery shows its voltage and state of charge on the Batteries tab, the
-  circuit diagram, the schematic and its page, reusing the live stream that
-  already exists. A shunt's own SignalK path keeps working as its meter.
+  "Monitored by" link to a shunt or battery monitor device and four optional
+  SignalK path fields (voltage, current, state of charge, time remaining). With
+  Live mode on, a battery shows its voltage, state of charge and time remaining
+  on the Batteries tab, the circuit diagram, the schematic and its page, reusing
+  the live stream that already exists. A shunt's own SignalK path keeps working as its meter.
+- **Runtime: the monitor's own value, nothing computed.** The time remaining
+  comes from SignalK, `electrical.batteries.<id>.capacity.timeRemaining`
+  (seconds), and is shown when Live mode is on and the monitor reports one.
+  Nothing is computed from the capacity and the loads in this plan: a bank with
+  no monitor, or a monitor that reports no value, shows no runtime. Checked
+  against the live server on 2026-11-08: the Venus battery and the N2K monitors
+  publish the path, with a null value while current is about zero (nothing is
+  discharging), so the null case is normal and handled. The SignalK
+  specification gives `timeRemaining` in seconds and `current` as positive when
+  it flows out of the battery (discharging) and negative when charging.
 - **Extra details.** Make and model (free text) and install date (shown as an
   age, recorded only). Not chosen: a BMS note, and series and parallel counts
   on a single device.
@@ -51,10 +61,11 @@ their monitors.
 
 - Migration 11 adds to `devices`: `chemistry` (`flooded`, `agm`, `gel`,
   `lifepo4`, `lithium`, `other`, or null), `purpose` (`house`, `starter`,
-  `thruster`, `windlass`, `other`, or null), `capacity_ah` (REAL, amp-hours of
+  `thruster`, `windlass`, `motor`, `other`, or null), `capacity_ah` (REAL, amp-hours of
   this battery), `usable_fraction` (REAL, 0 to 1), `make_model` (TEXT),
   `installed_on` (TEXT, an ISO date), `monitor_device_id` (TEXT, a device),
-  `voltage_path`, `current_path`, `soc_path` (TEXT, SignalK paths). It adds to
+  `voltage_path`, `current_path`, `soc_path`, `time_remaining_path` (TEXT,
+  SignalK paths). It adds to
   `wire_runs`: `link` (`series`, `parallel`, or null). All guarded so the
   migration is safe to run twice.
 - The store validates the values (the sets above, 0 to 1, a real device id for
@@ -109,8 +120,10 @@ store's `deriveAll` calls `deriveBanks`.
 - **Device form and page** (storage role, and the monitor fields on shunt and
   battery monitor types): Chemistry, Purpose, Capacity (Ah), Usable (%),
   Nominal voltage (already there), Make and model, Installed on, Monitored by
-  (a device picker), and the three path fields (with the existing SignalK path
-  search). Chemistry fills the voltage and usable defaults while those fields
+  (a device picker), and the four path fields (with the existing SignalK path
+  search; the time remaining path is suggested from the state of charge path by
+  replacing its tail `stateOfCharge` with `timeRemaining` when it has the
+  standard form, and stays editable). Chemistry fills the voltage and usable defaults while those fields
   are untouched, as the type fills the Current field. The page shows the details,
   the age ("installed 3 years ago"), and the bank the battery belongs to.
 - **Cables.** When both ends of a new cable are storage devices, the quick
@@ -120,12 +133,20 @@ store's `deriveAll` calls `deriveBanks`.
 - **Batteries tab** (`#/batteries`, added to the router): bank cards as above,
   with the warnings of the bank under the card, an "incomplete" note naming the
   missing capacity or voltage, and links to the battery devices.
-- **Live values.** `public/live.js` also subscribes to the voltage, current and
-  state-of-charge paths of storage devices (a battery with no path of its own
-  uses its monitor's), and `info(id)` for a storage device gives a short reading
-  such as "12.8 V, 87 %". The Batteries tab, the circuit diagram, the schematic
-  and the battery page show it when Live is on, with the same look as the
-  existing readings (theme tokens, night theme).
+- **Live values.** `public/live.js` also subscribes to the voltage, current,
+  state-of-charge and time remaining paths of storage devices (a battery with no
+  path of its own uses its monitor's), and `info(id)` for a storage device gives
+  a short reading such as "12.8 V, 87 %, 6 h 20 min". The Batteries tab, the
+  circuit diagram, the schematic and the battery page show it when Live is on,
+  with the same look as the existing readings (theme tokens, night theme).
+- **Time remaining display.** `timeRemaining` is seconds, shown as hours and
+  minutes ("6 h 20 min", "45 min", or days for long values). A null value is
+  normal (the monitors here publish null while nothing discharges): when the
+  current path is known and shows no discharge (zero or negative, since the
+  specification makes outflow positive) the reading says "not discharging",
+  otherwise it shows nothing. A stale value (no update for a while) is shown as
+  stale, as the other live readings are. The path is never computed over: when
+  there is no value there is no runtime.
 
 ### Defaults chosen without asking
 
@@ -136,13 +157,15 @@ These are open to change in review:
   lithium; none for other.
 - Nominal voltage default: 12 V for the lead-acid kinds, 12.8 V for LiFePO4,
   none for the others (it is per battery, for a 12 V unit).
-- Purpose list: House, Starter, Thruster, Windlass, Other.
+- Purpose list: House, Starter, Thruster, Windlass, Motor (propulsion), Other.
 - A series link is a single positive conductor; a parallel link carries
   positive and negative, as bank links have been.
 - The bank's capacity is the sum of the weakest battery of each string, and the
   bank's usable fraction is the lowest in the bank.
 - The monitor's paths are used for a battery that has none of its own; a bank's
   live reading takes the first battery in the bank that has a value.
+- Time remaining is only the SignalK value; there is no computed estimate (the
+  user chose this over a live computed or a planned estimate).
 - The CSV import has no columns for the new fields in this plan.
 
 ## Test Strategy
@@ -159,7 +182,9 @@ These are open to change in review:
   from chemistry, drawing a parallel and a series link, the Batteries tab with a
   2S2P bank, a bank with a missing capacity, and live readings with a mock
   stream on the tab, the diagram and the schematic, in the light and the night
-  theme.
+  theme; time remaining as a value, as null while not discharging, and absent.
+  The duration formatting and the "not discharging" rule are pure functions with
+  unit tests (null, zero current, negative current, stale, minutes, hours, days).
 
 ## Implementation Steps
 
@@ -189,7 +214,9 @@ These are open to change in review:
 ## Follow-ups (not in this plan)
 
 - Charge voltages per chemistry and a check against chargers.
-- A runtime estimate from the usable capacity and the load summary.
+- A computed runtime estimate (from the live state of charge and current, or a
+  planned one from the usable capacity and the load summary) for banks whose
+  monitor reports no time remaining. Offered and not chosen for now.
 - A BMS note, and series and parallel counts on a single device record.
 - CSV import columns for the battery fields.
 - Standard terminals for battery posts and a BMS.
