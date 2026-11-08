@@ -159,7 +159,7 @@ breaker checks become based on what the boat actually draws.
 - [x] Calibration: pure statistics, then the run state machine, then the
       routes to start, poll, cancel, accept and reject, with tests.
 - [x] Device forms: switch path, flags, meter path, measured values.
-- [ ] Live mode on the floorplan, then on the circuit diagram.
+- [x] Live mode on the floorplan, then on the circuit diagram.
 - [ ] Calibrate load dialog, including hand-switched prompts and step
       detection.
 - [ ] Load check uses measured values.

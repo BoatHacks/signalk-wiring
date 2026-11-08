@@ -36,6 +36,9 @@
   --wire-line: #8a5a2b;
   --wire-neutral: #2f6fb5;
   --wire-earth: #4a9a3a;
+  --live-on: #2f8a2f;
+  --live-off: #8a8a85;
+  --live-unknown: #c9c4a8;
   --wire-highlight: #e0a800;
 }
 
@@ -73,6 +76,9 @@
   --wire-neutral: #a15850;
   --wire-earth: #c06657;
   --wire-highlight: #ffb3a6;
+  --live-on: #ff5c47;
+  --live-off: #4d332e;
+  --live-unknown: #7a5048;
 }
 
 * { box-sizing: border-box; }
@@ -657,3 +663,28 @@ main:has(.schematic-editor) { max-width: none; }
 /* Plan 0017: checkboxes in forms and measured values */
 .form-field .checkbox-input { width: auto; align-self: flex-start; min-height: 0; }
 .meta.measured { font-weight: 600; color: var(--text); }
+
+/* Plan 0017: the Live mode */
+.live-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; margin: 6px 0; }
+.live-legend { display: inline-flex; align-items: center; gap: 6px; }
+.live-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--marker-stroke); }
+.live-swatch.on { background: var(--live-on); }
+.live-swatch.off { background: var(--live-off); }
+.live-swatch.unknown { background: var(--live-unknown); }
+.live-swatch.fixed { background: var(--live-off); opacity: 0.35; }
+.live-swatch.locked { background: var(--live-off); opacity: 0.35; outline: 2px dotted var(--text-muted-strong); }
+.live-status { margin-left: auto; }
+.floorplan-canvas .device-marker.live-on circle { fill: var(--live-on); fill-opacity: 0.95; }
+.floorplan-canvas .device-marker.live-off circle { fill: var(--live-off); fill-opacity: 0.9; }
+.floorplan-canvas .device-marker.live-unknown circle { fill: var(--live-unknown); fill-opacity: 0.9; }
+.floorplan-canvas .device-marker.live-fixed, .floorplan-canvas .device-marker.live-locked, .floorplan-canvas .device-marker.live-none { opacity: 0.4; }
+.floorplan-canvas .device-marker.live-clickable circle { cursor: pointer; }
+.floorplan-canvas .device-marker.live-fixed circle, .floorplan-canvas .device-marker.live-locked circle, .floorplan-canvas .device-marker.live-none circle { cursor: not-allowed; }
+.live-lock rect { fill: var(--text); }
+.live-lock path { stroke: var(--text); }
+.live-reading { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 0.5; pointer-events: none; }
+.diagram-wrap g.live-on .diagram-node { fill: var(--live-on); fill-opacity: 0.85; }
+.diagram-wrap g.live-off .diagram-node { fill: var(--live-off); fill-opacity: 0.8; }
+.diagram-wrap g.live-unknown .diagram-node { fill: var(--live-unknown); }
+.diagram-wrap g.live-fixed, .diagram-wrap g.live-locked, .diagram-wrap g.live-none { opacity: 0.4; }
+.diagram-wrap g.live-clickable { cursor: pointer; }

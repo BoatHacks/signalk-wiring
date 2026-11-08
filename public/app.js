@@ -16,6 +16,8 @@ import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
 import { typeOptions, isCriticalType } from './deviceTypes.js'
 import { describeMeasured, describeGroup } from './measured.js'
+import { useLive } from './live.js'
+import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
@@ -1287,7 +1289,7 @@ function CircuitsList ({ onSelect }) {
 // Built from data already fetched through the resource API: the derived
 // circuit says which cables belong to it, and the cables say which devices
 // they join. Return (negative) cables are drawn dotted.
-function DiagramView ({ cables, deviceNameById, deviceIconById }) {
+function DiagramView ({ cables, deviceNameById, deviceIconById, live, onLiveError }) {
   if (cables.length === 0) return null
 
   const nodes = []
@@ -1339,13 +1341,24 @@ function DiagramView ({ cables, deviceNameById, deviceIconById }) {
         })}
         ${nodes.map((n) => {
           const pos = g.node(n.id)
+          const liveState = live ? live.info(n.id) : null
+          const toggle = async () => {
+            if (!liveState || !liveState.clickable) return
+            try { await live.toggle(n.id) } catch (err) { onLiveError(err.message) }
+          }
           return html`
-            <g key=${n.id} transform="translate(${pos.x - pos.width / 2}, ${pos.y - pos.height / 2})">
+            <g key=${n.id} transform="translate(${pos.x - pos.width / 2}, ${pos.y - pos.height / 2})"
+              class=${live ? (liveState ? 'live-' + liveState.look + (liveState.clickable ? ' live-clickable' : '') : 'live-none') : ''}
+              data-live=${liveState ? liveState.look : undefined} data-name=${n.label}
+              onClick=${live ? toggle : undefined}>
+              ${liveState && html`<title>${liveState.title}</title>`}
               <rect width=${pos.width} height=${pos.height} rx="6" class="diagram-node diagram-node-${n.kind}" />
               ${n.icon && html`<image href=${n.icon} x="6" y=${(pos.height - 36) / 2} width="36" height="36" preserveAspectRatio="xMidYMid meet" />`}
               <text x=${(pos.width + (n.icon ? 36 : 0)) / 2} y=${pos.height / 2 + 4} text-anchor="middle" class="diagram-label">
                 ${n.label}
               </text>
+              ${liveState && liveState.look === 'locked' && html`<${LiveLock} x=${pos.width - 12} y=${12} size=${14} />`}
+              ${liveState && html`<${LiveReading} x=${pos.width / 2} y=${pos.height - 4} size=${10} text=${liveState.reading} />`}
             </g>
           `
         })}
@@ -1364,6 +1377,9 @@ function CircuitDetail ({ circuitId, onBack }) {
   const { items: devices } = useResourceList('wiringDevices')
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
   const deviceIconById = new Map(devices.filter((d) => deviceIconUrl(d)).map((d) => [d.id, deviceIconUrl(d)]))
+  const [liveOn, setLiveOn] = useState(false)
+  const [liveError, setLiveError] = useState(null)
+  const live = useLive(liveOn, 0, (id) => deviceNameById.get(id) || id)
 
   useEffect(() => {
     let cancelled = false
@@ -1416,7 +1432,15 @@ function CircuitDetail ({ circuitId, onBack }) {
 
       ${feedCables.length > 0 && html`
         <h3>Diagram</h3>
-        <${DiagramView} cables=${[...feedCables, ...returnCables]} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById} />
+        <div class="row-actions">
+          <button class=${liveOn ? 'active' : ''} data-testid="diagram-live" onClick=${() => { setLiveOn((v) => !v); setLiveError(null) }}>
+            ${liveOn ? 'Live: on' : 'Live'}
+          </button>
+        </div>
+        ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
+        ${liveError && html`<div class="error-banner">${liveError}</div>`}
+        <${DiagramView} cables=${[...feedCables, ...returnCables]} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById}
+          live=${liveOn ? live : null} onLiveError=${setLiveError} />
       `}
 
       <h3>Cables</h3>

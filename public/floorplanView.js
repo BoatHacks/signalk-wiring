@@ -14,6 +14,8 @@ import {
 import { startValues } from './quickCable.js'
 import { CablePopover } from './cablePopover.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
+import { useLive } from './live.js'
+import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -273,6 +275,10 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       if (target.kind === 'device') actions.connectDevice(target.key)
       return
     }
+    if (ctx.tool === 'live') {
+      if (target.kind === 'device') actions.liveToggle(target.key)
+      return
+    }
     startDrag(e, target)
   }
 
@@ -495,9 +501,12 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           if (!px) return null
           const lit = ctx.deviceId === device.id || (members && members.deviceIds.has(device.id)) ||
             (ctx.connect && (ctx.connect.fromId === device.id || ctx.connect.toId === device.id))
+          const liveState = ctx.live ? ctx.live.info(device.id) : null
           return html`
-            <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''}"
+            <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''} ${liveState ? 'live-' + liveState.look + (liveState.clickable ? ' live-clickable' : '') : ctx.live ? 'live-none' : ''}"
+              data-live=${liveState ? liveState.look : undefined}
               onPointerDown=${(e) => onMarkerDown(e, { kind: 'device', key: device.id })}>
+              ${liveState && html`<title>${liveState.title}</title>`}
               <circle cx=${px[0]} cy=${px[1]} r=${unit * 1.3} />
               ${deviceIconUrl(device) && html`
                 <image href=${deviceIconUrl(device)} x=${px[0] - unit * 1.1} y=${px[1] - unit * 1.1}
@@ -505,6 +514,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
                   clip-path="circle(50%)" style="pointer-events: none" />
               `}
               <text x=${px[0] + unit * 1.8} y=${px[1] + unit * 0.6} font-size=${unit * 1.9}>${device.name}</text>
+              ${liveState && liveState.look === 'locked' && html`<${LiveLock} x=${px[0]} y=${px[1]} size=${unit * 1.9} />`}
+              ${liveState && html`<${LiveReading} x=${px[0]} y=${px[1] + unit * 3.2} size=${unit * 1.5} text=${liveState.reading} />`}
             </g>
           `
         })}
@@ -594,6 +605,7 @@ export function FloorplanTab ({ renderCableForm }) {
   const liveDevices = devices.filter((d) => d.status !== 'removed')
   const liveRuns = wireRuns.filter((r) => r.status !== 'removed')
   const devicesById = new Map(devices.map((d) => [d.id, d]))
+  const live = useLive(tool === 'live', reloadKey, (id) => (devicesById.get(id) || {}).name || id)
   const circuitsById = new Map(circuits.map((c) => [c.id, c]))
   const circuit = circuitId ? circuitsById.get(circuitId) : null
   const run = runId ? wireRuns.find((r) => r.id === runId) : null
@@ -653,6 +665,10 @@ export function FloorplanTab ({ renderCableForm }) {
       guard(() => deleteResource('wiringPlans', plan.id))
     },
     selectDevice: (id) => { setDeviceId(id); setError(null) },
+    liveToggle: async (id) => {
+      setError(null)
+      try { await live.toggle(id) } catch (err) { setError(err.message) }
+    },
     connectDevice: (id) => { setConnect((s) => connectPickDevice(s, id)); setNotice(null); setError(null) },
     connectWaypoint: (view, a, b) => {
       if (connect.stage !== 'route') { setError('Pick the From and To devices first.'); return }
@@ -698,6 +714,7 @@ export function FloorplanTab ({ renderCableForm }) {
   const ctx = {
     tool, deviceId, runId, conduitId, members, waypointIndex,
     connect: connecting ? connect : null,
+    live: tool === 'live' ? live : null,
     connectPoints,
     connectStartCount: connectStart.length
   }
@@ -752,7 +769,7 @@ export function FloorplanTab ({ renderCableForm }) {
       ${active.length > 0 && html`
         <div class="floorplan-toolbar">
           <div class="row-actions">
-            ${[['select', 'Select'], ['place', 'Place device'], ['route', 'Draw route'], ['connect', 'Connect']].map(([id, label]) => html`
+            ${[['select', 'Select'], ['place', 'Place device'], ['route', 'Draw route'], ['connect', 'Connect'], ['live', 'Live']].map(([id, label]) => html`
               <button key=${id} class=${tool === id ? 'active' : ''} data-testid=${'tool-' + id} onClick=${() => chooseTool(id)}>${label}</button>
             `)}
           </div>
@@ -775,6 +792,7 @@ export function FloorplanTab ({ renderCableForm }) {
                 onChange=${(v) => { setConduitId(v); setRunId(null); setWaypointIndex(null) }} />
             `}
           </div>
+          ${tool === 'live' && html`<${LiveBar} live=${live} error=${live.error} />`}
           ${tool === 'place' && html`<p class="meta">Choose a device, then click a calibrated plan to place it. A click in one view sets only the two axes it shows. Drag a marker in Select mode to adjust it.</p>`}
           ${connecting && html`<p class="meta">Pick the From and To devices by clicking their markers on a plan (or with the lists), then click the route on the plan and finish. The cable gets the drawn route and its measured length.</p>`}
           ${tool === 'route' && html`<p class="meta">Choose a wire run or a conduit, then click to add waypoints. A conduit route is just its points. A wire run route starts at the run's from-device when that is placed. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
