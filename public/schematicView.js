@@ -11,6 +11,8 @@ import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { PortBlocks } from './ports.js'
+import { useUndo } from './undoBar.js'
+import { offerCableUndo } from './canvasRemoval.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
@@ -200,6 +202,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const [moreForm, setMoreForm] = useState(null) // { cable?, prefill? }
   const [notice, setNotice] = useState(null)
   const settings = useSettings()
+  const undo = useUndo()
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])
 
   const { devices, cables, circuits, schematics } = data
   const deviceById = new Map(devices.map((d) => [d.id, d]))
@@ -351,11 +356,22 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     try { await putResource('wiringDevices', r.id, { name: text }); onError(null); reload() } catch (err) { onError(err.message) }
   }
 
+  // Takes the device off this page only; Undo puts it back where it was.
   const removeFromPage = async (id) => {
+    const old = pos[id]
+    const index = schematic.devices.findIndex((d) => d.deviceId === id)
+    const name = deviceName(id) || 'Device'
     const next = { ...pos }
     delete next[id]
     setSelection(null)
     await save(next, bends, schematic.devices.map((d) => d.deviceId).filter((x) => x !== id))
+    if (!old) return
+    undo.offer({
+      message: `"${name}" taken off this page.`,
+      onUndo: () => patchStored((s) => ({
+        devices: G.withDevicePlaced(s.devices || [], { deviceId: id, x: Math.round(old.x), y: Math.round(old.y) }, index)
+      }))
+    })
   }
 
   const autoArrange = async () => {
@@ -400,20 +416,43 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     await reload()
   }
 
+  // Reads the stored schematic, changes its lists and writes them back; used by
+  // Undo, which may run after the layout in local state has moved on.
+  const patchStored = async (change) => {
+    const res = await fetch(`${RESOURCE_BASE}/wiringSchematics/${schematic.id}`)
+    if (!res.ok) throw new Error(failureMessage(res.status))
+    const stored = await res.json()
+    await putResource('wiringSchematics', schematic.id, change(stored))
+    await reload()
+  }
+
+  // No confirm dialog: the cable is marked removed, an Undo message is offered,
+  // and when the window ends the cable is deleted for good.
   const deleteWire = async (cable) => {
     const label = cableTitle(cable, new Map(devices.map((d) => [d.id, d.name])))
-    if (!window.confirm(`Remove the cable "${label}"? It is marked removed and stays in the record, and the circuit updates.`)) return
+    const savedBends = bends[cable.id]
     try {
       await deleteResource('wiringWireRuns', cable.id)
       const next = { ...bends }
       delete next[cable.id]
       setBends(next)
       setSelection(null)
-      setNotice('Cable removed.')
+      setNotice(null)
       onError(null)
       await reload()
-      if (bends[cable.id]) await save(pos, next)
-    } catch (err) { onError(err.message) }
+      if (savedBends) await save(pos, next)
+    } catch (err) { onError(err.message); return }
+    offerCableUndo({
+      undo, cable, title: label,
+      notice: (message) => { if (!mounted.current) return false; setNotice(message); return true },
+      restore: async () => {
+        await putResource('wiringWireRuns', cable.id, { status: 'active' })
+        if (savedBends && savedBends.length) {
+          await patchStored((s) => ({ wires: G.withWireBends(s.wires || [], cable.id, savedBends) }))
+        } else await reload()
+        setSelection({ type: 'wire', id: cable.id })
+      }
+    })
   }
 
   const straighten = async (id) => {
@@ -422,6 +461,43 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     setBends(next)
     await save(pos, next)
   }
+
+  // ---- Keyboard ----
+  // Attached for as long as the editor is mounted, so it is gone when another
+  // tab is shown. Re-attached every render to see the latest state.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const cmd = G.keyCommand(e.key, {
+        typing: G.isTypingTarget(e.target),
+        drag: !!drag.current && (drag.current.kind !== 'pan' || drag.current.moved),
+        popover: !!popover,
+        tabMenu: !!tabMenu,
+        moreForm: !!moreForm,
+        selection
+      })
+      if (!cmd) return
+      e.preventDefault()
+      if (cmd.kind === 'cancel-drag') {
+        drag.current = null
+        setPreview(null)
+        const p = {}
+        for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
+        const b = {}
+        for (const w of schematic.wires) b[w.wireRunId] = w.points
+        setPos(p)
+        setBends(b)
+      } else if (cmd.kind === 'close-popover') setPopover(null)
+      else if (cmd.kind === 'close-tabmenu') setTabMenu(null)
+      else if (cmd.kind === 'clear-selection') setSelection(null)
+      else if (cmd.kind === 'delete-wire') {
+        const w = wires.find((x) => x.id === cmd.id)
+        if (w) deleteWire(w.cable)
+      } else if (cmd.kind === 'remove-device') removeFromPage(cmd.id)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  })
 
   // ---- Pointer handling ----
   const onPointerDown = (e) => {

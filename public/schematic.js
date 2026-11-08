@@ -594,3 +594,44 @@ export function fitView (boxes, margin = 40) {
   const y1 = Math.max(...boxes.map((b) => b.y + b.h)) + margin
   return { x: x0, y: y0, w: Math.max(200, x1 - x0), h: Math.max(150, y1 - y0) }
 }
+
+// ---- Keyboard --------------------------------------------------------------
+
+// True when a key press belongs to a text field and must not drive the canvas.
+export function isTypingTarget (el) {
+  if (!el) return false
+  const tag = String(el.tagName || '').toUpperCase()
+  return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || el.isContentEditable === true
+}
+
+// What a key press does on the schematic canvas, or null for nothing.
+// state: { typing, drag, popover, tabMenu, moreForm, selection: { type, id } | null }
+export function keyCommand (key, state) {
+  if (state.typing || state.moreForm) return null
+  if (key === 'Escape') {
+    if (state.drag) return { kind: 'cancel-drag' }
+    if (state.popover) return { kind: 'close-popover' }
+    if (state.tabMenu) return { kind: 'close-tabmenu' }
+    if (state.selection) return { kind: 'clear-selection' }
+    return null
+  }
+  if (key === 'Delete' || key === 'Backspace') {
+    if (state.drag || state.popover || !state.selection) return null
+    if (state.selection.type === 'wire') return { kind: 'delete-wire', id: state.selection.id }
+    if (state.selection.type === 'device') return { kind: 'remove-device', id: state.selection.id }
+  }
+  return null
+}
+
+// The schematic record's device list with one device put back at its old
+// position (and old place in the order), without duplicating it.
+export function withDevicePlaced (devices, placed, index) {
+  const rest = devices.filter((d) => d.deviceId !== placed.deviceId)
+  const at = Math.max(0, Math.min(index, rest.length))
+  return [...rest.slice(0, at), placed, ...rest.slice(at)]
+}
+
+// The schematic record's wire list with one wire's bend points put back.
+export function withWireBends (wires, wireRunId, points) {
+  return [...wires.filter((w) => w.wireRunId !== wireRunId), { wireRunId, points }]
+}

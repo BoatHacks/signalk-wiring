@@ -717,6 +717,7 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-terminal.c-signal { fill: var(--wire-signal); }
 
 /* Undo message at the top of the main area */
+.canvas-toast { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 50; background: var(--surface-alt); color: var(--text); border-color: var(--warn); }
 .undo-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin-bottom: 12px; padding: 8px 12px;
