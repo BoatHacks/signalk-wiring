@@ -105,7 +105,7 @@ test('migration 10 fills by type and terminals, never overrides a mark, and is s
   store.close()
   for (let i = 0; i < 2; i++) {
     const again = new Store(file)
-    assert.equal(again.db.pragma('user_version', { simple: true }), 10)
+    assert.ok(again.db.pragma('user_version', { simple: true }) >= 10)
     const cur = (k) => again.get('device', ids[k]).current
     assert.equal(cur('gen'), 'ac')
     assert.equal(cur('batt'), 'dc')

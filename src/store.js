@@ -6,6 +6,7 @@ const crypto = require('crypto')
 const Database = require('better-sqlite3')
 const { deriveCircuits } = require('./circuits')
 const { isCriticalType } = require('./safety')
+const { CHEMISTRIES, PURPOSES, LINKS, typeChemistry, typePurpose } = require('./batteries')
 const { CURRENTS, typeCurrent, terminalsCurrent, mixesAcAndDc } = require('./current')
 const { deriveSwitchability } = require('./switchability')
 
@@ -20,7 +21,7 @@ const TABLES = {
     table: 'wire_runs',
     columns: [
       'id', 'from_device_id', 'to_device_id', 'gauge', 'gauge_unit',
-      'length', 'length_unit', 'zone', 'cable_label', 'switch_ref',
+      'length', 'length_unit', 'zone', 'cable_label', 'switch_ref', 'link',
       'route', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
@@ -29,7 +30,9 @@ const TABLES = {
     columns: [
       'id', 'name', 'type', 'role', 'icon_attachment_id', 'zone', 'rated_power_w', 'signalk_path',
       'trip_rating_a', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
-      'meter_path', 'meter_unit', 'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
+      'meter_path', 'meter_unit', 'chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
+      'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path',
+      'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
   conduit: {
@@ -388,6 +391,32 @@ const MIGRATIONS = [
         if (value) set.run(value, d.id)
       }
     }
+  },
+  {
+    version: 11,
+    description: 'plan 0020: devices + battery details and monitor paths; wire_runs + link; chemistry and purpose filled once from the type',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      const add = (table, col, type) => { if (!has(table, col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`) }
+      add('devices', 'chemistry', 'TEXT')
+      add('devices', 'purpose', 'TEXT')
+      add('devices', 'capacity_ah', 'REAL')
+      add('devices', 'usable_fraction', 'REAL')
+      for (const col of ['make_model', 'installed_on', 'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path']) {
+        add('devices', col, 'TEXT')
+      }
+      add('wire_runs', 'link', 'TEXT')
+      // The one-time fill: only where nothing is set, never over a mark, and
+      // the type text stays as it is.
+      const setChem = db.prepare('UPDATE devices SET chemistry = ? WHERE id = ? AND chemistry IS NULL')
+      const setPurpose = db.prepare('UPDATE devices SET purpose = ? WHERE id = ? AND purpose IS NULL')
+      for (const d of db.prepare('SELECT id, type FROM devices').all()) {
+        const chemistry = typeChemistry(d.type)
+        if (chemistry) setChem.run(chemistry, d.id)
+        const purpose = typePurpose(d.type)
+        if (purpose) setPurpose.run(purpose, d.id)
+      }
+    }
   }
 ]
 
@@ -518,9 +547,9 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
-    if (kind === 'device') row = this._checkSwitching(this._checkIcon(id, this._checkRole(row)), true)
+    if (kind === 'device') row = this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(row)), true))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
-    if (kind === 'wireRun') this._checkWireRunEnds(row)
+    if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null) }
     if (kind === 'schematic') row.name = this._checkSchematicName(row.name)
     const lists = kind === 'schematic' ? this._checkSchematicLists(row) : null
     const children = this._childrenOf(kind)
@@ -852,10 +881,10 @@ class Store {
     if (kind === 'schematic') return this._updateSchematic(id, patch, existing)
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkSwitching(this._checkIcon(id, this._checkRole(patch)), false)
+    if (kind === 'device') patch = this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(patch)), false))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
-    if (kind === 'wireRun') this._checkWireRunEnds(patch)
+    if (kind === 'wireRun') { this._checkWireRunEnds(patch); patch = this._checkLink(patch, existing) }
 
     const { table, columns } = TABLES[kind]
     const children = this._childrenOf(kind)
@@ -1000,6 +1029,74 @@ class Store {
        ON CONFLICT (wire_run_id, conduit_id) DO UPDATE SET position = excluded.position`
     )
     conduitIds.forEach((id, i) => upsert.run(wireRunId, id, i))
+  }
+
+  // Plan 0020 battery fields. Lists and the date are checked, numbers must be
+  // real numbers in range, text is trimmed, and a monitor must be another
+  // existing device. An empty value clears a field.
+  _checkBattery (id, fields) {
+    let out = fields
+    const empty = (v) => v === null || v === undefined || v === ''
+    const oneOf = (key, list) => {
+      if (!(key in out)) return
+      if (empty(out[key])) { out = { ...out, [key]: null }; return }
+      if (!list.includes(out[key])) throw new Error(`${key} must be one of: ${list.join(', ')}`)
+    }
+    oneOf('chemistry', CHEMISTRIES)
+    oneOf('purpose', PURPOSES)
+    const number = (key, ok, message) => {
+      if (!(key in out)) return
+      if (empty(out[key])) { out = { ...out, [key]: null }; return }
+      const n = typeof out[key] === 'string' ? Number(out[key]) : out[key]
+      if (typeof n !== 'number' || !Number.isFinite(n) || !ok(n)) throw new Error(message)
+      out = { ...out, [key]: n }
+    }
+    number('capacity_ah', (n) => n > 0, 'capacity_ah must be a positive number')
+    number('usable_fraction', (n) => n >= 0 && n <= 1, 'usable_fraction must be a number from 0 to 1')
+    for (const key of ['make_model', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path']) {
+      if (key in out) out = { ...out, [key]: textOrNull(out[key]) }
+    }
+    if ('installed_on' in out) {
+      const v = textOrNull(out.installed_on)
+      if (v !== null) {
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(v + 'T00:00:00Z') : null
+        if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) {
+          throw new Error('installed_on must be a date like 2026-03-14')
+        }
+      }
+      out = { ...out, installed_on: v }
+    }
+    if ('monitor_device_id' in out) {
+      const v = textOrNull(out.monitor_device_id)
+      if (v !== null) {
+        if (v === id) throw new Error('A battery cannot be its own monitor')
+        if (!this.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(v)) throw new Error(`device not found: ${v}`)
+      }
+      out = { ...out, monitor_device_id: v }
+    }
+    return out
+  }
+
+  // A link type only applies to a cable between two storage devices. `existing`
+  // supplies the ends a patch leaves alone.
+  _checkLink (fields, existing) {
+    let out = fields
+    if ('link' in out) {
+      const v = out.link === '' || out.link === undefined ? null : out.link
+      if (v !== null && !LINKS.includes(v)) throw new Error(`link must be one of: ${LINKS.join(', ')}`)
+      out = { ...out, link: v }
+    }
+    const merged = { ...(existing || {}), ...out }
+    if (merged.link) {
+      const role = (id) => {
+        const r = id ? this.db.prepare('SELECT role FROM devices WHERE id = ?').get(id) : null
+        return r ? r.role : null
+      }
+      if (role(merged.from_device_id) !== 'storage' || role(merged.to_device_id) !== 'storage') {
+        throw new Error('A link type only applies to a cable between two batteries')
+      }
+    }
+    return out
   }
 
   // A device's icon must be one of its own JPEG, PNG or WebP attachments.

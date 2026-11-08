@@ -6,7 +6,7 @@ import { ROLES } from '../public/roles.js'
 test('every role has suggestions, with no duplicates inside a role', () => {
   for (const role of ROLES) {
     const list = TYPE_SUGGESTIONS[role.value]
-    assert.ok(list && list.length >= 5, `${role.value} needs suggestions`)
+    assert.ok(list && list.length >= (role.value === 'storage' ? 2 : 5), `${role.value} needs suggestions`)
     const keys = list.map((t) => t.toLowerCase())
     assert.equal(new Set(keys).size, keys.length, `${role.value} has duplicates`)
   }
@@ -47,4 +47,18 @@ test('the current presets match the server table', async () => {
   assert.equal(web.typeCurrent('AGM battery'), 'dc')
   assert.equal(web.typeCurrent('Inverter'), null)
   assert.equal(web.typeCurrent(undefined), null)
+})
+
+test('the battery table and helpers match the server copy', async () => {
+  const { createRequire } = await import('node:module')
+  const server = createRequire(import.meta.url)('../src/batteries.js')
+  const web = await import('../public/batteries.js')
+  for (const key of ['CHEMISTRIES', 'PURPOSES', 'LINKS', 'CHEMISTRY_LABELS', 'PURPOSE_LABELS', 'CHEMISTRY_DEFAULTS', 'TYPE_CHEMISTRY', 'TYPE_PURPOSE']) {
+    assert.deepEqual(web[key], server[key], key)
+  }
+  assert.equal(web.PURPOSE_LABELS.motor, 'Motor (propulsion)')
+  assert.equal(web.CHEMISTRY_LABELS.lithium, 'Other lithium')
+  for (const t of ['Lead-acid battery', 'agm battery', 'Battery']) assert.equal(web.typeChemistry(t), server.typeChemistry(t))
+  for (const t of ['Starter battery', 'house battery', 'Battery']) assert.equal(web.typePurpose(t), server.typePurpose(t))
+  for (const c of [...server.CHEMISTRIES, null]) assert.deepEqual(web.chemistryDefaults(c), server.chemistryDefaults(c))
 })

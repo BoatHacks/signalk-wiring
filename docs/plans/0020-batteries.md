@@ -188,7 +188,7 @@ These are open to change in review:
 
 ## Implementation Steps
 
-- [ ] Migration 11, the new device and cable fields, validation, the one-time
+- [x] Migration 11, the new device and cable fields, validation, the one-time
       fill, the storage type suggestions, with tests.
 - [ ] `src/banks.js` and the richer `/derived` banks, with tests.
 - [ ] Device form and page fields with the chemistry defaults; the link type in

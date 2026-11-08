@@ -11,10 +11,7 @@ export const TYPE_SUGGESTIONS = {
     'Solar panel', 'Shore power inlet', 'Generator', 'Alternator', 'Wind generator',
     'Hydro generator', 'Fuel cell'
   ],
-  storage: [
-    'Battery', 'Battery bank', 'Lead-acid battery', 'AGM battery', 'LiFePO4 battery',
-    'Starter battery', 'House battery'
-  ],
+  storage: ['Battery', 'Battery bank'],
   distribution: [
     'Switch', 'Breaker', 'Fuse', 'Bus bar', 'Distribution panel', 'Battery isolator',
     'Battery switch', 'Relay', 'Shunt'
