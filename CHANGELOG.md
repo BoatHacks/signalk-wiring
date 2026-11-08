@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Live mode ignored every update from a real SignalK server, so nothing showed
+  live (relay states, meter values and the new battery readings). The server
+  answers a `vessels.self` subscription with updates under the vessel's own
+  context (`vessels.urn:mrn:...`), and the app only accepted `vessels.self`. It
+  now takes the vessel's context from the server's hello message. It also asks
+  for a fixed one second period instead of the instant policy, which the server
+  was ignoring with a warning. Found by testing against the live server; the
+  earlier checks only used mock servers.
+
 ## [0.5.0] - 2026-11-08
 
 ### Added

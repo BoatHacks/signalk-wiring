@@ -116,9 +116,12 @@ export function pathsToWatch (live) {
 
 // Applies the updates of a SignalK delta message to a map of values.
 // Returns true when anything changed.
-export function applyDelta (values, message, watching, stamps, now = Date.now()) {
+// `selfContext` is the vessel's own context from the server's hello message
+// (`vessels.urn:mrn:imo:mmsi:...`): a real server answers a `vessels.self`
+// subscription with deltas under that concrete context, not with `vessels.self`.
+export function applyDelta (values, message, watching, stamps, now = Date.now(), selfContext = null) {
   if (!message || !Array.isArray(message.updates)) return false
-  if (message.context && message.context !== 'vessels.self') return false
+  if (message.context && message.context !== 'vessels.self' && message.context !== selfContext) return false
   let changed = false
   for (const update of message.updates) {
     for (const item of update.values || []) {
@@ -227,18 +230,20 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
       let ws
       try { ws = new WebSocket(`${proto}//${window.location.host}/signalk/v1/stream?subscribe=none`) } catch (e) { startPolling(); return }
       socket = ws
+      let selfContext = null
       ws.onopen = () => {
         failures = 0
         setConnected(true)
         ws.send(JSON.stringify({
           context: 'vessels.self',
-          subscribe: paths.map((path) => ({ path, period: 1000, policy: 'instant' }))
+          subscribe: paths.map((path) => ({ path, period: 1000, policy: 'fixed' }))
         }))
       }
       ws.onmessage = (event) => {
         let message
         try { message = JSON.parse(event.data) } catch (e) { return }
-        if (applyDelta(valuesRef.current, message, watching, stampsRef.current)) publish()
+        if (message && typeof message.self === 'string') selfContext = message.self
+        if (applyDelta(valuesRef.current, message, watching, stampsRef.current, Date.now(), selfContext)) publish()
       }
       ws.onclose = () => {
         setConnected(false)

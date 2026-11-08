@@ -94,3 +94,16 @@ test('delta messages update the watched values only, for the own vessel only', (
   assert.equal(applyDelta(values, { context: 'vessels.other', updates: [{ values: [{ path: 'a.b', value: 9 }] }] }, watching), false)
   assert.equal(applyDelta(values, { name: 'hello' }, watching), false)
 })
+
+test('a delta under the concrete self context from the hello message is applied, others are not', () => {
+  const self = 'vessels.urn:mrn:imo:mmsi:218025410'
+  const values = new Map()
+  const watching = new Set(['electrical.batteries.main.voltage'])
+  const delta = (context) => ({ context, updates: [{ timestamp: '2026-11-08T16:56:43.257Z', values: [{ path: 'electrical.batteries.main.voltage', value: 53.59 }] }] })
+  // Without the self context a real server's delta used to be dropped.
+  assert.equal(applyDelta(values, delta(self), watching, null, Date.now(), null), false)
+  assert.equal(applyDelta(values, delta(self), watching, null, Date.now(), self), true)
+  assert.equal(values.get('electrical.batteries.main.voltage'), 53.59)
+  assert.equal(applyDelta(new Map(), delta('vessels.urn:mrn:imo:mmsi:123'), watching, null, Date.now(), self), false)
+  assert.equal(applyDelta(new Map(), delta('vessels.self'), watching, null, Date.now(), self), true)
+})
