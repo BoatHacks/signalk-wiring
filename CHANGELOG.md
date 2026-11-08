@@ -5,6 +5,37 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- New cables start with default conductor colours: red for positive, black for
+  negative, brown, blue and green/yellow for AC line, neutral and earth. They
+  are filled into the colour fields and can be changed or emptied. Editing an
+  existing cable never fills colours in.
+- Cables tab: a cable that is already marked removed gets a Delete permanently
+  button. It asks first, then erases the cable with its history, attachments,
+  conduit assignments and schematic bends. Removing stays the safe default.
+- Cables tab: tick several cables (or all shown) and change gauge, length, cable
+  label, zone or add tags on all of them at once. Empty fields leave each
+  cable as it is.
+- A device of type Shunt is metered from its SignalK path (an explicit Meter
+  path still wins), so loads downstream of it use its readings for the Live
+  view and load calibration.
+- "MPPT charger" as a suggested Converter type. "Solar charge controller" is no
+  longer suggested as a Source, since a controller changes power and the solar
+  panel is the source. Devices already using that type keep it.
+
+### Fixed
+
+- Emptying a text, number or SignalK path field on an edit form (for example
+  the device's SignalK path) now clears it; before, the old value was kept.
+
+### Changed
+
+- Cables tab: the Edit, Remove, Attachments and History buttons are icons now,
+  with the word as a tooltip.
+- Device positions and route points set by clicking on a plan are rounded to
+  the centimeter (two decimals), and the position fields step by 0.01.
+
 ## [0.4.3] - 2026-11-08
 
 ### Added

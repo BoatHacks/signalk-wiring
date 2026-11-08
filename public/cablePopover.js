@@ -22,7 +22,7 @@ export function CablePopover ({ start, lengthNote, style, onCreate, onMore, onCa
     setSaving(true)
     setError(null)
     try {
-      await onCreate(buildCablePayload(values))
+      await onCreate(buildCablePayload(values, { defaults: true }))
     } catch (err) {
       setError(err.message)
       setSaving(false)

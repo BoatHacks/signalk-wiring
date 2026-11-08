@@ -52,9 +52,11 @@ to someone else doesn't depend on the current owner being present.
   consumers converted to amps via the voltage of its supply (with an
   optional power factor on AC) and checked against the rating of the fuse or
   breaker that protects it, flagging circuits over their rating.
-- **Nothing is ever hard-deleted.** "Removing" a record marks it
-  `removed` rather than dropping it, so the wiring's history stays
-  intact — a refit doesn't erase what used to be there.
+- **Removing keeps the record.** "Removing" a record marks it `removed`
+  rather than dropping it, so the wiring's history stays intact — a refit
+  doesn't erase what used to be there. The one exception is a cable that is
+  already removed, which can then be deleted permanently (with its history and
+  attachments) from the Cables tab.
 - A **change log** per record: every create/edit/removal is timestamped
   with a before/after diff, viewable from the webapp.
 - The same look as the stowage webapp: a header bar, an underlined tab

@@ -5,7 +5,7 @@ import { ROLES, roleLabel } from './roles.js'
 import { NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches } from './zones.js'
 import {
   CABLE_KINDS, CONDUCTOR_LABELS, kindByValue, defaultNegativeLanding, negativeLandingCandidates, needsTerminal,
-  terminalOptions, buildCablePayload, cableToValues, validateCable, circuitsOfCable, cableTitle
+  terminalOptions, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle
 } from './cableForm.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
@@ -315,7 +315,10 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
       // Zone and tags are always sent, so clearing them on an edit takes effect.
       if (f.type === 'zone' || f.type === 'deviceType' || f.type === 'conduitKind') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
-      if (f.clearable && (raw === '' || raw == null)) { payload[f.key] = null; continue }
+      // Emptied free-form fields are sent as null so clearing them on an edit
+      // takes effect (a missing key keeps the stored value).
+      const freeForm = f.type === 'text' || f.type === 'number' || f.type === 'textarea' || f.type === 'signalkPath'
+      if ((f.clearable || (freeForm && !f.required)) && (raw === '' || raw == null)) { payload[f.key] = null; continue }
       if (raw === '' || raw == null) continue
       payload[f.key] = f.type === 'number' ? Number(raw) : raw
     }
@@ -381,7 +384,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
               value=${values[f.key]}
               required=${!!f.required}
               placeholder=${f.placeholder || ''}
-              step=${f.type === 'number' ? 'any' : undefined}
+              step=${f.type === 'number' ? (f.step || 'any') : undefined}
               onInput=${(e) => setField(f.key, e.target.value)}
             />
           `}
@@ -647,13 +650,14 @@ const DEVICE_FIELDS = [
     label: 'Terminals',
     type: 'terminals',
     showWhen: (values, ctx) => deviceFieldVisible('terminals', values, ctx),
-    hint: 'Only needed where they remove ambiguity: a converter (give each terminal the port it belongs to, for example DC in or AC out), a battery with several posts, a fuse block.'
+    hint: 'Only needed where they remove ambiguity: a converter (give each terminal the port it belongs to, for example DC in or AC out, or PV in and Battery on an MPPT charger), a battery with several posts, a fuse block.'
   },
   {
     key: 'signalkPath',
     label: 'SignalK path',
     type: 'signalkPath',
-    placeholder: 'e.g. electrical.switches.anchorLight'
+    placeholder: 'e.g. electrical.switches.anchorLight',
+    hint: 'For a Shunt, this is where its current readings come from, unless a Meter path is set below.'
   },
   {
     key: 'switchPath',
@@ -691,9 +695,9 @@ const DEVICE_FIELDS = [
     clearable: true,
     hint: 'Watts are better. With amps the plugin multiplies by the circuit voltage and assumes a power factor of 1, and marks the result as an estimate. Blank counts as amps.'
   },
-  { key: 'posX', label: 'Position x (m, from the transom toward the bow)', type: 'number' },
-  { key: 'posY', label: 'Position y (m, athwartships)', type: 'number' },
-  { key: 'posZ', label: 'Position z (m, height)', type: 'number' },
+  { key: 'posX', label: 'Position x (m, from the transom toward the bow)', type: 'number', step: '0.01' },
+  { key: 'posY', label: 'Position y (m, athwartships)', type: 'number', step: '0.01' },
+  { key: 'posZ', label: 'Position z (m, height)', type: 'number', step: '0.01' },
   { key: 'notes', label: 'Notes', type: 'textarea' }
 ]
 
@@ -965,7 +969,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
     setSaving(true)
     setError(null)
     try {
-      await onSaved(buildCablePayload({ ...values, tags: parseTags(tagsText) }), cable ? cable.id : newId())
+      await onSaved(buildCablePayload({ ...values, tags: parseTags(tagsText) }, { defaults: !cable }), cable ? cable.id : newId())
     } catch (err) {
       setError(err.message)
       setSaving(false)
@@ -1011,7 +1015,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
       ${conductors.map((conductor) => html`
         <label class="form-field" key=${conductor}>
           <span>Colour: ${CONDUCTOR_LABELS[conductor]}</span>
-          <input type="text" value=${values.colors[conductor] || ''}
+          <input type="text" value=${values.colors[conductor] ?? (cable ? '' : defaultColorFor(conductor))}
             placeholder=${colorPlaceholder(settings.convention)}
             onInput=${(e) => setColor(conductor, e.target.value)} />
         </label>
@@ -1092,6 +1096,100 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
   `
 }
 
+// Change the same properties on several cables at once. Blank fields leave
+// each cable as it is; tags are added to each cable's own.
+function BulkCableForm ({ cables, deviceNameById, onDone, onCancel }) {
+  const [values, setValues] = useState({ gauge: '', gaugeUnit: '', length: '', lengthUnit: '', cableLabel: '', zoneId: '', clearZone: false })
+  const [tagsText, setTagsText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const set = (key, value) => setValues((v) => ({ ...v, [key]: value }))
+  const addTags = parseTags(tagsText)
+  const anything = Object.keys(buildBulkPayload({ ...values, addTags }, {})).length > 0
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    const failed = []
+    for (const cable of cables) {
+      const payload = buildBulkPayload({ ...values, addTags }, cable)
+      if (Object.keys(payload).length === 0) continue
+      try {
+        await putResource('wiringWireRuns', cable.id, payload)
+      } catch (err) {
+        failed.push(`${cableTitle(cable, deviceNameById)}: ${err.message}`)
+      }
+    }
+    setSaving(false)
+    if (failed.length > 0) setError(`${failed.length} of ${cables.length} cables could not be saved. ${failed.join('; ')}`)
+    else onDone(`Changed ${cables.length} cable${cables.length === 1 ? '' : 's'}.`)
+  }
+
+  return html`
+    <form class="inline-form" onSubmit=${submit}>
+      <strong>Change ${cables.length} selected cable${cables.length === 1 ? '' : 's'}</strong>
+      <p class="meta">Only the fields you fill in are changed. Empty fields leave every cable as it is.</p>
+      <${ErrorBanner} message=${error} />
+      <div class="form-field">
+        <span>Gauge</span>
+        <div class="row-actions">
+          <input type="number" step="any" value=${values.gauge} onInput=${(e) => set('gauge', e.target.value)} />
+          <select value=${values.gaugeUnit} onChange=${(e) => set('gaugeUnit', e.target.value)}>
+            <option value="">(unchanged)</option><option value="AWG">AWG</option><option value="mm2">mm²</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-field">
+        <span>Length</span>
+        <div class="row-actions">
+          <input type="number" step="any" value=${values.length} onInput=${(e) => set('length', e.target.value)} />
+          <select value=${values.lengthUnit} onChange=${(e) => set('lengthUnit', e.target.value)}>
+            <option value="">(unchanged)</option><option value="m">m</option><option value="ft">ft</option>
+          </select>
+        </div>
+      </div>
+      <label class="form-field"><span>Cable label</span>
+        <input type="text" value=${values.cableLabel} onInput=${(e) => set('cableLabel', e.target.value)} />
+      </label>
+      <label class="form-field"><span>Zone</span>
+        <${ZoneField} value=${values.zoneId} onChange=${(v) => { set('zoneId', v); if (v) set('clearZone', false) }} />
+        <small class="hint">Leave empty to keep each cable's zone.</small>
+      </label>
+      <label class="form-field"><span>Clear the zone</span>
+        <input type="checkbox" class="checkbox-input" checked=${values.clearZone}
+          onChange=${(e) => setValues((v) => ({ ...v, clearZone: e.target.checked, zoneId: e.target.checked ? '' : v.zoneId }))} />
+      </label>
+      <label class="form-field"><span>Add tags</span>
+        <input type="text" value=${tagsText} placeholder="e.g. audio: main"
+          onInput=${(e) => setTagsText(e.target.value)} />
+        <small class="hint">Added to each cable's tags; existing tags stay.</small>
+      </label>
+      <div class="form-actions">
+        <button type="submit" disabled=${saving || !anything}>${saving ? 'Saving…' : `Change ${cables.length} cable${cables.length === 1 ? '' : 's'}`}</button>
+        <button type="button" onClick=${onCancel} disabled=${saving}>Cancel</button>
+      </div>
+    </form>
+  `
+}
+
+// Small line icons for row actions (24x24, drawn with the current text colour).
+const ROW_ICONS = {
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  remove: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  purge: '<circle cx="12" cy="12" r="9"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/><line x1="15.5" y1="8.5" x2="8.5" y2="15.5"/>',
+  attachments: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  history: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>'
+}
+
+function IconButton ({ icon, label, onClick, active, disabled }) {
+  return html`
+    <button class=${active ? 'icon-btn active' : 'icon-btn'} title=${label} aria-label=${label}
+      onClick=${onClick} disabled=${disabled}
+      dangerouslySetInnerHTML=${{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ROW_ICONS[icon]}</svg>` }}></button>
+  `
+}
+
 function CablesList () {
   const settings = useSettings()
   const [reloadKey, setReloadKey] = useState(0)
@@ -1102,6 +1200,8 @@ function CablesList () {
   const [attachmentsId, setAttachmentsId] = useState(null)
   const [historyId, setHistoryId] = useState(null)
   const [filter, setFilter] = useState({})
+  const [picked, setPicked] = useState(() => new Set())
+  const [bulk, setBulk] = useState(false)
   const { loading, error, items: cables } = useResourceList('wiringWireRuns', reloadKey)
   const { items: devices } = useResourceList('wiringDevices', devKey)
   const { items: circuits } = useResourceList('wiringCircuits', reloadKey)
@@ -1109,6 +1209,22 @@ function CablesList () {
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
   const conduitNameById = new Map(conduits.map((c) => [c.id, c.name]))
   const visible = cables.filter((c) => matchesFilter(c, filter))
+  const pickedCables = cables.filter((c) => picked.has(c.id))
+  const allVisiblePicked = visible.length > 0 && visible.every((c) => picked.has(c.id))
+  const togglePicked = (id) => setPicked((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const toggleAllVisible = () => setPicked((prev) => {
+    const next = new Set(prev)
+    for (const c of visible) {
+      if (allVisiblePicked) next.delete(c.id)
+      else next.add(c.id)
+    }
+    return next
+  })
 
   const save = async (payload, id) => {
     await putResource('wiringWireRuns', id, payload)
@@ -1119,6 +1235,20 @@ function CablesList () {
       : `Saved. ${mine.map(({ circuit }) => circuitSummaryLine(circuit)).join('; ')}`)
     setForm(null)
     setReloadKey((k) => k + 1)
+  }
+
+  const purgeCable = async (cable) => {
+    const name = cableTitle(cable, deviceNameById)
+    if (!window.confirm(`Delete "${name}" permanently? Its history and attachments are erased too, and this cannot be undone.`)) return
+    try {
+      const res = await fetch(`${ROUTES_BASE}/cables/${cable.id}/purge`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(apiErrorMessage(res.status))
+      setPicked((prev) => { const next = new Set(prev); next.delete(cable.id); return next })
+      setNotice(`Deleted "${name}" permanently.`)
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setNotice(`Could not delete the cable: ${err.message}`)
+    }
   }
 
   const removeCable = async (cable) => {
@@ -1147,6 +1277,21 @@ function CablesList () {
         <button onClick=${() => setShowImport(true)}>Import CSV</button>
       </div>
       ${notice && html`<div class="notice">${notice}</div>`}
+      ${pickedCables.length > 0 && !bulk && html`
+        <div class="list-header">
+          <span>${pickedCables.length} selected</span>
+          <button onClick=${() => { setNotice(null); setForm(null); setBulk(true) }}>Change selected&hellip;</button>
+          <button onClick=${() => setPicked(new Set())}>Clear selection</button>
+        </div>
+      `}
+      ${bulk && pickedCables.length > 0 && html`
+        <${BulkCableForm}
+          cables=${pickedCables}
+          deviceNameById=${deviceNameById}
+          onDone=${(msg) => { setBulk(false); setPicked(new Set()); setNotice(msg); setReloadKey((k) => k + 1) }}
+          onCancel=${() => setBulk(false)}
+        />
+      `}
       ${form && html`
         <${CableForm}
           key=${`${settings.defaultGaugeUnit}/${settings.defaultLengthUnit}/${form === 'create' ? 'new' : form.id}`}
@@ -1166,13 +1311,14 @@ function CablesList () {
       ${visible.length > 0 && html`
         <table>
           <thead>
-            <tr><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Conduits</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Status</th><th></th></tr>
+            <tr><th><input type="checkbox" class="checkbox-input" title="Select all shown" checked=${allVisiblePicked} onChange=${toggleAllVisible} /></th><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Conduits</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
             ${visible.flatMap((cable) => {
               const here = circuitsOfCable(cable.id, circuits)
               const rows = [html`
                 <tr key=${cable.id}>
+                  <td><input type="checkbox" class="checkbox-input" checked=${picked.has(cable.id)} onChange=${() => togglePicked(cable.id)} /></td>
                   <td>${deviceNameById.get(cable.fromDeviceId) || '?'}</td>
                   <td>${deviceNameById.get(cable.toDeviceId) || '?'}</td>
                   <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}</td>
@@ -1184,22 +1330,22 @@ function CablesList () {
                   <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '-'}</td>
                   <td><${StatusBadge} status=${cable.status} /></td>
                   <td class="row-actions">
-                    <button onClick=${() => { setNotice(null); setForm(cable) }}>Edit</button>
-                    ${cable.status !== 'removed' && html`<button onClick=${() => removeCable(cable)}>Remove</button>`}
-                    <button onClick=${() => setAttachmentsId(attachmentsId === cable.id ? null : cable.id)}>
-                      ${attachmentsId === cable.id ? 'Hide attachments' : 'Attachments'}
-                    </button>
-                    <button onClick=${() => setHistoryId(historyId === cable.id ? null : cable.id)}>
-                      ${historyId === cable.id ? 'Hide history' : 'History'}
-                    </button>
+                    <${IconButton} icon="edit" label="Edit" onClick=${() => { setNotice(null); setForm(cable) }} />
+                    ${cable.status !== 'removed'
+                      ? html`<${IconButton} icon="remove" label="Remove" onClick=${() => removeCable(cable)} />`
+                      : html`<${IconButton} icon="purge" label="Delete permanently" onClick=${() => purgeCable(cable)} />`}
+                    <${IconButton} icon="attachments" label=${attachmentsId === cable.id ? 'Hide attachments' : 'Attachments'}
+                      active=${attachmentsId === cable.id} onClick=${() => setAttachmentsId(attachmentsId === cable.id ? null : cable.id)} />
+                    <${IconButton} icon="history" label=${historyId === cable.id ? 'Hide history' : 'History'}
+                      active=${historyId === cable.id} onClick=${() => setHistoryId(historyId === cable.id ? null : cable.id)} />
                   </td>
                 </tr>
               `]
               if (attachmentsId === cable.id) {
-                rows.push(html`<tr key="${cable.id}-attachments"><td colspan="11"><${AttachmentList} ownerType="wireRun" ownerId=${cable.id} /></td></tr>`)
+                rows.push(html`<tr key="${cable.id}-attachments"><td colspan="12"><${AttachmentList} ownerType="wireRun" ownerId=${cable.id} /></td></tr>`)
               }
               if (historyId === cable.id) {
-                rows.push(html`<tr key="${cable.id}-history"><td colspan="11"><${ChangeLog} kind="wireRun" id=${cable.id} /></td></tr>`)
+                rows.push(html`<tr key="${cable.id}-history"><td colspan="12"><${ChangeLog} kind="wireRun" id=${cable.id} /></td></tr>`)
               }
               return rows
             })}

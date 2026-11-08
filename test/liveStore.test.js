@@ -253,3 +253,17 @@ test('circuit resources can have a meter set from outside', async () => {
   assert.equal(got.meterUnit, 'A')
   store.close()
 })
+
+test('a shunt with a SignalK path is metered from it, and an explicit meter path wins', () => {
+  const store = freshStore()
+  const bat = store.create('device', { name: 'House battery', role: 'storage', nominal_voltage: 12 })
+  const shunt = store.create('device', { name: 'House shunt', type: 'Shunt', role: 'distribution', signalk_path: 'electrical.batteries.house.current' })
+  const lamp = store.create('device', { name: 'Cabin lamp' })
+  store.create('wireRun', { from_device_id: bat.id, to_device_id: shunt.id })
+  store.create('wireRun', { from_device_id: shunt.id, to_device_id: lamp.id })
+  const meterPath = () => store.deriveSwitching().consumers[lamp.id].meters[0].path
+  assert.equal(meterPath(), 'electrical.batteries.house.current')
+  store.update('device', shunt.id, { meter_path: 'explicit.path' })
+  assert.equal(meterPath(), 'explicit.path')
+  store.close()
+})

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   axesForView, calibrationFromClicks, pxToMeters, metersToPx, applyClick,
-  waypointFromClick, routeLength, resolveRouteStart, planShowsPoint, parseSvgSize,
+  waypointFromClick, roundCm, routeLength, resolveRouteStart, planShowsPoint, parseSvgSize,
   conduitRoutePoints, unroutedCables, conduitMembers, effectiveCableRoute
 } from '../public/floorplan.js'
 
@@ -323,4 +323,9 @@ test('effective route: unset heights make the length a lower bound', () => {
   const result = effectiveCableRoute({ id: 'w', conduitIds: ['k1'] }, null, new Map(), conduitMap(k1))
   near(result.length, 5)
   assert.equal(result.complete, false)
+})
+
+test('clicks are rounded to the centimeter', () => {
+  assert.equal(roundCm(3.14159), 3.14)
+  assert.deepEqual(applyClick(null, 'top', 4.123456, 1.987654), { x: 4.12, y: 1.99, z: null })
 })

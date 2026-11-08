@@ -119,6 +119,10 @@ A wire run or device is either:
   again if they imply it once more.
 - Editing an active record's attributes (gauge, color, routing, etc.)
   appends a **change log entry** rather than silently overwriting history.
+- `removed → gone`: a removed cable can be deleted permanently on a second,
+  confirmed step. This erases the cable with its conductors, conduit
+  assignments, schematic bends, attachments and change log. Nothing else is
+  deleted this way.
 - There is no `removed → active` transition; if something is reinstalled,
   it's a new record (possibly referencing the old one as prior art).
 

@@ -20,6 +20,20 @@ export const CONDUCTOR_LABELS = {
   earth: 'Earth'
 }
 
+// The colour a new cable's conductors start with. A starting value only: the
+// field can be changed or emptied.
+export const DEFAULT_CONDUCTOR_COLORS = {
+  positive: 'red',
+  negative: 'black',
+  line: 'brown',
+  neutral: 'blue',
+  earth: 'green/yellow'
+}
+
+export function defaultColorFor (conductor) {
+  return DEFAULT_CONDUCTOR_COLORS[conductor] || ''
+}
+
 export function kindByValue (value) {
   return CABLE_KINDS.find((k) => k.value === value) || CABLE_KINDS[0]
 }
@@ -79,7 +93,9 @@ const blank = (v) => v === '' || v === null || v === undefined
 //             existingConductors (kept as they are for a 'custom' kind),
 //             gauge, gaugeUnit, length, lengthUnit, cableLabel, zoneId, tags,
 //             notes }
-export function buildCablePayload (values) {
+// With `defaults` (a new cable), a colour the user never touched (undefined,
+// as opposed to emptied on purpose) gets the conductor's default colour.
+export function buildCablePayload (values, { defaults = false } = {}) {
   const out = {
     fromDeviceId: values.fromDeviceId,
     toDeviceId: values.toDeviceId
@@ -98,9 +114,11 @@ export function buildCablePayload (values) {
   const both = kind.conductors.includes('negative') && kind.conductors.includes('positive')
   out.conductors = kind.conductors.map((conductor) => {
     const terminals = (values.terminals && values.terminals[conductor]) || {}
+    const given = values.colors ? values.colors[conductor] : undefined
+    const color = given === undefined && defaults ? defaultColorFor(conductor) : given
     const c = {
       conductor,
-      color: blank(values.colors && values.colors[conductor]) ? null : values.colors[conductor].trim(),
+      color: blank(color) || !String(color).trim() ? null : String(color).trim(),
       fromTerminal: blank(terminals.from) ? null : terminals.from,
       toTerminal: blank(terminals.to) ? null : terminals.to
     }
@@ -166,4 +184,26 @@ export function circuitsOfCable (cableId, circuits) {
     .filter((c) => c.status !== 'removed' && c.derived &&
       (c.derived.cableIds.includes(cableId) || c.derived.returnCableIds.includes(cableId)))
     .map((c) => ({ circuit: c, via: c.derived.cableIds.includes(cableId) ? 'feed' : 'return' }))
+}
+
+// Bulk edit: the partial write for one cable from the bulk form. Blank
+// fields leave the cable alone; only what the user filled in is sent. Tags
+// are added to the cable's own tags, never replacing them.
+export function buildBulkPayload (values, cable) {
+  const out = {}
+  if (!blank(values.gauge)) out.gauge = Number(values.gauge)
+  if (!blank(values.gaugeUnit)) out.gaugeUnit = values.gaugeUnit
+  if (!blank(values.length)) out.length = Number(values.length)
+  if (!blank(values.lengthUnit)) out.lengthUnit = values.lengthUnit
+  if (!blank(values.cableLabel) && values.cableLabel.trim()) out.cableLabel = values.cableLabel.trim()
+  if (values.clearZone) out.zoneId = null
+  else if (!blank(values.zoneId)) out.zoneId = values.zoneId
+  const add = (values.addTags || []).filter((t) => !blank(t))
+  if (add.length > 0) {
+    const have = cable.tags || []
+    const merged = [...have]
+    for (const t of add) if (!merged.some((x) => x.toLowerCase() === t.toLowerCase())) merged.push(t)
+    if (merged.length !== have.length) out.tags = merged
+  }
+  return out
 }

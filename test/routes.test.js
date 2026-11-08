@@ -585,3 +585,37 @@ test('GET /changelog accepts the conduit kind and attachments can belong to a co
   assert.equal(up.statusCode, 201)
   cleanup()
 })
+
+test('DELETE /cables/:id/purge refuses a live cable and erases a removed one with its files, history and links', () => {
+  const { store, router, dataDir, cleanup } = setup()
+  const a = store.create('device', { name: 'Battery', role: 'storage' })
+  const b = store.create('device', { name: 'Lamp' })
+  const cable = store.create('wireRun', { from_device_id: a.id, to_device_id: b.id })
+  const keep = store.create('wireRun', { from_device_id: a.id, to_device_id: b.id })
+  const attachment = store.createAttachment({
+    owner_type: 'wireRun', owner_id: cable.id, filename: 'c.jpg', mime_type: 'image/jpeg', uploaded_at: new Date().toISOString()
+  })
+  fs.mkdirSync(path.join(dataDir, 'attachments'), { recursive: true })
+  fs.writeFileSync(path.join(dataDir, 'attachments', `${attachment.id}.jpg`), 'x')
+
+  let res = new FakeResponse()
+  router.invoke('delete', '/cables/:id/purge', new FakeRequest({ params: { id: cable.id } }), res)
+  assert.equal(res.statusCode, 409)
+  assert.ok(store.get('wireRun', cable.id))
+
+  store.remove('wireRun', cable.id)
+  res = new FakeResponse()
+  router.invoke('delete', '/cables/:id/purge', new FakeRequest({ params: { id: cable.id } }), res)
+  assert.equal(res.statusCode, 204)
+  assert.equal(store.get('wireRun', cable.id), null)
+  assert.equal(store.getAttachment(attachment.id), null)
+  assert.equal(fs.existsSync(path.join(dataDir, 'attachments', `${attachment.id}.jpg`)), false)
+  assert.equal(store.changeLog('wireRun', cable.id).length, 0)
+  assert.equal(store.db.prepare('SELECT COUNT(*) n FROM wire_run_conductors WHERE wire_run_id = ?').get(cable.id).n, 0)
+  assert.ok(store.get('wireRun', keep.id))
+
+  res = new FakeResponse()
+  router.invoke('delete', '/cables/:id/purge', new FakeRequest({ params: { id: cable.id } }), res)
+  assert.equal(res.statusCode, 404)
+  cleanup()
+})

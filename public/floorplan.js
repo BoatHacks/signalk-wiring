@@ -90,9 +90,14 @@ function pointOf (p) {
 
 // A click in a view sets that view's two axes and keeps the third, so a
 // device moved in the side view also moves in the top view.
+// Positions are kept to the centimeter; finer values are noise.
+export function roundCm (value) {
+  return Math.round(value * 100) / 100
+}
+
 export function applyClick (position, view, a, b) {
   const [first, second] = axesForView(view)
-  return { ...pointOf(position), [first]: a, [second]: b }
+  return { ...pointOf(position), [first]: roundCm(a), [second]: roundCm(b) }
 }
 
 // A new waypoint takes the axis its view does not show from the previous

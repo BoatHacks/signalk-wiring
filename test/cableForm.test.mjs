@@ -106,3 +106,32 @@ test('cable title and the circuits a cable is part of', () => {
   ]
   assert.deepEqual(circuitsOfCable('w1', circuits).map((x) => [x.circuit.id, x.via]), [['c1', 'feed'], ['c2', 'return']])
 })
+
+import { buildBulkPayload } from '../public/cableForm.js'
+
+test('bulk payload sends only filled-in fields and adds tags without duplicates', () => {
+  assert.deepEqual(buildBulkPayload({ gauge: '', cableLabel: '  ' }, { tags: [] }), {})
+  assert.deepEqual(
+    buildBulkPayload({ gauge: '4', gaugeUnit: 'mm2', addTags: ['audio', 'Main'] }, { tags: ['main'] }),
+    { gauge: 4, gaugeUnit: 'mm2', tags: ['main', 'audio'] }
+  )
+  assert.deepEqual(buildBulkPayload({ zoneId: 'z1', clearZone: true }, {}), { zoneId: null })
+  assert.deepEqual(buildBulkPayload({ zoneId: 'z1' }, {}), { zoneId: 'z1' })
+})
+
+import { defaultColorFor } from '../public/cableForm.js'
+
+test('new cables start with red, black and brown/blue/green-yellow, and edits do not', () => {
+  assert.equal(defaultColorFor('positive'), 'red')
+  assert.equal(defaultColorFor('negative'), 'black')
+  const base = { fromDeviceId: 'a', toDeviceId: 'b', colors: {}, terminals: {} }
+  const both = buildCablePayload({ ...base, kind: 'both' }, { defaults: true })
+  assert.deepEqual(both.conductors.map((c) => c.color), ['red', 'black'])
+  const ac = buildCablePayload({ ...base, kind: 'ac' }, { defaults: true })
+  assert.deepEqual(ac.conductors.map((c) => c.color), ['brown', 'blue', 'green/yellow'])
+  // Typed or deliberately emptied colours win over the defaults.
+  const own = buildCablePayload({ ...base, kind: 'both', colors: { positive: 'orange', negative: '' } }, { defaults: true })
+  assert.deepEqual(own.conductors.map((c) => c.color), ['orange', null])
+  // Without the flag (editing) nothing is filled in.
+  assert.deepEqual(buildCablePayload({ ...base, kind: 'both' }).conductors.map((c) => c.color), [null, null])
+})

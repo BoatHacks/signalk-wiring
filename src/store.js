@@ -742,7 +742,9 @@ class Store {
       switchPath: d.switch_path,
       confirmSwitching: Boolean(d.confirm_switching),
       neverRemote: Boolean(d.never_remote),
-      meterPath: d.meter_path,
+      // A shunt's own SignalK path is where its readings come from, unless a
+      // separate meter path is set.
+      meterPath: d.meter_path || (/^\s*shunt\s*$/i.test(d.type || '') ? d.signalk_path : null) || null,
       meterUnit: d.meter_unit
     }))
     const cables = this.list('wireRun').map((w) => ({
@@ -1229,6 +1231,27 @@ class Store {
   // Marks a record removed rather than deleting the row (SPEC.md §3.1/§3.2).
   remove (kind, id) {
     return this.update(kind, id, { status: REMOVED_STATUS })
+  }
+
+  // Erases a cable for good, only once it has been removed (so it takes two
+  // deliberate steps). Its conductors, conduit assignments, schematic bends,
+  // attachments (rows only, the caller deletes the files) and change log go
+  // with it. Returns the attachment rows so their files can be deleted.
+  purgeCable (id) {
+    const cable = this.get('wireRun', id)
+    if (!cable) throw new Error(`wireRun not found: ${id}`)
+    if (cable.status !== REMOVED_STATUS) throw new Error('only a removed cable can be deleted permanently')
+    const attachments = this.listAttachmentsByOwner('wireRun', id)
+    this.db.transaction(() => {
+      for (const table of ['wire_run_conductors', 'wire_run_conduits', 'schematic_wires']) {
+        this.db.prepare(`DELETE FROM ${table} WHERE wire_run_id = ?`).run(id)
+      }
+      this.db.prepare("DELETE FROM attachments WHERE owner_type = 'wireRun' AND owner_id = ?").run(id)
+      this.db.prepare("DELETE FROM change_log WHERE record_type = 'wireRun' AND record_id = ?").run(id)
+      this.db.prepare('DELETE FROM wire_runs WHERE id = ?').run(id)
+    })()
+    this._afterWrite('wireRun')
+    return attachments
   }
 
   changeLog (kind, id) {

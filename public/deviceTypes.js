@@ -9,7 +9,7 @@ export const TYPE_SUGGESTIONS = {
   ],
   source: [
     'Solar panel', 'Shore power inlet', 'Generator', 'Alternator', 'Wind generator',
-    'Hydro generator', 'Fuel cell', 'Solar charge controller'
+    'Hydro generator', 'Fuel cell'
   ],
   storage: [
     'Battery', 'Battery bank', 'Lead-acid battery', 'AGM battery', 'LiFePO4 battery',
@@ -20,7 +20,7 @@ export const TYPE_SUGGESTIONS = {
     'Battery switch', 'Relay', 'Shunt'
   ],
   converter: [
-    'Inverter', 'Battery charger', 'Inverter/charger', 'DC-DC converter', 'Isolation transformer'
+    'Inverter', 'Battery charger', 'Inverter/charger', 'DC-DC converter', 'MPPT charger', 'Isolation transformer'
   ]
 }
 

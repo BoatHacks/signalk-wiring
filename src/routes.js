@@ -208,6 +208,18 @@ function registerRoutes (router, getStore, dataDir) {
     res.status(204).end()
   })
 
+  // Permanent delete of a cable that is already marked removed. Admin only,
+  // like every write route here.
+  router.delete('/cables/:id/purge', requireStore, (req, res) => {
+    try {
+      const attachments = req.wiringStore.purgeCable(req.params.id)
+      for (const attachment of attachments) fs.rmSync(storedFilePath(dataDir, attachment), { force: true })
+      res.status(204).end()
+    } catch (err) {
+      res.status(/not found/.test(err.message) ? 404 : 409).json({ error: err.message })
+    }
+  })
+
   router.post('/plans/:id/image', requireStore, (req, res) => {
     const plan = req.wiringStore.get('plan', req.params.id)
     if (!plan) {
