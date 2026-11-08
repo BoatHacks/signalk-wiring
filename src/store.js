@@ -550,7 +550,7 @@ class Store {
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
     if (kind === 'device') row = this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(row)), true))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
-    if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null) }
+    if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null); row = this._checkGauge(row, null) }
     if (kind === 'schematic') row.name = this._checkSchematicName(row.name)
     const lists = kind === 'schematic' ? this._checkSchematicLists(row) : null
     const children = this._childrenOf(kind)
@@ -749,6 +749,32 @@ class Store {
     return list
   }
 
+  // A gauge is a real number. Zero and below only exist in AWG, where 0 to -3
+  // stand for 1/0 to 4/0, so a size of 0 or less needs the AWG unit and a
+  // whole number from 0 to -3. `existing` supplies the unit a patch leaves
+  // alone, and the gauge a patch of the unit alone leaves in place.
+  _checkGauge (fields, existing) {
+    if (!('gauge' in fields) && !('gauge_unit' in fields)) return fields
+    let out = fields
+    if ('gauge' in out) {
+      const v = out.gauge
+      if (v === null || v === undefined || v === '') out = { ...out, gauge: null }
+      else {
+        const n = typeof v === 'string' ? Number(v) : v
+        if (typeof n !== 'number' || !Number.isFinite(n)) throw new Error('gauge must be a number')
+        out = { ...out, gauge: n }
+      }
+    }
+    const merged = { ...(existing || {}), ...out }
+    const gauge = merged.gauge
+    if (gauge !== null && gauge !== undefined && gauge <= 0) {
+      const unit = String(merged.gauge_unit || '').trim().toLowerCase()
+      if (unit !== 'awg') throw new Error('a gauge of 0 or less (1/0 to 4/0) only exists in AWG')
+      if (!Number.isInteger(gauge) || gauge < -3) throw new Error('an AWG gauge of 0 or less must be 0, -1, -2 or -3 (1/0 to 4/0)')
+    }
+    return out
+  }
+
   _checkWireRunEnds (fields) {
     for (const key of ['from_device_id', 'to_device_id']) {
       const id = fields[key]
@@ -896,7 +922,10 @@ class Store {
     if (kind === 'device') patch = this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(patch)), false))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
-    if (kind === 'wireRun') { this._checkWireRunEnds(patch); patch = this._checkLink(patch, existing) }
+    if (kind === 'wireRun') {
+      this._checkWireRunEnds(patch)
+      patch = this._checkGauge(this._checkLink(patch, existing), existing)
+    }
 
     const { table, columns } = TABLES[kind]
     const children = this._childrenOf(kind)

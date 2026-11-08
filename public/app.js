@@ -18,6 +18,8 @@ import { LoadSummary } from './loadSummary.js'
 import { FloorplanTab } from './floorplanView.js'
 import { SchematicsTab } from './schematicView.js'
 import { BatteriesTab } from './batteriesView.js'
+import { GaugeField } from './gaugeField.js'
+import { formatGauge } from './gauge.js'
 import { hashForState, parseHash } from './router.js'
 import { UndoProvider, useUndo } from './undoBar.js'
 import { deviceBox, endTerminals } from './schematic.js'
@@ -1308,10 +1310,8 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
       <div class="form-field">
         <span>Gauge</span>
         <div class="row-actions">
-          <input type="number" step="any" value=${values.gauge} onInput=${(e) => set('gauge', e.target.value)} />
-          <select value=${values.gaugeUnit} onChange=${(e) => set('gaugeUnit', e.target.value)}>
-            <option value="">-</option><option value="AWG">AWG</option><option value="mm2">mm²</option>
-          </select>
+          <${GaugeField} value=${values.gauge} unit=${values.gaugeUnit}
+            onValue=${(v) => set('gauge', v)} onUnit=${(u) => set('gaugeUnit', u)} />
         </div>
       </div>
       <div class="form-field">
@@ -1395,10 +1395,8 @@ function BulkCableForm ({ cables, deviceNameById, onDone, onCancel }) {
       <div class="form-field">
         <span>Gauge</span>
         <div class="row-actions">
-          <input type="number" step="any" value=${values.gauge} onInput=${(e) => set('gauge', e.target.value)} />
-          <select value=${values.gaugeUnit} onChange=${(e) => set('gaugeUnit', e.target.value)}>
-            <option value="">(unchanged)</option><option value="AWG">AWG</option><option value="mm2">mm²</option>
-          </select>
+          <${GaugeField} value=${values.gauge} unit=${values.gaugeUnit} noneLabel="(unchanged)"
+            onValue=${(v) => set('gauge', v)} onUnit=${(u) => set('gaugeUnit', u)} />
         </div>
       </div>
       <div class="form-field">
@@ -1604,7 +1602,7 @@ function CablesList () {
                   <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}${cable.link ? html` <span class="badge link-badge" data-testid="link-badge">${cable.link}</span>` : ''}</td>
                   <td>${cable.cableLabel || '-'}</td>
                   <td>${(cable.conduitIds || []).map((id) => conduitNameById.get(id) || '?').join(' > ') || '-'}</td>
-                  <td>${cable.gauge ? `${cable.gauge} ${cable.gaugeUnit || ''}` : '-'}</td>
+                  <td>${formatGauge(cable.gauge, cable.gaugeUnit)}</td>
                   <td>${cable.length ? `${cable.length} ${cable.lengthUnit || ''}` : '-'}</td>
                   <td>${cable.zone || '-'}${(cable.tags || []).length ? html`<div class="meta">${cable.tags.join(', ')}</div>` : ''}</td>
                   <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '-'}</td>
@@ -1917,7 +1915,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
                 <td><${DeviceLink} id=${c.toDeviceId} names=${deviceNameById} /></td>
                 <td>${c.isReturn ? 'Negative return' : 'Feed'}</td>
                 <td><${RouteLink} tab="cables">${c.cableLabel || 'Cable'}<//></td>
-                <td>${c.gauge ? `${c.gauge} ${c.gaugeUnit || ''}` : '-'}</td>
+                <td>${formatGauge(c.gauge, c.gaugeUnit)}</td>
                 <td>${c.length ? `${c.length} ${c.lengthUnit || ''}` : '-'}</td>
               </tr>
             `)}

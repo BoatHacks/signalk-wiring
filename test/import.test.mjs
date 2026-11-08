@@ -342,3 +342,21 @@ test('importToStore reports a cable the store refuses as an error row and carrie
     globalThis.fetch = realFetch
   }
 })
+
+test('gauges written as 1/0 to 4/0 are read as the numbers 0 to -3', () => {
+  assert.deepEqual(parseCombinedGauge('1/0 AWG'), { gauge: 0, unit: 'AWG' })
+  assert.deepEqual(parseCombinedGauge('4/0 awg'), { gauge: -3, unit: 'AWG' })
+  assert.deepEqual(parseCombinedGauge('000 AWG'), { gauge: -2, unit: 'AWG' })
+  assert.equal(parseCombinedGauge('1/0 mm²'), null)
+})
+
+test('a plain gauge column accepts 1/0 and sets AWG when no unit column is mapped', () => {
+  const headers = ['Load', 'Fuse', 'Gauge']
+  const rows = [{ Load: 'Windlass', Fuse: '1', Gauge: '1/0' }, { Load: 'Lamp', Fuse: '2', Gauge: '2,5' }]
+  const grouped = groupImportRows(rows, headers, { Load: 'deviceName', Fuse: 'circuitGroupKey', Gauge: 'wireGauge' })
+  assert.equal(grouped.wireRuns.length, 2)
+  assert.equal(grouped.wireRuns[0].gauge, 0)
+  assert.equal(grouped.wireRuns[0].gaugeUnit, 'AWG')
+  assert.equal(grouped.wireRuns[1].gauge, 2.5)
+  assert.equal(grouped.wireRuns[1].gaugeUnit, null)
+})

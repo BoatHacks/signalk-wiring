@@ -1,4 +1,5 @@
 import { html, useState } from './vendor/preact-standalone.module.js'
+import { GaugeField } from './gaugeField.js'
 import { CABLE_KINDS, LINK_CHOICES, buildCablePayload } from './cableForm.js'
 import { mismatchText } from './current.js'
 import { popoverKinds, quickProblem, withKind, withLink } from './quickCable.js'
@@ -56,13 +57,9 @@ export function CablePopover ({ start, lengthNote, style, onCreate, onMore, onCa
         `)}
       </div>`}
       <div class="cable-popover-row">
-        <label>Gauge
-          <input type="number" step="any" class="short" value=${values.gauge}
-            onInput=${(e) => set('gauge', e.target.value)} />
-        </label>
-        <select value=${values.gaugeUnit} onChange=${(e) => set('gaugeUnit', e.target.value)}>
-          <option value="">-</option><option value="AWG">AWG</option><option value="mm2">mm²</option>
-        </select>
+        <span>Gauge</span>
+        <${GaugeField} value=${values.gauge} unit=${values.gaugeUnit}
+          onValue=${(v) => set('gauge', v)} onUnit=${(u) => set('gaugeUnit', u)} />
       </div>
       ${lengthNote
         ? html`<div class="meta">${lengthNote}</div>`

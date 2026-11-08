@@ -1232,3 +1232,28 @@ test('schematics: removing a device from a page does not touch the device or its
   assert.equal(store.get('wireRun', cable.id).status, 'active')
   store.close()
 })
+
+test('gauge: 1/0 to 4/0 are stored as 0 to -3 and only for AWG', () => {
+  const store = freshStore()
+  const a = store.create('device', { name: 'A' })
+  const b = store.create('device', { name: 'B' })
+  const base = { from_device_id: a.id, to_device_id: b.id, conductors: [{ conductor: 'positive' }] }
+  const big = store.create('wireRun', { ...base, gauge: 0, gauge_unit: 'AWG' })
+  assert.equal(big.gauge, 0)
+  assert.equal(store.update('wireRun', big.id, { gauge: -3 }).gauge, -3)
+  assert.equal(store.update('wireRun', big.id, { gauge: '-2' }).gauge, -2)
+  assert.throws(() => store.update('wireRun', big.id, { gauge: -4 }), /0, -1, -2 or -3/)
+  assert.throws(() => store.update('wireRun', big.id, { gauge: -1.5 }), /0, -1, -2 or -3/)
+  // the unit of the stored cable is used when a patch leaves it alone
+  assert.throws(() => store.update('wireRun', big.id, { gauge_unit: 'mm2' }), /only exists in AWG/)
+  assert.throws(() => store.create('wireRun', { ...base, gauge: 0, gauge_unit: 'mm2' }), /only exists in AWG/)
+  assert.throws(() => store.create('wireRun', { ...base, gauge: -1 }), /only exists in AWG/)
+  // non-numbers are rejected, positive values and clearing still work
+  assert.throws(() => store.create('wireRun', { ...base, gauge: 'thick' }), /gauge must be a number/)
+  assert.throws(() => store.update('wireRun', big.id, { gauge: NaN }), /gauge must be a number/)
+  const ok = store.create('wireRun', { ...base, gauge: 2.5, gauge_unit: 'mm2' })
+  assert.equal(ok.gauge, 2.5)
+  assert.equal(store.update('wireRun', ok.id, { gauge: null }).gauge, null)
+  assert.equal(store.update('wireRun', ok.id, { gauge: '' }).gauge, null)
+  store.close()
+})

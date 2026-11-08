@@ -1,5 +1,6 @@
 import { html, useState } from './vendor/preact-standalone.module.js'
 import { newId } from './ids.js'
+import { parseGauge } from './gauge.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 
@@ -110,11 +111,11 @@ export function parseGermanNumber (value) {
 // or "14 AWG" — the shape of the real source CSV's Querschnitt column.
 export function parseCombinedGauge (value) {
   if (!value) return null
-  const match = String(value).match(/^\s*([\d.,]+)\s*(mm²|mm2|awg)/i)
+  const match = String(value).match(/^\s*(\d\s*\/\s*0|[\d.,]+)\s*(mm²|mm2|awg)/i)
   if (!match) return null
-  const gauge = parseGermanNumber(match[1])
-  if (gauge == null) return null
   const unit = match[2].toLowerCase() === 'awg' ? 'AWG' : 'mm2'
+  const gauge = parseGauge(match[1], unit)
+  if (gauge == null) return null
   return { gauge, unit }
 }
 
@@ -145,7 +146,7 @@ export const MAPPING_TARGETS = [
   { value: 'wireFromDevice', label: 'Cable: from device (supply side)' },
   { value: 'wireToDevice', label: 'Cable: to device (load side)' },
   { value: 'wireConductor', label: 'Cable: conductor (positive, negative, line, neutral, earth)' },
-  { value: 'wireGauge', label: 'Cable: gauge (number only)' },
+  { value: 'wireGauge', label: 'Cable: gauge (number, or 1/0 to 4/0)' },
   { value: 'wireGaugeUnit', label: 'Cable: gauge unit' },
   { value: 'wireGaugeCombined', label: 'Cable: gauge (combined, e.g. "2,5 mm²")' },
   { value: 'wireColor', label: 'Cable: color' },
@@ -306,8 +307,11 @@ export function groupImportRows (rows, headers, mapping, existingConduits = [], 
         gaugeUnit = parsed.unit
       }
     } else {
-      gauge = parseGermanNumber(cell(row, byTarget.wireGauge))
       gaugeUnit = cell(row, byTarget.wireGaugeUnit) || null
+      const gaugeText = cell(row, byTarget.wireGauge)
+      gauge = parseGauge(gaugeText, gaugeUnit)
+      // "1/0" and the other sizes above 1 AWG only exist in AWG.
+      if (gauge != null && gauge <= 0 && !gaugeUnit) gaugeUnit = 'AWG'
     }
 
     const tempId = `cable_${wireRuns.length}`
