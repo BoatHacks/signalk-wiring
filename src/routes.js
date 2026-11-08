@@ -3,6 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 const { rowToResource } = require('./resources')
+const { version: PLUGIN_VERSION } = require('../package.json')
 
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
   'image/jpeg',
@@ -269,6 +270,12 @@ function registerRoutes (router, getStore, dataDir) {
   // where the server offers it (signalk-server >= 2.36); older servers keep
   // the admin-only default, which is safe, just stricter.
   const readOnlyRoutes = typeof router.access === 'function' ? router.access('readonly') : router
+  // The plugin version, so an open page can tell it is out of date after an
+  // update. It needs no database, so it answers even when the plugin is stopped.
+  readOnlyRoutes.get('/version', (req, res) => {
+    res.json({ version: PLUGIN_VERSION })
+  })
+
   readOnlyRoutes.get('/plans/:id/image', requireStore, (req, res) => {
     const plan = req.wiringStore.get('plan', req.params.id)
     const filePath = plan && plan.filename ? planImagePath(dataDir, plan) : null

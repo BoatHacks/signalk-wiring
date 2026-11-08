@@ -21,6 +21,7 @@ import { BatteriesTab } from './batteriesView.js'
 import { GaugeField } from './gaugeField.js'
 import { formatGauge } from './gauge.js'
 import { toast } from './canvasRemoval.js'
+import { UpdateHint } from './updateHint.js'
 import { cablesEndingOn, blockedText, purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import { hashForState, parseHash } from './router.js'
 import { UndoProvider, useUndo } from './undoBar.js'
@@ -2544,6 +2545,7 @@ function AppBody () {
 
   return html`
     <div>
+      <${UpdateHint} />
       <header>
         <h1>Wiring Documentation</h1>
         <${ThemeToggle} theme=${theme} onToggle=${toggleTheme} />

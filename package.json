@@ -9,7 +9,9 @@
     "public"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "prepack": "node scripts/stamp-version.js stamp",
+    "postpack": "node scripts/stamp-version.js restore"
   },
   "keywords": [
     "signalk-node-server-plugin",

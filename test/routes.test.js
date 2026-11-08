@@ -460,6 +460,7 @@ test('the SVG download is registered readonly when the server supports router.ac
   registerRoutes(router, () => store, os.tmpdir())
 
   assert.deepEqual(registered, [
+    { level: 'readonly', method: 'get', routePath: '/version' },
     { level: 'readonly', method: 'get', routePath: '/plans/:id/image' },
     { level: 'readonly', method: 'get', routePath: '/devices/:id/icon' },
     { level: 'readonly', method: 'get', routePath: '/derived' }
@@ -664,5 +665,15 @@ test('DELETE /devices/:id/purge is 409 with the cable names while a cable still 
   router.invoke('delete', '/devices/:id/purge', new FakeRequest({ params: { id: b.id } }), res)
   assert.equal(res.statusCode, 409)
   assert.match(res.body.error, /Delete these cables first: lamp feed/)
+  cleanup()
+})
+
+test('GET /version returns the plugin version, even with the plugin stopped', () => {
+  const { router, disable, cleanup } = setup()
+  disable()
+  const res = new FakeResponse()
+  router.invoke('get', '/version', new FakeRequest(), res)
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body, { version: require('../package.json').version })
   cleanup()
 })

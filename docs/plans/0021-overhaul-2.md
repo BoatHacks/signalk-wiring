@@ -266,7 +266,7 @@ These are open to change in review:
 - [x] Ratings: migration 12, store, resource, device form and page.
 - [x] Permanent deletion: the three purge methods, routes, UI, show removed on
       conduits and schematics.
-- [ ] Version: the version route, the update hint, the pack-time stamping.
+- [x] Version: the version route, the update hint, the pack-time stamping.
 - [x] Wire routing: `wireRouter.js`, bridges, stub lanes, tests on the boat's
       pages.
 - [x] Layout: `schematicLayout.js` with no overlaps (and the Tidy notice) and the
