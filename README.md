@@ -154,6 +154,9 @@ npm install
 npm test
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report issues, plan larger
+changes and send pull requests.
+
 The webapp (`public/`) uses [Preact](https://preactjs.com/) and
 [`htm`](https://github.com/developit/htm) (JSX-like syntax without a
 build step) plus [`dagre`](https://github.com/dagrejs/dagre) for diagram
