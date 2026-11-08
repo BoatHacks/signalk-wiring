@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-08
+
 ### Added
 
 - Ports. Terminals that name a port are drawn grouped as a block per port, with
