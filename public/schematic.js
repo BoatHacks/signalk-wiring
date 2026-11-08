@@ -607,8 +607,8 @@ export function circuitHighlight (circuit) {
 
 // autoLayout, resolveOverlaps and the other layout functions live in
 // schematicLayout.js and are re-exported here.
-export { autoLayout, resolveOverlaps, findOverlaps, rankGap, GAP_MIN, GAP_MAX, OVERLAP_MARGIN } from './schematicLayout.js'
-export { routePage, routeSchematicPage, conduitBands, pathToDWithBridges, USE_NEW_ROUTER } from './wireRouter.js'
+export { autoLayout, resolveOverlaps, findOverlaps, freeTabSpot, rankGap, GAP_MIN, GAP_MAX, OVERLAP_MARGIN } from './schematicLayout.js'
+export { routePage, routeSchematicPage, stubAt, conduitBands, pathToDWithBridges, USE_NEW_ROUTER } from './wireRouter.js'
 
 // A viewBox that frames every box with a margin, or a default when empty.
 export function fitView (boxes, margin = 40) {

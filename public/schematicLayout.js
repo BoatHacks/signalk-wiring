@@ -2,7 +2,7 @@
 // that follow the cable lengths, and keeping devices from overlapping.
 // Pure, no DOM. Boxes are { id, x, y, w, h }.
 
-import { deviceBox } from './schematic.js'
+import { deviceBox, OFFPAGE_TAB_W, OFFPAGE_TAB_H } from './schematic.js'
 
 export const OVERLAP_MARGIN = 24
 export const GAP_MIN = 80
@@ -126,4 +126,15 @@ export function resolveOverlaps (boxes, stubs = [], margin = OVERLAP_MARGIN, mov
     placed.push(cur)
   }
   return moved
+}
+
+// The nearest spot for a tab the user dropped (top left corner `at`, size of
+// the off-page tab) that is at least `margin` (room for the line to leave
+// the tab and for the wires around it) from every device box and every
+// other tab; `at` itself when it is free. Pure.
+export function freeTabSpot (at, boxes, otherTabs = [], margin = 32) {
+  const tab = { id: '__tab__', x: at.x, y: at.y, w: OFFPAGE_TAB_W, h: OFFPAGE_TAB_H }
+  const fixed = [...boxes.map((b) => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h })), ...otherTabs.map((t, i) => ({ id: '__t' + i, x: t.x, y: t.y, w: t.w, h: t.h }))]
+  const moved = resolveOverlaps([...fixed, tab], [], margin, ['__tab__'])
+  return moved.__tab__ ? { x: moved.__tab__.x, y: moved.__tab__.y } : { x: at.x, y: at.y }
 }

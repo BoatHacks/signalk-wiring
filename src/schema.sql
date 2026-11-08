@@ -192,8 +192,20 @@ CREATE TABLE IF NOT EXISTS schematic_wires (
   points TEXT
 );
 
+-- Plan 0022: where the user dragged an off-page "to" tab on a page. A row per
+-- cable with one end on the page; x and y are the tab's top left corner.
+CREATE TABLE IF NOT EXISTS schematic_stubs (
+  id TEXT PRIMARY KEY,
+  schematic_id TEXT NOT NULL REFERENCES schematics(id),
+  position INTEGER NOT NULL,
+  wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_schematic_devices_schematic ON schematic_devices (schematic_id);
 CREATE INDEX IF NOT EXISTS idx_schematic_wires_schematic ON schematic_wires (schematic_id);
+CREATE INDEX IF NOT EXISTS idx_schematic_stubs_schematic ON schematic_stubs (schematic_id);
 
 -- Plan 0017: load calibration runs. `device_id` is the device the result is
 -- about: a consumer, or the switch for a group result, in which case

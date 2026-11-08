@@ -649,6 +649,16 @@ function routeAll (grid, items, committed, legs, rounds = 4) {
   return res
 }
 
+// A cheap tab and line for a stub the user is dragging: the tab at `pos`, a
+// straight line from the device to the side of the tab that faces it. The full
+// routing follows the drop.
+export function stubAt (stub, pos) {
+  const tab = tabAt(pos.x, pos.y)
+  const a = stub.path[0]
+  const to = attachOf(tab, a)
+  return { tab, path: [{ x: a.x, y: a.y }, { x: to.x, y: to.y }], bridges: [] }
+}
+
 // ---- Conduit bands (plan 0021, 4c) ---------------------------------------
 
 // Where a conduit is drawn. wires: [{ id, conduitIds }] with their routed

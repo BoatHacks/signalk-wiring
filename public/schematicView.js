@@ -235,6 +235,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const lastBendDown = useRef(null)
   const [pos, setPos] = useState({})
   const [bends, setBends] = useState({})
+  const [stubPos, setStubPos] = useState({}) // cable id -> { x, y }: tabs the user placed
   const [vb, setVb] = useState(null)
   const [selection, setSelection] = useState(null) // { type: 'device' | 'wire', id }
   const [highlightId, setHighlightId] = useState('')
@@ -266,14 +267,17 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   // Layout lives in local state while it is being dragged and is written
   // when the drag ends. It is reset from the record whenever that changes.
-  const recordKey = JSON.stringify([schematic.devices, schematic.wires])
+  const recordKey = JSON.stringify([schematic.devices, schematic.wires, schematic.stubs || []])
   useEffect(() => {
     const p = {}
     for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
     const b = {}
     for (const w of schematic.wires) b[w.wireRunId] = w.points
+    const sp = {}
+    for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
     setPos(p)
     setBends(b)
+    setStubPos(sp)
   }, [recordKey])
 
   const pageDevices = schematic.devices
@@ -284,14 +288,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const liveCables = cables.filter(isLive)
   const onPage = liveCables.filter((c) => boxById.has(c.fromDeviceId) && boxById.has(c.toDeviceId))
   const lanes = G.assignLanes(onPage.map((c) => ({ id: c.id, a: c.fromDeviceId, b: c.toDeviceId })))
-  const stubsBase = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName })
+  const stubsBase = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName }).map((st) => (stubPos[st.cableId] ? { ...st, pos: stubPos[st.cableId] } : st))
   // Routing runs when the page's layout, wires or conduits change, not on
   // every pointer move: while a device or a bend point is being dragged the
   // old cheap routes are drawn and the full routing follows the drop.
-  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'bend')
+  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'bend' || drag.current.kind === 'stub')
   const routeKey = dragging ? 'drag' : JSON.stringify([
     boxes.map((b) => [b.id, b.x, b.y, b.w, b.h]), onPage.map((c) => [c.id, c.fromDeviceId, c.toDeviceId, c.conductors, c.conduitIds]),
-    bends, stubsBase.map((x) => x.cableId)
+    bends, stubsBase.map((x) => [x.cableId, x.pos || null])
   ])
   const routed = useMemo(() => {
     if (dragging) return null
@@ -319,7 +323,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
   const stubs = stubsBase.map((st) => {
     const r = routed && routed.stubs.get(st.cableId)
-    return r ? { ...st, path: r.path, tab: r.tab, bridges: r.bridges || [] } : st
+    if (r) return { ...st, path: r.path, tab: r.tab, bridges: r.bridges || [] }
+    return st.pos ? { ...st, ...G.stubAt(st, st.pos) } : st
   })
   const conduitInfo = new Map(conduits.filter(isLive).map((c) => [c.id, c]))
   const bands = G.conduitBands({
@@ -381,14 +386,17 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
 
   // ---- Persisting ----
-  const save = async (nextPos, nextBends, order) => {
+  const save = async (nextPos, nextBends, order, nextStubs = stubPos) => {
     const ids = order || schematic.devices.map((d) => d.deviceId)
     try {
       await putResource('wiringSchematics', schematic.id, {
         devices: ids.filter((id) => nextPos[id]).map((id) => ({ deviceId: id, x: Math.round(nextPos[id].x), y: Math.round(nextPos[id].y) })),
         wires: Object.entries(nextBends)
           .filter(([id, pts]) => pts && pts.length > 0 && liveCables.some((c) => c.id === id))
-          .map(([wireRunId, points]) => ({ wireRunId, points }))
+          .map(([wireRunId, points]) => ({ wireRunId, points })),
+        stubs: Object.entries(nextStubs)
+          .filter(([id]) => stubsBase.some((st) => st.cableId === id))
+          .map(([wireRunId, at]) => ({ wireRunId, x: Math.round(at.x), y: Math.round(at.y) }))
       })
       onError(null)
       await reload()
@@ -405,7 +413,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       const d = deviceById.get(id)
       if (d) bx.push(G.deviceBox(d, layout[id]))
     }
-    const tabs = stubs.map((st) => ({ ...st.tab, deviceId: st.deviceId }))
+    // tabs the user placed stay where they are; the others are placed after the devices
+    const tabs = stubs.filter((st) => st.pos).map((st) => ({ ...st.tab, deviceId: st.deviceId }))
     const moved = G.resolveOverlaps(bx, tabs, G.OVERLAP_MARGIN, movable)
     return Object.keys(moved).length ? { ...layout, ...moved } : layout
   }
@@ -578,8 +587,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
         const b = {}
         for (const w of schematic.wires) b[w.wireRunId] = w.points
+        const sp = {}
+        for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
         setPos(p)
         setBends(b)
+        setStubPos(sp)
       } else if (cmd.kind === 'close-popover') setPopover(null)
       else if (cmd.kind === 'close-tabmenu') setTabMenu(null)
       else if (cmd.kind === 'clear-selection') setSelection(null)
@@ -597,9 +609,10 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     if (e.button !== 0 && e.pointerType === 'mouse') return
     const p = toCanvas(e)
     setTabMenu(null)
-    const tab = stubs.find((s) => p.x >= s.tab.x && p.x <= s.tab.x + s.tab.w && p.y >= s.tab.y && p.y <= s.tab.y + s.tab.h)
-    if (tab) { setTabMenu({ stub: tab }); return }
     try { svgRef.current.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointers cannot be captured */ }
+    // A tab: a click opens its menu, a drag moves it (not in live mode).
+    const tab = stubs.find((s) => p.x >= s.tab.x && p.x <= s.tab.x + s.tab.w && p.y >= s.tab.y && p.y <= s.tab.y + s.tab.h)
+    if (tab) { drag.current = { kind: 'stub', stub: tab, dx: p.x - tab.tab.x, dy: p.y - tab.tab.y, sx: e.clientX, sy: e.clientY, moved: false }; return }
     if (liveOn) {
       const hit = G.hitDevice(boxes, p.x, p.y)
       if (hit) { liveToggle(hit.id); return }
@@ -661,6 +674,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     if (d.kind === 'move') {
       const p = toCanvas(e)
       setPos((cur) => ({ ...cur, [d.id]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
+    } else if (d.kind === 'stub') {
+      const p = toCanvas(e)
+      setStubPos((cur) => ({ ...cur, [d.stub.cableId]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
     } else if (d.kind === 'bend') {
       const p = toCanvas(e)
       setBends((cur) => {
@@ -691,6 +707,13 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       save(next, bends)
     }
     if (d.kind === 'bend' && d.moved) save(pos, bends)
+    if (d.kind === 'stub') {
+      if (!d.moved) { setTabMenu({ stub: d.stub }); return }
+      const at = stubPos[d.stub.cableId]
+      const next = at ? { ...stubPos, [d.stub.cableId]: G.freeTabSpot(at, boxes, stubs.filter((x) => x.cableId !== d.stub.cableId).map((x) => x.tab)) } : stubPos
+      setStubPos(next)
+      save(pos, bends, undefined, next)
+    }
     if (d.kind === 'wire') {
       setPreview(null)
       const p = toCanvas(e)

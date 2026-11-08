@@ -11,7 +11,7 @@ tab. The router now treats these as hard rules instead of costs.
 
 ## Items
 
-- [ ] 1. Draggable "to" stubs, saved on the page, kept by Auto-arrange and Tidy.
+- [x] 1. Draggable "to" stubs, saved on the page, kept by Auto-arrange and Tidy.
 - [x] 2. At least two line widths of clear space (edge to edge) between parallel wires.
 - [x] 3. Wires leave their ports straight out for a visible stub length.
 - [x] 4. The line from a device to a stub never overlaps other lines, stubs or devices.

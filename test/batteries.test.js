@@ -143,7 +143,7 @@ test('migration 11 fills chemistry and purpose once, never overrides, is safe tw
   store.close()
   for (let i = 0; i < 2; i++) {
     const again = new Store(file)
-    assert.equal(again.db.pragma('user_version', { simple: true }), 12)
+    assert.equal(again.db.pragma('user_version', { simple: true }), 13)
     const g = (k) => again.get('device', ids[k])
     assert.equal(g('lead').chemistry, 'flooded')
     assert.equal(g('agm').chemistry, 'agm')

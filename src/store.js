@@ -428,6 +428,17 @@ const MIGRATIONS = [
         if (!has('devices', col)) db.exec(`ALTER TABLE devices ADD COLUMN ${col} REAL`)
       }
     }
+  },
+  {
+    version: 13,
+    description: 'plan 0022: schematic_stubs, the saved position of an off-page tab on a page',
+    apply (db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS schematic_stubs (
+        id TEXT PRIMARY KEY, schematic_id TEXT NOT NULL REFERENCES schematics(id),
+        position INTEGER NOT NULL, wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+        x REAL NOT NULL, y REAL NOT NULL)`)
+      db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_stubs_schematic ON schematic_stubs (schematic_id)')
+    }
   }
 ]
 
@@ -606,6 +617,9 @@ class Store {
     const wires = one
       ? this.db.prepare('SELECT * FROM schematic_wires WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
       : this.db.prepare('SELECT * FROM schematic_wires ORDER BY schematic_id, position').all()
+    const stubs = one
+      ? this.db.prepare('SELECT * FROM schematic_stubs WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
+      : this.db.prepare('SELECT * FROM schematic_stubs ORDER BY schematic_id, position').all()
     const group = (list, map) => {
       const by = new Map()
       for (const r of list) {
@@ -616,7 +630,8 @@ class Store {
     }
     const dByS = group(devices, (r) => ({ deviceId: r.device_id, x: r.x, y: r.y }))
     const wByS = group(wires, (r) => ({ wireRunId: r.wire_run_id, points: r.points ? JSON.parse(r.points) : [] }))
-    return rows.map((row) => ({ ...row, devices: dByS.get(row.id) || [], wires: wByS.get(row.id) || [] }))
+    const sByS = group(stubs, (r) => ({ wireRunId: r.wire_run_id, x: r.x, y: r.y }))
+    return rows.map((row) => ({ ...row, devices: dByS.get(row.id) || [], wires: wByS.get(row.id) || [], stubs: sByS.get(row.id) || [] }))
   }
 
   _checkSchematicName (name) {
@@ -629,7 +644,7 @@ class Store {
   // not given is null (left alone). A wire without bend points is dropped,
   // since an unbent wire needs no row.
   _checkSchematicLists (fields) {
-    const out = { devices: null, wires: null }
+    const out = { devices: null, wires: null, stubs: null }
     const finite = (v, what) => {
       const n = Number(v)
       if (v === null || v === '' || v === undefined || !Number.isFinite(n)) throw new Error(`${what} must be a number`)
@@ -666,6 +681,19 @@ class Store {
         if (points.length > 0) out.wires.push({ wireRunId, points })
       }
     }
+    if (fields.stubs !== undefined) {
+      if (!Array.isArray(fields.stubs)) throw new Error('stubs must be a list')
+      const seen = new Set()
+      out.stubs = fields.stubs.map((item) => {
+        const wireRunId = item && item.wireRunId
+        if (!wireRunId || !this.db.prepare('SELECT 1 FROM wire_runs WHERE id = ?').get(wireRunId)) {
+          throw new Error(`wire run not found: ${wireRunId}`)
+        }
+        if (seen.has(wireRunId)) throw new Error(`stub listed twice: ${wireRunId}`)
+        seen.add(wireRunId)
+        return { wireRunId, x: finite(item.x, 'x'), y: finite(item.y, 'y') }
+      })
+    }
     return out
   }
 
@@ -682,6 +710,12 @@ class Store {
         'INSERT INTO schematic_wires (id, schematic_id, position, wire_run_id, points) VALUES (?, ?, ?, ?, ?)')
       lists.wires.forEach((w, i) => insert.run(crypto.randomUUID(), id, i, w.wireRunId, JSON.stringify(w.points)))
     }
+    if (lists.stubs) {
+      this.db.prepare('DELETE FROM schematic_stubs WHERE schematic_id = ?').run(id)
+      const insert = this.db.prepare(
+        'INSERT INTO schematic_stubs (id, schematic_id, position, wire_run_id, x, y) VALUES (?, ?, ?, ?, ?, ?)')
+      lists.stubs.forEach((st, i) => insert.run(crypto.randomUUID(), id, i, st.wireRunId, st.x, st.y))
+    }
   }
 
   _updateSchematic (id, patch, existing) {
@@ -693,7 +727,8 @@ class Store {
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     const layoutChanged =
       (lists.devices && !same(lists.devices, existing.devices)) ||
-      (lists.wires && !same(lists.wires, existing.wires))
+      (lists.wires && !same(lists.wires, existing.wires)) ||
+      (lists.stubs && !same(lists.stubs, existing.stubs))
     const diff = {}
     this.db.transaction(() => {
       if (cols.length) {
@@ -1449,7 +1484,7 @@ class Store {
     if (cable.status !== REMOVED_STATUS) throw new Error('only a removed cable can be deleted permanently')
     const attachments = this.listAttachmentsByOwner('wireRun', id)
     this.db.transaction(() => {
-      for (const table of ['wire_run_conductors', 'wire_run_conduits', 'schematic_wires']) {
+      for (const table of ['wire_run_conductors', 'wire_run_conduits', 'schematic_wires', 'schematic_stubs']) {
         this.db.prepare(`DELETE FROM ${table} WHERE wire_run_id = ?`).run(id)
       }
       this.db.prepare("DELETE FROM attachments WHERE owner_type = 'wireRun' AND owner_id = ?").run(id)
@@ -1533,6 +1568,7 @@ class Store {
     this.db.transaction(() => {
       this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
       this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
+      this.db.prepare('DELETE FROM schematic_stubs WHERE schematic_id = ?').run(id)
       attachments = this._purgeOwned('schematic', id)
       this.db.prepare('DELETE FROM schematics WHERE id = ?').run(id)
     })()
