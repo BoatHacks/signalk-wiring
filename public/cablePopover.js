@@ -1,7 +1,7 @@
 import { html, useState } from './vendor/preact-standalone.module.js'
-import { CABLE_KINDS, buildCablePayload } from './cableForm.js'
+import { CABLE_KINDS, LINK_CHOICES, buildCablePayload } from './cableForm.js'
 import { mismatchText } from './current.js'
-import { popoverKinds, quickProblem, withKind } from './quickCable.js'
+import { popoverKinds, quickProblem, withKind, withLink } from './quickCable.js'
 
 // The small popover that asks how a freshly drawn wire is made: Positive,
 // Negative or Positive + negative, with optional gauge and length. Shared by
@@ -35,7 +35,18 @@ export function CablePopover ({ start, lengthNote, style, onCreate, onMore, onCa
       onPointerDown=${(e) => e.stopPropagation()}>
       <div class="cable-popover-title">${start.from.name} to ${start.to.name}</div>
       ${start.mismatch && html`<div class="warning-banner" data-testid="current-mismatch">${mismatchText(start.mismatch, start.from, start.to)}</div>`}
-      <div class="cable-popover-kinds">
+      ${start.values.link && html`
+        <div class="cable-popover-kinds" data-testid="popover-links">
+          ${LINK_CHOICES.map((l) => html`
+            <label key=${l.value} class="radio-line">
+              <input type="radio" name="quick-link" checked=${values.link === l.value}
+                onChange=${() => setValues((v) => withLink(start, v, l.value))} />
+              ${l.label}
+            </label>
+          `)}
+        </div>
+      `}
+      ${!start.values.link && html`<div class="cable-popover-kinds">
         ${kinds.map((k) => html`
           <label key=${k.value} class="radio-line">
             <input type="radio" name="quick-kind" checked=${values.kind === k.value}
@@ -43,7 +54,7 @@ export function CablePopover ({ start, lengthNote, style, onCreate, onMore, onCa
             ${k.label}
           </label>
         `)}
-      </div>
+      </div>`}
       <div class="cable-popover-row">
         <label>Gauge
           <input type="number" step="any" class="short" value=${values.gauge}

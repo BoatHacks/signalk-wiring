@@ -148,3 +148,142 @@ export function allBanks (devices, banks) {
   return [...banks, ...singleBatteryBanks(devices, banks)]
     .sort((a, b) => (a.batteryIds[0] < b.batteryIds[0] ? -1 : a.batteryIds[0] > b.batteryIds[0] ? 1 : 0))
 }
+
+// ---- Device form and page helpers (plan 0020, step 3) ----
+
+const BATTERY_KEYS = [
+  'chemistry', 'purpose', 'capacityAh', 'usablePercent', 'makeModel', 'installedOn', 'monitorDeviceId'
+]
+const MONITOR_PATH_KEYS = ['voltagePath', 'currentPath', 'socPath', 'timeRemainingPath']
+const MONITOR_TYPE = /shunt|monitor|bms/i
+
+// Which battery fields the device form shows. The details belong to storage
+// devices; the four monitor paths also to a shunt, battery monitor or BMS.
+export function batteryFieldVisible (key, values) {
+  const role = (values && values.role) || 'consumer'
+  if (BATTERY_KEYS.includes(key)) return role === 'storage'
+  if (MONITOR_PATH_KEYS.includes(key)) {
+    return role === 'storage' || MONITOR_TYPE.test(String((values && values.type) || ''))
+  }
+  return true
+}
+
+const blankValue = (v) => v === null || v === undefined || String(v).trim() === '' || Number.isNaN(Number(v))
+
+// The fraction 0 to 1 as the text of a percent field, and back (null when empty).
+export function fractionToPercent (fraction) {
+  return blankValue(fraction) ? '' : String(Math.round(Number(fraction) * 1000) / 10)
+}
+
+export function percentToFraction (percent) {
+  return blankValue(percent) ? null : Math.round(Number(percent) * 10) / 1000
+}
+
+// A stored device as the form values it starts from (usableFraction shows as a
+// percent), and the form payload back to a device (usablePercent becomes
+// usableFraction; an empty one is null so clearing works).
+export function deviceToFormValues (device) {
+  return device ? { ...device, usablePercent: fractionToPercent(device.usableFraction) } : device
+}
+
+export function formPayloadToDevice (payload) {
+  if (!('usablePercent' in payload)) return payload
+  const { usablePercent, ...rest } = payload
+  rest.usableFraction = percentToFraction(usablePercent)
+  return rest
+}
+
+// The time remaining path that goes with a state of charge path: the standard
+// `...stateOfCharge` tail becomes `...timeRemaining`. Null for any other path.
+export function timeRemainingSuggestion (socPath) {
+  const path = typeof socPath === 'string' ? socPath.trim() : ''
+  return /\.stateOfCharge$/.test(path) ? path.replace(/stateOfCharge$/, 'timeRemaining') : null
+}
+
+// True when a field is empty or holds some chemistry's default, so a value the
+// user typed or stored by hand is never replaced.
+const isEmptyOrDefault = (value, pick) => {
+  if (blankValue(value)) return true
+  return Object.values(CHEMISTRY_DEFAULTS).some((d) => d[pick] !== null && Number(d[pick]) === Number(value))
+}
+
+// Form hook: the values to set when the chemistry changes. Nominal voltage and
+// Usable (%) follow the chemistry while the user has not set them.
+export function chemistryFill (chemistry, values, touched = {}) {
+  if (!chemistry) return {}
+  const defaults = chemistryDefaults(chemistry)
+  const extra = {}
+  if (!touched.nominalVoltage && isEmptyOrDefault(values.nominalVoltage, 'nominalVoltage')) {
+    extra.nominalVoltage = defaults.nominalVoltage === null ? '' : String(defaults.nominalVoltage)
+  }
+  if (!touched.usablePercent && isEmptyOrDefault(percentToFraction(values.usablePercent), 'usableFraction')) {
+    extra.usablePercent = fractionToPercent(defaults.usableFraction)
+  }
+  return extra
+}
+
+// Form hook for a new device: the type presets chemistry and purpose while
+// untouched, and the chemistry in turn fills voltage and usable.
+export function typeBatteryFill (type, values, touched = {}) {
+  const extra = {}
+  if (!touched.chemistry) {
+    const chemistry = typeChemistry(type)
+    if (chemistry) {
+      extra.chemistry = chemistry
+      Object.assign(extra, chemistryFill(chemistry, values, touched))
+    }
+  }
+  if (!touched.purpose) {
+    const purpose = typePurpose(type)
+    if (purpose) extra.purpose = purpose
+  }
+  return extra
+}
+
+// Form hook: the time remaining path follows the state of charge path while it
+// is empty or an earlier suggestion (ends in `.timeRemaining`) and untouched.
+export function socPathFill (socPath, values, touched = {}) {
+  if (touched.timeRemainingPath) return null
+  const current = values.timeRemainingPath || ''
+  if (current !== '' && !/\.timeRemaining$/.test(current)) return null
+  return { timeRemainingPath: timeRemainingSuggestion(socPath) || '' }
+}
+
+// "installed 3 years ago", "installed 5 months ago", "installed 12 days ago".
+// Null for an empty or unreadable date. `now` is a Date (for tests).
+export function installedAgeText (isoDate, now = new Date()) {
+  if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(isoDate)) return null
+  const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number)
+  const ny = now.getUTCFullYear()
+  const nm = now.getUTCMonth() + 1
+  const nd = now.getUTCDate()
+  let months = (ny - y) * 12 + (nm - m)
+  if (nd < d) months -= 1
+  if (months < 0) return 'installed in the future'
+  if (months >= 12) {
+    const years = Math.floor(months / 12)
+    return `installed ${years} ${years === 1 ? 'year' : 'years'} ago`
+  }
+  if (months >= 1) return `installed ${months} ${months === 1 ? 'month' : 'months'} ago`
+  const days = Math.floor((Date.UTC(ny, nm - 1, nd) - Date.UTC(y, m - 1, d)) / 86400000)
+  if (days <= 0) return 'installed today'
+  return `installed ${days} ${days === 1 ? 'day' : 'days'} ago`
+}
+
+// The bank (from /derived) a battery belongs to, or null.
+export function bankOfBattery (banks, deviceId) {
+  return (banks || []).find((b) => (b.batteryIds || []).includes(deviceId)) || null
+}
+
+// Short lines describing a bank for the battery page.
+export function describeBank (bank) {
+  if (!bank) return []
+  const size = (bank.batteryIds || []).length
+  const lines = [size <= 1 ? 'Bank of one' : `Bank of ${size}${bank.layout ? `, ${bank.layout.label}` : ''}`]
+  const facts = []
+  if (bank.voltage != null) facts.push(`${bank.voltage} V`)
+  if (bank.capacityAh != null) facts.push(`${bank.capacityAh} Ah`)
+  if (bank.usableAh != null) facts.push(`${bank.usableAh} Ah usable`)
+  if (facts.length) lines.push(facts.join(', '))
+  return lines
+}

@@ -89,6 +89,32 @@ export function terminalOptions (device, conductor) {
 
 const blank = (v) => v === '' || v === null || v === undefined
 
+// Link type between two batteries (plan 0020): a parallel link carries
+// positive and negative, a series link is a single positive conductor.
+export const LINK_CHOICES = [
+  { value: 'parallel', label: 'Parallel link', kind: 'both' },
+  { value: 'series', label: 'Series link', kind: 'positive' }
+]
+
+// The link choice applies only when both ends are storage devices.
+export function linkApplies (from, to) {
+  return Boolean(from && to && (from.role || 'consumer') === 'storage' && (to.role || 'consumer') === 'storage')
+}
+
+// The cable type a link choice sets.
+export function linkKind (link) {
+  const found = LINK_CHOICES.find((l) => l.value === link)
+  return found ? found.kind : null
+}
+
+// The link to send: the chosen one (parallel unless set) when the ends are
+// both storage; null when they are not but a link is stored (clears it);
+// undefined (not sent at all) for every other cable.
+export function resolveLink (values, from, to, storedLink = null) {
+  if (linkApplies(from, to)) return values.link === 'series' ? 'series' : 'parallel'
+  return storedLink ? null : undefined
+}
+
 // Form values -> wire run resource.
 //   values: { fromDeviceId, toDeviceId, kind, colors: {conductor: text},
 //             negativeLandingId, terminals: {conductor: {from, to}},
@@ -107,6 +133,7 @@ export function buildCablePayload (values, { defaults = false } = {}) {
   // Cleared zone and tags must reach the server, so they are always sent.
   out.zoneId = blank(values.zoneId) ? null : values.zoneId
   if (values.tags !== undefined) out.tags = values.tags
+  if (values.link !== undefined) out.link = values.link || null
 
   if (values.kind === 'custom') {
     out.conductors = values.existingConductors || []
@@ -160,7 +187,8 @@ export function cableToValues (cable) {
     cableLabel: cable.cableLabel || '',
     zoneId: cable.zoneId || '',
     tags: cable.tags || [],
-    notes: cable.notes || ''
+    notes: cable.notes || '',
+    link: cable.link || null
   }
 }
 

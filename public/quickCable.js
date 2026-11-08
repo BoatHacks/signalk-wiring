@@ -3,7 +3,7 @@
 // same values the full cable form builds and passes them through
 // buildCablePayload, so validation and circuit derivation are shared.
 
-import { kindByValue, defaultNegativeLanding, needsTerminal, terminalOptions, validateCable } from './cableForm.js'
+import { kindByValue, defaultNegativeLanding, needsTerminal, terminalOptions, validateCable, linkApplies, linkKind } from './cableForm.js'
 import { supplyOrder } from './schematic.js'
 import { suggestKind } from './current.js'
 
@@ -56,7 +56,11 @@ export function startValues ({ a, ta, b, tb, cables, defaults = {}, keepOrder = 
   const swapped = from.id !== a.id
   const fromTerminal = swapped ? tb : ta
   const toTerminal = swapped ? ta : tb
-  const { kind, mismatch } = suggestKind(from, fromTerminal, to, toTerminal)
+  const suggested = suggestKind(from, fromTerminal, to, toTerminal)
+  const mismatch = suggested.mismatch
+  // Between two batteries the link choice sets the cable type: parallel first.
+  const link = linkApplies(from, to) ? 'parallel' : undefined
+  const kind = link ? linkKind(link) : suggested.kind
   return {
     from,
     to,
@@ -78,7 +82,8 @@ export function startValues ({ a, ta, b, tb, cables, defaults = {}, keepOrder = 
       cableLabel: '',
       zoneId: '',
       tags: [],
-      notes: ''
+      notes: '',
+      ...(link ? { link } : {})
     }
   }
 }
@@ -99,4 +104,9 @@ export function withKind (start, values, kind) {
     kind,
     terminals: resolveTerminals(kind, start.from, start.fromTerminal, start.to, start.toTerminal).terminals
   }
+}
+
+// Values with the link choice applied: the link and the cable type it means.
+export function withLink (start, values, link) {
+  return { ...withKind(start, values, linkKind(link)), link }
 }

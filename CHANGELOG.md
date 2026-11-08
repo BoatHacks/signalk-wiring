@@ -7,6 +7,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- The battery fields in the device form and on the device page: chemistry and
+  purpose, capacity, usable percent, make and model, install date (with its
+  age), the monitoring device and the four SignalK paths. Choosing a chemistry
+  fills the nominal voltage and usable percent until you set them, the type
+  can preset chemistry and purpose, and the time remaining path is suggested
+  from the state of charge path. The page also shows the bank the battery
+  belongs to.
+- The link type on cables between batteries: the quick popover and the cable
+  form offer a parallel link (positive and negative) and a series link (one
+  positive conductor), and the cables table shows a series or parallel badge.
 - Battery details on storage devices: chemistry (flooded, AGM, gel, LiFePO4,
   other lithium, other), purpose (house, starter, thruster, windlass, motor,
   other), capacity in amp-hours, usable fraction, make and model, install

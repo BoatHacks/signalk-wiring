@@ -9,7 +9,8 @@ import {
 import { duplicateDevicePayload, duplicateCablePrefill } from './duplicate.js'
 import {
   CABLE_KINDS, CONDUCTOR_LABELS, kindByValue, defaultNegativeLanding, negativeLandingCandidates, needsTerminal,
-  terminalOptions, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle
+  terminalOptions, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle,
+  LINK_CHOICES, linkApplies, linkKind, resolveLink
 } from './cableForm.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
@@ -31,6 +32,10 @@ import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
+import {
+  CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
+  chemistryFill, typeBatteryFill, socPathFill, installedAgeText, fractionToPercent, bankOfBattery, describeBank
+} from './batteries.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -386,7 +391,8 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
       // Emptied free-form fields are sent as null so clearing them on an edit
       // takes effect (a missing key keeps the stored value).
-      const freeForm = f.type === 'text' || f.type === 'number' || f.type === 'textarea' || f.type === 'signalkPath'
+      const freeForm = f.type === 'text' || f.type === 'number' || f.type === 'textarea' || f.type === 'signalkPath' ||
+        f.type === 'date' || f.type === 'devicePick'
       if ((f.clearable || (freeForm && !f.required)) && (raw === '' || raw == null)) { payload[f.key] = null; continue }
       if (raw === '' || raw == null) continue
       payload[f.key] = f.type === 'number' ? Number(raw) : raw
@@ -426,6 +432,18 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
                 return html`<option value=${option.value} key=${option.value}>${option.label}</option>`
               })}
             </select>
+          `}
+          ${f.type === 'devicePick' && html`
+            <select value=${values[f.key]} onChange=${(e) => setField(f.key, e.target.value)}>
+              <option value="">None</option>
+              ${((context && context.devices) || [])
+                .filter((d) => d.status !== 'removed' && d.id !== (context && context.deviceId))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((d) => html`<option value=${d.id} key=${d.id}>${d.name} (${roleLabel(d.role)})</option>`)}
+            </select>
+          `}
+          ${f.type === 'date' && html`
+            <input type="date" value=${values[f.key]} onInput=${(e) => setField(f.key, e.target.value)} />
           `}
           ${f.type === 'zone' && html`
             <${ZoneField} value=${values[f.key]} onChange=${(v) => setField(f.key, v)} />
@@ -685,7 +703,16 @@ function criticalDefault (key, value, values, touched) {
 function newDeviceDefaults (key, value, values, touched) {
   const extra = criticalDefault(key, value, values, touched) || {}
   if (key === 'type' && !touched.current) extra.current = typeCurrent(value) || ''
-  return extra
+  if (key === 'type') Object.assign(extra, typeBatteryFill(value, values, touched))
+  return { ...extra, ...(batteryDefaults(key, value, values, touched) || {}) }
+}
+
+// The battery form follows: the chemistry fills voltage and usable, the state
+// of charge path suggests the time remaining path. Used when adding and editing.
+function batteryDefaults (key, value, values, touched) {
+  if (key === 'chemistry') return chemistryFill(value, values, touched)
+  if (key === 'socPath') return socPathFill(value, values, touched)
+  return null
 }
 
 const DEVICE_FIELDS = [
@@ -736,12 +763,95 @@ const DEVICE_FIELDS = [
     hint: 'Read it off the fuse or breaker. A device with a rating protects the circuit it feeds; a switch or bus bar has none and only passes it through.'
   },
   {
+    key: 'chemistry',
+    label: 'Chemistry',
+    type: 'select',
+    options: CHEMISTRIES.map((c) => ({ value: c, label: CHEMISTRY_LABELS[c] })),
+    blankLabel: 'Either',
+    clearable: true,
+    showWhen: (values) => batteryFieldVisible('chemistry', values),
+    hint: 'Choosing one fills Nominal voltage and Usable (%) with usual values until you set them yourself.'
+  },
+  {
+    key: 'purpose',
+    label: 'Purpose',
+    type: 'select',
+    options: PURPOSES.map((p) => ({ value: p, label: PURPOSE_LABELS[p] })),
+    blankLabel: 'Not set',
+    clearable: true,
+    showWhen: (values) => batteryFieldVisible('purpose', values)
+  },
+  {
+    key: 'capacityAh',
+    label: 'Capacity (Ah)',
+    type: 'number',
+    clearable: true,
+    showWhen: (values) => batteryFieldVisible('capacityAh', values),
+    hint: 'The amp-hours of this one battery.'
+  },
+  {
+    key: 'usablePercent',
+    label: 'Usable (%)',
+    type: 'number',
+    clearable: true,
+    showWhen: (values) => batteryFieldVisible('usablePercent', values),
+    hint: 'How much of the capacity you plan to use, for example 50 for lead-acid and 80 for LiFePO4.'
+  },
+  {
     key: 'nominalVoltage',
     label: 'Nominal voltage (V)',
     type: 'number',
     clearable: true,
     showWhen: (values, ctx) => deviceFieldVisible('nominalVoltage', values, ctx),
     hint: 'The voltage this battery or source supplies. Circuits fed from it take this voltage.'
+  },
+  {
+    key: 'makeModel',
+    label: 'Make and model',
+    type: 'text',
+    showWhen: (values) => batteryFieldVisible('makeModel', values)
+  },
+  {
+    key: 'installedOn',
+    label: 'Installed on',
+    type: 'date',
+    showWhen: (values) => batteryFieldVisible('installedOn', values)
+  },
+  {
+    key: 'monitorDeviceId',
+    label: 'Monitored by',
+    type: 'devicePick',
+    showWhen: (values) => batteryFieldVisible('monitorDeviceId', values),
+    hint: 'The shunt or battery monitor that measures this battery. Its paths are used when this battery has none of its own.'
+  },
+  {
+    key: 'voltagePath',
+    label: 'Voltage path',
+    type: 'signalkPath',
+    placeholder: 'e.g. electrical.batteries.house.voltage',
+    showWhen: (values) => batteryFieldVisible('voltagePath', values)
+  },
+  {
+    key: 'currentPath',
+    label: 'Current path',
+    type: 'signalkPath',
+    placeholder: 'e.g. electrical.batteries.house.current',
+    showWhen: (values) => batteryFieldVisible('currentPath', values)
+  },
+  {
+    key: 'socPath',
+    label: 'State of charge path',
+    type: 'signalkPath',
+    placeholder: 'e.g. electrical.batteries.house.capacity.stateOfCharge',
+    showWhen: (values) => batteryFieldVisible('socPath', values)
+  },
+  {
+    key: 'timeRemainingPath',
+    label: 'Time remaining path',
+    type: 'signalkPath',
+    placeholder: 'e.g. electrical.batteries.house.capacity.timeRemaining',
+    showWhen: (values) => batteryFieldVisible('timeRemainingPath', values),
+    hint: 'Suggested from the state of charge path. Leave empty when the monitor does not report it.'
   },
   {
     key: 'powerFactor',
@@ -1057,6 +1167,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
   const [kindTouched, setKindTouched] = useState(Boolean(cable || (prefill && prefill.kind)))
   const set = (key, value) => setValues((v) => ({ ...v, [key]: value }))
   const setKind = (kind) => { setKindTouched(true); set('kind', kind) }
+  const setLink = (link) => setValues((v) => ({ ...v, link, kind: v.kind === 'custom' ? v.kind : linkKind(link) }))
   const setEnd = (key, id) => {
     const next = { ...values, [key]: id }
     if (!kindTouched && !cable) {
@@ -1067,6 +1178,13 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
         if (kindByValue(kind).more) setMore(true)
         next.kind = kind
       }
+    }
+    // Between two batteries a new cable is a parallel link until chosen otherwise.
+    const fromEnd = devices.find((d) => d.id === next.fromDeviceId)
+    const toEnd = devices.find((d) => d.id === next.toDeviceId)
+    if (!cable && linkApplies(fromEnd, toEnd) && !next.link) {
+      next.link = 'parallel'
+      if (!kindTouched) next.kind = linkKind('parallel')
     }
     setValues(next)
   }
@@ -1083,6 +1201,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
     ? values.existingConductors.map((c) => c.conductor)
     : kindByValue(values.kind).conductors
   const askTerminals = needsTerminal(fromDevice) || needsTerminal(toDevice)
+  const showLink = linkApplies(fromDevice, toDevice)
   const mismatch = !cable && fromDevice && toDevice ? suggestKind(fromDevice, '', toDevice, '').mismatch : null
   const kinds = CABLE_KINDS.filter((k) => !k.more || more || k.value === values.kind)
 
@@ -1094,7 +1213,8 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
     setSaving(true)
     setError(null)
     try {
-      await onSaved(buildCablePayload({ ...values, tags: parseTags(tagsText) }, { defaults: !cable }), cable ? cable.id : newId())
+      const link = resolveLink(values, fromDevice, toDevice, cable && cable.link)
+      await onSaved(buildCablePayload({ ...values, tags: parseTags(tagsText), link }, { defaults: !cable }), cable ? cable.id : newId())
     } catch (err) {
       setError(err.message)
       setSaving(false)
@@ -1114,6 +1234,21 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
         onChange=${(v) => setEnd('toDeviceId', v)} devices=${devices} onCreated=${onDevicesChanged}
         defaultRole="consumer" />
 
+      ${showLink && html`
+        <div class="form-field" data-testid="link-choice">
+          <span>Link between the batteries</span>
+          <div class="kind-choice">
+            ${LINK_CHOICES.map((l) => html`
+              <label key=${l.value} class="radio-chip">
+                <input type="radio" name="cable-link" value=${l.value} checked=${(values.link || 'parallel') === l.value}
+                  onChange=${() => setLink(l.value)} />
+                ${l.label}
+              </label>
+            `)}
+          </div>
+          <small class="hint">Parallel joins positive and negative and makes one bigger bank. Series is a single positive conductor between two batteries and adds their voltages.</small>
+        </div>
+      `}
       <div class="form-field">
         <span>Conductors</span>
         ${mismatch && html`<div class="warning-banner" data-testid="current-mismatch">${mismatchText(mismatch, fromDevice, toDevice)}</div>`}
@@ -1466,7 +1601,7 @@ function CablesList () {
                   <td><input type="checkbox" class="checkbox-input" checked=${picked.has(cable.id)} onChange=${() => togglePicked(cable.id)} /></td>
                   <td><${DeviceLink} id=${cable.fromDeviceId} names=${deviceNameById} /></td>
                   <td><${DeviceLink} id=${cable.toDeviceId} names=${deviceNameById} /></td>
-                  <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}</td>
+                  <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}${cable.link ? html` <span class="badge link-badge" data-testid="link-badge">${cable.link}</span>` : ''}</td>
                   <td>${cable.cableLabel || '-'}</td>
                   <td>${(cable.conduitIds || []).map((id) => conduitNameById.get(id) || '?').join(' > ') || '-'}</td>
                   <td>${cable.gauge ? `${cable.gauge} ${cable.gaugeUnit || ''}` : '-'}</td>
@@ -1804,7 +1939,7 @@ function DevicesList ({ onSelect }) {
     matchesRemoved(d, showRemoved) && matchesSearch(d, query))
 
   const createDevice = async (payload) => {
-    await putResource('wiringDevices', newId(), payload)
+    await putResource('wiringDevices', newId(), formPayloadToDevice(payload))
     setShowForm(false)
     setReloadKey((k) => k + 1)
   }
@@ -1817,6 +1952,7 @@ function DevicesList ({ onSelect }) {
       ${showForm && html`
         <${Form}
           fields=${DEVICE_FIELDS}
+          context=${{ devices: items }}
           onFieldChange=${newDeviceDefaults}
           onSubmit=${createDevice}
           onCancel=${() => setShowForm(false)}
@@ -1859,6 +1995,58 @@ function DevicesList ({ onSelect }) {
 // name can be changed at once. Not in the URL (forms stay out of it).
 const editOnOpen = new Set()
 
+// The battery details on the device page: the fields, the monitor, the paths
+// and the bank the battery belongs to (from /derived).
+function BatteryDetails ({ device, deviceNames }) {
+  const [banks, setBanks] = useState(null)
+  const isBattery = (device.role || 'consumer') === 'storage'
+  useEffect(() => {
+    if (!isBattery) return undefined
+    let cancelled = false
+    fetch(`${ROUTES_BASE}/derived`)
+      .then((res) => (res.ok ? res.json() : { banks: [] }))
+      .then((data) => { if (!cancelled) setBanks(data.banks || []) })
+      .catch(() => { if (!cancelled) setBanks([]) })
+    return () => { cancelled = true }
+  }, [device.id, device.updatedAt, isBattery])
+  const paths = [
+    ['Voltage path', device.voltagePath], ['Current path', device.currentPath],
+    ['State of charge path', device.socPath], ['Time remaining path', device.timeRemainingPath]
+  ].filter(([, p]) => p)
+  const age = installedAgeText(device.installedOn)
+  const bank = banks && bankOfBattery(banks, device.id)
+  const bankLines = describeBank(bank)
+  const hasDetails = device.chemistry || device.purpose || device.capacityAh != null || device.usableFraction != null ||
+    device.makeModel || device.installedOn
+  if (!isBattery && paths.length === 0) return null
+  return html`
+    <div class="battery-details" data-testid="battery-details">
+      ${hasDetails && html`
+        <div class="meta">
+          ${[
+            device.chemistry && (CHEMISTRY_LABELS[device.chemistry] || device.chemistry),
+            device.purpose && (PURPOSE_LABELS[device.purpose] || device.purpose),
+            device.capacityAh != null && `${device.capacityAh} Ah`,
+            device.usableFraction != null && `${fractionToPercent(device.usableFraction)} % usable`
+          ].filter(Boolean).join(', ')}
+        </div>
+      `}
+      ${device.makeModel && html`<div class="meta">Make and model: ${device.makeModel}</div>`}
+      ${device.installedOn && html`<div class="meta">Installed on ${device.installedOn}${age ? ` (${age})` : ''}</div>`}
+      ${device.monitorDeviceId && html`
+        <div class="meta">Monitored by: <${DeviceLink} id=${device.monitorDeviceId} names=${deviceNames} /></div>
+      `}
+      ${paths.map(([label, p]) => html`<div class="meta" key=${label}>${label}: <code>${p}</code></div>`)}
+      ${isBattery && bank && html`
+        <div class="meta bank-summary" data-testid="battery-bank">
+          ${bankLines.map((line, i) => html`<div key=${i}>${i === 0 ? html`<strong>${line}</strong>` : line}</div>`)}
+          ${(bank.warnings || []).map((w, i) => html`<div class="warning-banner" key=${i}>${w.message || w}</div>`)}
+        </div>
+      `}
+    </div>
+  `
+}
+
 function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
   const undo = useUndo()
   const [device, setDevice] = useState(null)
@@ -1880,7 +2068,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
   }, [deviceId, reloadKey])
 
   const saveDevice = async (payload) => {
-    await putResource('wiringDevices', deviceId, payload)
+    await putResource('wiringDevices', deviceId, formPayloadToDevice(payload))
     setEditing(false)
     setReloadKey((k) => k + 1)
   }
@@ -1937,6 +2125,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
             </div>
           `}
           ${device.current && html`<div class="meta">Current: ${device.current === 'ac' ? 'AC' : 'DC'}</div>`}
+          <${BatteryDetails} device=${device} deviceNames=${deviceNames} />
           ${device.signalkPath && html`
             <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>
           `}
@@ -1979,8 +2168,9 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
         <div class="card">
           <${Form}
             fields=${DEVICE_FIELDS}
-            initial=${device}
-            context=${{ deviceId, acDeviceIds: acConsumerIds(circuits) }}
+            initial=${deviceToFormValues(device)}
+            context=${{ deviceId, acDeviceIds: acConsumerIds(circuits), devices: allDevices }}
+            onFieldChange=${batteryDefaults}
             onSubmit=${saveDevice}
             onCancel=${() => setEditing(false)}
           />

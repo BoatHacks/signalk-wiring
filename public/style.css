@@ -770,3 +770,6 @@ main:has(.schematic-editor) { max-width: none; }
 .bank-line-label { color: var(--text-muted-strong); display: inline-block; min-width: 100px; }
 .bank-incomplete { color: var(--warn); margin-bottom: 6px; }
 .bank-live:empty { display: none; }
+.link-badge { margin-left: 4px; text-transform: none; }
+.battery-details .bank-summary { margin-top: 6px; }
+.battery-details .warning-banner { margin: 4px 0; }
