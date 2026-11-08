@@ -219,7 +219,7 @@ These are open to change in review:
 
 - [x] Migration 10, the `current` field in the store and resource, type
       presets, the one-time fill, with tests.
-- [ ] The rule: `endCurrent` and `suggestKind`, used by the quick popover with
+- [x] The rule: `endCurrent` and `suggestKind`, used by the quick popover with
       the mismatch warning, and the rejection of mixed AC and DC cables in the
       store, the forms and the import, with tests.
 - [ ] Device form and page: the Current select and the type-driven default; the

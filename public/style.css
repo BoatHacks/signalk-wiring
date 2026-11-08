@@ -219,6 +219,16 @@ th { color: var(--text-muted-strong); font-weight: 600; background: var(--surfac
   font-size: 13px;
 }
 
+.warning-banner {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
 button {
   font: inherit;
   font-size: 13px;

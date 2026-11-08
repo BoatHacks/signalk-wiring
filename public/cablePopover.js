@@ -1,5 +1,6 @@
 import { html, useState } from './vendor/preact-standalone.module.js'
 import { CABLE_KINDS, buildCablePayload } from './cableForm.js'
+import { mismatchText } from './current.js'
 import { popoverKinds, quickProblem, withKind } from './quickCable.js'
 
 // The small popover that asks how a freshly drawn wire is made: Positive,
@@ -14,7 +15,7 @@ export function CablePopover ({ start, lengthNote, style, onCreate, onMore, onCa
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const set = (key, value) => setValues((v) => ({ ...v, [key]: value }))
-  const kinds = popoverKinds(start.values.kind, CABLE_KINDS)
+  const kinds = popoverKinds(start.values.kind, CABLE_KINDS, start.mismatch)
 
   const create = async () => {
     const problem = quickProblem(start, values)
@@ -33,6 +34,7 @@ export function CablePopover ({ start, lengthNote, style, onCreate, onMore, onCa
     <div class="cable-popover" style=${style} data-testid="cable-popover"
       onPointerDown=${(e) => e.stopPropagation()}>
       <div class="cable-popover-title">${start.from.name} to ${start.to.name}</div>
+      ${start.mismatch && html`<div class="warning-banner" data-testid="current-mismatch">${mismatchText(start.mismatch, start.from, start.to)}</div>`}
       <div class="cable-popover-kinds">
         ${kinds.map((k) => html`
           <label key=${k.value} class="radio-line">

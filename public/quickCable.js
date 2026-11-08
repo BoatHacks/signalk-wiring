@@ -4,12 +4,14 @@
 // buildCablePayload, so validation and circuit derivation are shared.
 
 import { kindByValue, defaultNegativeLanding, needsTerminal, terminalOptions, validateCable } from './cableForm.js'
-import { supplyOrder, defaultKind } from './schematic.js'
+import { supplyOrder } from './schematic.js'
+import { suggestKind } from './current.js'
 
 // The kinds the popover offers: the three DC ones, plus the suggested kind
 // when it is an AC or earth one.
-export function popoverKinds (suggested, allKinds) {
-  return allKinds.filter((k) => !k.more || k.value === suggested)
+// With a mismatch the plain AC kind is offered too, so either side can be chosen.
+export function popoverKinds (suggested, allKinds, mismatch = null) {
+  return allKinds.filter((k) => !k.more || k.value === suggested || (mismatch && k.value === 'ac'))
 }
 
 // For each conductor of the kind, the terminal to use at each end: the one
@@ -54,12 +56,13 @@ export function startValues ({ a, ta, b, tb, cables, defaults = {}, keepOrder = 
   const swapped = from.id !== a.id
   const fromTerminal = swapped ? tb : ta
   const toTerminal = swapped ? ta : tb
-  const kind = defaultKind(from, to)
+  const { kind, mismatch } = suggestKind(from, fromTerminal, to, toTerminal)
   return {
     from,
     to,
     fromTerminal: fromTerminal || '',
     toTerminal: toTerminal || '',
+    mismatch,
     values: {
       fromDeviceId: from.id,
       toDeviceId: to.id,
