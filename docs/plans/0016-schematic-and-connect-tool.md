@@ -122,7 +122,7 @@ the load check and everything else follow without changes.
 - [x] Schematics tab: list, create, rename, remove; canvas with pan and zoom;
       place existing devices; palette that creates devices; drag devices;
       Auto-arrange.
-- [ ] Drawing wires: drag between devices or terminals, the quick popover,
+- [x] Drawing wires: drag between devices or terminals, the quick popover,
       cable creation, derived circuit shown, highlighting, bend points,
       deleting a wire, removing a device from a page.
 - [ ] Floorplan connect tool with the shared popover.
@@ -172,3 +172,18 @@ None. The design is settled; the next step is the schema and store work.
 - The canvas view (pan, zoom, selection) is not stored. Pan is a drag on empty
   canvas, zoom is the wheel or the buttons. Two-finger touch pan and pinch are
   left to the follow-up.
+- A wire is started by dragging from a terminal dot or from the small connect
+  handle at the bottom centre of a device box. Dragging the box anywhere else
+  moves it, so moving and connecting never clash. The drop can land on a
+  terminal or anywhere on another device.
+- The quick popover creates the cable with the same payload builder as the
+  cable form. When a device has several terminals and the drag did not pick
+  one for a conductor, the popover refuses and points at "More...", which opens
+  the full cable form (prefilled) in place of the canvas.
+- After a cable is created the derived circuit is shown in a notice and in the
+  inspector. Selecting a wire highlights its circuit(s); a circuit can also be
+  picked from the toolbar.
+- Bend points: the selected wire shows a handle halfway along each segment;
+  dragging one adds a bend, dragging a bend moves it, double-click removes it,
+  and Straighten clears them. Bends are saved when the drag ends.
+- Where an off-page tab overlaps a wire, the tab wins the click.

@@ -4,10 +4,15 @@ import { newId } from './ids.js'
 import { TYPE_SUGGESTIONS } from './deviceTypes.js'
 import { roleLabel } from './roles.js'
 import * as G from './schematic.js'
+import { startValues } from './quickCable.js'
+import { CablePopover } from './cablePopover.js'
+import { circuitsOfCable, cableTitle, CONDUCTOR_LABELS } from './cableForm.js'
+import { useSettings, wireRunInitialValues } from './settings.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
 const MOVE_SLOP_PX = 3
+const DOUBLE_CLICK_MS = 400
 
 // Small local copies of the app.js helpers; importing app.js from here would
 // make the two modules import each other.
@@ -50,6 +55,17 @@ const PALETTE = [
 
 function shorten (text, max) {
   return text.length > max ? text.slice(0, max - 1) + '…' : text
+}
+
+// One line about a derived circuit: name, rating, voltage, AC or DC.
+function circuitLine (circuit) {
+  const d = circuit.derived
+  if (!d) return circuit.name
+  const bits = []
+  if (d.unprotected) bits.push('no protection')
+  else if (d.ratingA != null) bits.push(`${d.ratingA} A`)
+  if (d.voltage != null) bits.push(`${d.voltage} V ${d.ac ? 'AC' : 'DC'}`)
+  return bits.length ? `${circuit.name} (${bits.join(', ')})` : circuit.name
 }
 
 function isLive (record) {
@@ -157,6 +173,7 @@ function SchematicList ({ schematics, reload, onOpen, onError }) {
 function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, renderCableForm }) {
   const svgRef = useRef(null)
   const drag = useRef(null)
+  const lastBendDown = useRef(null)
   const [pos, setPos] = useState({})
   const [bends, setBends] = useState({})
   const [vb, setVb] = useState(null)
@@ -166,6 +183,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const [tabMenu, setTabMenu] = useState(null)
   const [addId, setAddId] = useState('')
   const [busy, setBusy] = useState(false)
+  const [preview, setPreview] = useState(null) // a wire being dragged: { a: {x,y}, b: {x,y}, targetId }
+  const [popover, setPopover] = useState(null) // { start, at }
+  const [moreForm, setMoreForm] = useState(null) // { cable?, prefill? }
+  const [notice, setNotice] = useState(null)
+  const settings = useSettings()
 
   const { devices, cables, circuits, schematics } = data
   const deviceById = new Map(devices.map((d) => [d.id, d]))
@@ -208,6 +230,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
   const stubs = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName })
 
+  const selectedWireId = selection && selection.type === 'wire' ? selection.id : null
   const view = vb || G.fitView(boxes)
   const fitNow = () => setVb(null)
 
@@ -324,6 +347,62 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     fitNow()
   }
 
+  // ---- Drawing wires ----
+  // Where a dragged wire would land: a terminal, else any other device box.
+  const wireTarget = (p, fromId) => {
+    const t = G.hitTerminal(boxes, p.x, p.y)
+    if (t && t.deviceId !== fromId) return t
+    const b = G.hitDevice(boxes, p.x, p.y)
+    return b && b.id !== fromId ? { deviceId: b.id, terminal: '', x: p.x, y: p.y } : null
+  }
+
+  const openPopover = (aId, ta, bId, tb, p) => {
+    const start = startValues({
+      a: deviceById.get(aId), ta, b: deviceById.get(bId), tb, cables: liveCables,
+      defaults: wireRunInitialValues(settings)
+    })
+    const at = toScreen(p)
+    const wrap = svgRef.current.parentElement.getBoundingClientRect()
+    setPopover({ start, at: { x: Math.max(4, Math.min(at.x, wrap.width - 250)), y: Math.max(4, Math.min(at.y, wrap.height - 260)) } })
+  }
+
+  const createCable = async (payload, id) => {
+    const cableId = id || newId()
+    await putResource('wiringWireRuns', cableId, payload)
+    const fresh = await fetchList('wiringCircuits')
+    const mine = circuitsOfCable(cableId, fresh)
+    setNotice(mine.length === 0
+      ? 'Cable created. It is not part of a circuit yet.'
+      : `Cable created. ${mine.map(({ circuit, via }) => circuitLine(circuit) + (via === 'return' ? ' (negative return)' : '')).join('; ')}`)
+    setPopover(null)
+    setMoreForm(null)
+    setSelection({ type: 'wire', id: cableId })
+    await reload()
+  }
+
+  const deleteWire = async (cable) => {
+    const label = cableTitle(cable, new Map(devices.map((d) => [d.id, d.name])))
+    if (!window.confirm(`Remove the cable "${label}"? It is marked removed and stays in the record, and the circuit updates.`)) return
+    try {
+      await deleteResource('wiringWireRuns', cable.id)
+      const next = { ...bends }
+      delete next[cable.id]
+      setBends(next)
+      setSelection(null)
+      setNotice('Cable removed.')
+      onError(null)
+      await reload()
+      if (bends[cable.id]) await save(pos, next)
+    } catch (err) { onError(err.message) }
+  }
+
+  const straighten = async (id) => {
+    const next = { ...bends }
+    delete next[id]
+    setBends(next)
+    await save(pos, next)
+  }
+
   // ---- Pointer handling ----
   const onPointerDown = (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return
@@ -331,8 +410,44 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     setTabMenu(null)
     const tab = stubs.find((s) => p.x >= s.tab.x && p.x <= s.tab.x + s.tab.w && p.y >= s.tab.y && p.y <= s.tab.y + s.tab.h)
     if (tab) { setTabMenu({ stub: tab }); return }
-    const device = G.hitDevice(boxes, p.x, p.y)
     try { svgRef.current.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointers cannot be captured */ }
+    // Bend handles of the selected wire come first, since they sit on the wire.
+    const sel = selectedWireId && wires.find((w) => w.id === selectedWireId)
+    if (sel) {
+      const cur = bends[sel.id] || []
+      const bi = G.hitBend(cur, p.x, p.y)
+      if (bi >= 0) {
+        const now = Date.now()
+        const last = lastBendDown.current
+        lastBendDown.current = { wireId: sel.id, index: bi, t: now }
+        if (last && last.wireId === sel.id && last.index === bi && now - last.t < DOUBLE_CLICK_MS) {
+          const next = { ...bends, [sel.id]: cur.filter((_, i) => i !== bi) }
+          setBends(next)
+          save(pos, next)
+          lastBendDown.current = null
+          return
+        }
+        drag.current = { kind: 'bend', wireId: sel.id, index: bi, sx: e.clientX, sy: e.clientY, moved: false }
+        return
+      }
+      const mids = midHandles(sel.path)
+      const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
+      if (mi >= 0) {
+        const index = G.insertBendIndex(sel.path, cur, mids[mi].x, mids[mi].y)
+        const next = { ...bends, [sel.id]: [...cur.slice(0, index), { x: Math.round(mids[mi].x), y: Math.round(mids[mi].y) }, ...cur.slice(index)] }
+        setBends(next)
+        drag.current = { kind: 'bend', wireId: sel.id, index, sx: e.clientX, sy: e.clientY, moved: true, fresh: true }
+        return
+      }
+    }
+    const term = G.hitTerminal(boxes, p.x, p.y)
+    const handle = !term && boxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, b.y + b.h - p.y) <= 9)
+    if (term || handle) {
+      const id = term ? term.deviceId : handle.id
+      drag.current = { kind: 'wire', fromId: id, fromTerminal: term ? term.terminal : '', sx: e.clientX, sy: e.clientY, moved: false }
+      return
+    }
+    const device = G.hitDevice(boxes, p.x, p.y)
     if (device) {
       setSelection({ type: 'device', id: device.id })
       drag.current = { kind: 'move', id: device.id, dx: p.x - device.x, dy: p.y - device.y, sx: e.clientX, sy: e.clientY, moved: false }
@@ -351,6 +466,18 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     if (d.kind === 'move') {
       const p = toCanvas(e)
       setPos((cur) => ({ ...cur, [d.id]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
+    } else if (d.kind === 'bend') {
+      const p = toCanvas(e)
+      setBends((cur) => {
+        const list = [...(cur[d.wireId] || [])]
+        list[d.index] = { x: Math.round(p.x), y: Math.round(p.y) }
+        return { ...cur, [d.wireId]: list }
+      })
+    } else if (d.kind === 'wire') {
+      const p = toCanvas(e)
+      const target = wireTarget(p, d.fromId)
+      const fromBox = boxById.get(d.fromId)
+      setPreview({ a: G.anchorOf(fromBox, d.fromTerminal, p), b: target ? { x: target.x, y: target.y } : p, targetId: target ? target.deviceId : null })
     } else if (d.kind === 'pan') {
       const svg = svgRef.current
       const rect = svg.getBoundingClientRect()
@@ -364,6 +491,13 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     drag.current = null
     if (!d) return
     if (d.kind === 'move' && d.moved) save(pos, bends)
+    if (d.kind === 'bend' && d.moved) save(pos, bends)
+    if (d.kind === 'wire') {
+      setPreview(null)
+      const p = toCanvas(e)
+      const target = d.moved ? wireTarget(p, d.fromId) : null
+      if (target) openPopover(d.fromId, d.fromTerminal, target.deviceId, target.terminal || '', p)
+    }
     if (d.kind === 'pan' && !d.moved) setSelection(null)
   }
 
@@ -416,7 +550,21 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${pageCircuits.map((c) => html`<option value=${c.id} key=${c.id}>${c.name}</option>`)}
         </select>
       </div>
-      <div class="schematic-layout">
+      ${notice && html`<div class="meta schematic-notice" data-testid="notice">${notice}</div>`}
+      ${moreForm && html`
+        <div class="schematic-moreform">
+          ${renderCableForm({
+            cable: moreForm.cable,
+            prefill: moreForm.prefill,
+            devices,
+            cables,
+            circuits,
+            onDevicesChanged: reload,
+            onSaved: (payload, id) => createCable(payload, id),
+            onCancel: () => setMoreForm(null)
+          })}
+        </div>`}
+      <div class="schematic-layout" style=${moreForm ? 'display:none' : ''}>
         <aside class="schematic-palette">
           <h3>New device</h3>
           ${PALETTE.map((group) => html`
@@ -440,10 +588,18 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
               selected=${!!selection && selection.type === 'wire' && selection.id === w.id}
               dim=${dimming && !hl.cableIds.has(w.id)} lit=${dimming && hl.cableIds.has(w.id)} />`)}
             ${stubs.map((s) => html`<${StubShape} key=${s.cableId} stub=${s} />`)}
+            ${selectedWireId && html`<${BendHandles} wire=${wires.find((w) => w.id === selectedWireId)} bends=${bends[selectedWireId] || []} />`}
             ${boxes.map((b) => html`<${DeviceShape} key=${b.id} box=${b} device=${deviceById.get(b.id)}
               selected=${!!selection && selection.type === 'device' && selection.id === b.id}
+              target=${!!preview && preview.targetId === b.id}
               dim=${dimming && !hl.deviceIds.has(b.id)} lit=${dimming && hl.deviceIds.has(b.id)} />`)}
+            ${preview && html`<path class="sch-preview" d=${G.pathToD([preview.a, preview.b])} />`}
           </svg>
+          ${popover && html`<${CablePopover} start=${popover.start}
+            style=${`left:${popover.at.x}px;top:${popover.at.y}px`}
+            onCreate=${(payload) => createCable(payload)}
+            onMore=${(values) => { setMoreForm({ prefill: values }); setPopover(null) }}
+            onCancel=${() => setPopover(null)} />`}
           ${boxes.length === 0 && html`<div class="schematic-empty meta">Empty page. Add an existing device from the list above, or click or drag a type from the palette to make a new one.</div>`}
           ${renaming && renameAt && html`
             <input type="text" class="schematic-rename" data-testid="rename-input" autofocus
@@ -459,6 +615,16 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             onClose=${() => setTabMenu(null)} />`}
         </div>
       </div>
+      ${selectedWire && html`
+        <div class="schematic-inspector" data-testid="wire-inspector">
+          <strong>${cableTitle(selectedWire.cable, new Map(devices.map((d) => [d.id, d.name])))}</strong>
+          <span class="meta">${selectedWire.cable.conductors.length ? selectedWire.cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] || c.conductor).join(' + ') : 'Positive'}${selectedWire.cable.gauge != null ? ', ' + selectedWire.cable.gauge + ' ' + (selectedWire.cable.gaugeUnit || '') : ''}${selectedWire.cable.length != null ? ', ' + selectedWire.cable.length + ' ' + (selectedWire.cable.lengthUnit || '') : ''}</span>
+          <span class="meta" data-testid="wire-circuits">${wireCircuits.length ? wireCircuits.map(circuitLine).join('; ') : 'Not part of a circuit yet.'}</span>
+          <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.cable })}>Edit cable</button>
+          ${(bends[selectedWire.id] || []).length > 0 && html`<button type="button" class="link-btn" onClick=${() => straighten(selectedWire.id)}>Straighten</button>`}
+          <button type="button" class="link-btn" data-testid="delete-wire" onClick=${() => deleteWire(selectedWire.cable)}>Delete wire</button>
+          <span class="meta">Drag the dots to bend the wire; double-click a dot to remove it.</span>
+        </div>`}
       ${selectedDevice && html`
         <div class="schematic-inspector" data-testid="inspector">
           <strong>${selectedDevice.name}</strong>
@@ -473,13 +639,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
 // ---- Shapes ----------------------------------------------------------------
 
-function DeviceShape ({ box, device, selected, dim, lit }) {
-  const cls = `sch-device role-${device.role || 'consumer'}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
+function DeviceShape ({ box, device, selected, dim, lit, target }) {
+  const cls = `sch-device role-${device.role || 'consumer'}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
   return html`
     <g class=${cls} transform="translate(${box.x}, ${box.y})" data-device=${box.id}>
       <rect width=${box.w} height=${box.h} rx="5" class="sch-device-box" />
       <text x=${box.w / 2} y="14" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
       ${device.type && html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type">${shorten(device.type, 26)}</text>`}
+      <circle cx=${box.w / 2} cy=${box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>
       ${box.terminals.map((t) => html`
         <g key=${t.name}>
           <circle cx=${t.x - box.x} cy=${t.y - box.y} r="4" class="sch-terminal c-${t.conductor}" />
@@ -528,5 +695,24 @@ function TabMenu ({ stub, pages, deviceName, placed, onGo, onAdd, onClose }) {
       ${!placed && html`<button type="button" data-testid="tab-add" onClick=${onAdd}>Add to this page</button>`}
       <button type="button" class="link-btn" onClick=${onClose}>Close</button>
     </div>
+  `
+}
+
+// The points halfway along each segment of a path, where a drag adds a bend.
+function midHandles (path) {
+  const out = []
+  for (let i = 1; i < path.length; i++) {
+    out.push({ x: (path[i - 1].x + path[i].x) / 2, y: (path[i - 1].y + path[i].y) / 2 })
+  }
+  return out
+}
+
+function BendHandles ({ wire, bends }) {
+  if (!wire) return null
+  return html`
+    <g class="sch-bend-handles">
+      ${midHandles(wire.path).map((m, i) => html`<circle key=${'m' + i} cx=${m.x} cy=${m.y} r="5" class="sch-bend-add" />`)}
+      ${bends.map((b, i) => html`<circle key=${'b' + i} cx=${b.x} cy=${b.y} r="6" class="sch-bend" data-testid="bend" />`)}
+    </g>
   `
 }

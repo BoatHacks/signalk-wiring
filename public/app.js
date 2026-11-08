@@ -853,7 +853,7 @@ function DevicePicker ({ label, hint, value, onChange, devices, onCreated, defau
 
 // The cable form (a wire run): DC first, two devices, and the circuit it
 // belongs to is worked out from the cables, never entered.
-function CableForm ({ cable, devices, cables, circuits, onDevicesChanged, onSaved, onCancel }) {
+function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChanged, onSaved, onCancel }) {
   const settings = useSettings()
   const [values, setValues] = useState(() => cable
     ? cableToValues(cable)
@@ -872,10 +872,11 @@ function CableForm ({ cable, devices, cables, circuits, onDevicesChanged, onSave
         cableLabel: '',
         zoneId: '',
         tags: [],
-        notes: ''
+        notes: '',
+        ...(prefill || {})
       })
   const [tagsText, setTagsText] = useState(() => tagsToText(cable ? cable.tags : []))
-  const [more, setMore] = useState(() => cable ? kindByValue(values.kind).more : false)
+  const [more, setMore] = useState(() => (cable || prefill) ? kindByValue(values.kind).more : false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const set = (key, value) => setValues((v) => ({ ...v, [key]: value }))
@@ -1778,7 +1779,7 @@ function App () {
       `}
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
-      ${tab === 'schematics' && html`<${SchematicsTab} />`}
+      ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${(props) => html`<${CableForm} ...${props} />`} />`}
       ${tab === 'floorplan' && html`<${FloorplanTab} />`}
       </main>
     </div>
