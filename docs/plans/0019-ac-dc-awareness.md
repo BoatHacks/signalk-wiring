@@ -226,7 +226,7 @@ These are open to change in review:
       full cable form suggestion and warning.
 - [ ] Line style: AC pattern and markers on the schematic, the AC pattern on the
       floorplan, thinner paired second conductor, night theme check.
-- [ ] Conduit warning: `conduitCurrentMix`, the conduit page, the Conduits list
+- [x] Conduit warning: `conduitCurrentMix`, the conduit page, the Conduits list
       and the assign notice, with tests.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #5.
 

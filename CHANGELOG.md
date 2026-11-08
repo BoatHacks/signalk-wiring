@@ -20,6 +20,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   is AC and the other DC, a warning names both devices and asks for the type to
   be chosen; nothing is blocked. In the full form a kind you pick yourself
   stays, and editing a cable never changes its kind.
+- A warning on conduits that hold both AC and DC cables: a banner on the
+  conduit page naming the cables under AC and DC, a "Mixes AC and DC" line in
+  the Conduits list, and the same notice after adding the cable that creates the
+  mix. Adding is never blocked.
 
 ### Changed
 

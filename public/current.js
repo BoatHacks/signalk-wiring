@@ -82,3 +82,32 @@ export function mismatchText (mismatch, from, to) {
   const label = (c) => (c === 'ac' ? 'AC' : 'DC')
   return `${from.name} is ${label(mismatch.fromCurrent)}, ${to.name} is ${label(mismatch.toCurrent)}. Choose the cable type.`
 }
+
+// The live (not removed) cables of a conduit sorted by current: `ac` and `dc`
+// hold the cables, `mixed` is true only when both are non-empty. Cables that
+// are neither (signal only, earth only) count as neither.
+export function conduitCurrentMix (cables) {
+  const ac = []
+  const dc = []
+  for (const cable of cables || []) {
+    if (!cable || cable.status === 'removed') continue
+    const current = cableCurrent(cable)
+    if (current === 'ac') ac.push(cable)
+    else if (current === 'dc') dc.push(cable)
+  }
+  return { ac, dc, mixed: ac.length > 0 && dc.length > 0 }
+}
+
+// The warning for a mixed conduit: a heading, the advice and the cables named
+// under AC and under DC, as lines joined with newlines. Null when not mixed.
+// `cableName` turns a cable into the name shown.
+export function conduitMixText (mix, cableName) {
+  if (!mix || !mix.mixed) return null
+  const names = (list) => list.map((c) => cableName(c)).join(', ')
+  return [
+    'This conduit holds AC and DC cables.',
+    'Keep them in separate conduits where you can. If they share one, the AC must be in its own sheathed cable, all insulation rated for the highest voltage present, and ideally a partition.',
+    `AC: ${names(mix.ac)}`,
+    `DC: ${names(mix.dc)}`
+  ].join('\n')
+}

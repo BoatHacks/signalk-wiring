@@ -23,7 +23,7 @@ import { PortBlocks } from './ports.js'
 import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
 import { typeOptions, isCriticalType, typeCurrent } from './deviceTypes.js'
-import { suggestKind, mismatchText } from './current.js'
+import { suggestKind, mismatchText, conduitCurrentMix, conduitMixText } from './current.js'
 import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
@@ -1999,6 +1999,9 @@ function ConduitsList ({ onSelect }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const { loading, error, items } = useResourceList('wiringConduits', reloadKey)
+  const { items: allRuns } = useResourceList('wiringWireRuns', reloadKey)
+  const runById = new Map(allRuns.map((r) => [r.id, r]))
+  const mixesOf = (conduit) => conduitCurrentMix((conduit.cableIds || []).map((id) => runById.get(id)).filter(Boolean)).mixed
   const [filter, setFilter] = useState({})
   const { suggested, used } = kindOptions(items.map((c) => c.kind), '')
   const visible = filterConduits(items, filter)
@@ -2050,6 +2053,7 @@ function ConduitsList ({ onSelect }) {
           <div>
             <div>${conduit.name}</div>
             <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` – ${conduit.zone}` : ''} – ${(conduit.cableIds || []).length === 1 ? '1 cable' : `${(conduit.cableIds || []).length} cables`}</div>
+            ${mixesOf(conduit) && html`<div class="meta" style="color: var(--warn)" data-testid="conduit-mix-line">Mixes AC and DC</div>`}
           </div>
           <${StatusBadge} status=${conduit.status} />
         </div>
@@ -2066,6 +2070,7 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
   const [editing, setEditing] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [toAdd, setToAdd] = useState('')
+  const [mixNotice, setMixNotice] = useState(null)
   const { items: runs } = useResourceList('wiringWireRuns', reloadKey)
   const { items: devices } = useResourceList('wiringDevices')
   const { items: conduits } = useResourceList('wiringConduits', reloadKey)
@@ -2098,12 +2103,17 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
     onBack() // leaving the page first: it would otherwise finish the message below
     undo.offer({ message: `Conduit "${name}" removed.`, onUndo: () => restoreResource('wiringConduits', conduitId) })
   }
-  const setCables = (cableIds) => guard(() => putResource('wiringConduits', conduitId, { cableIds }))
+  const setCables = (cableIds) => { setMixNotice(null); return guard(() => putResource('wiringConduits', conduitId, { cableIds })) }
   const addCable = () => {
     if (!toAdd) return
     const id = toAdd
     setToAdd('')
-    return setCables([...(conduit.cableIds || []), id])
+    const cableIds = [...(conduit.cableIds || []), id]
+    const mix = conduitCurrentMix(cableIds.map((cid) => runById.get(cid)).filter(Boolean))
+    // Never blocks: the cable is added, and the warning is shown after.
+    const done = setCables(cableIds)
+    setMixNotice(mix.mixed ? conduitMixText(mix, (r) => cableName(r, deviceNameById)) : null)
+    return done
   }
   // Moves this conduit one place earlier or later in the cable's own list.
   const moveForCable = (run, delta) =>
@@ -2111,6 +2121,7 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
 
   const cables = conduit ? (conduit.cableIds || []).map((id) => runById.get(id)).filter(Boolean) : []
   const candidates = conduit ? addableCables(runs, conduit) : []
+  const mixText = conduitMixText(conduitCurrentMix(cables), (r) => cableName(r, deviceNameById))
 
   return html`
     <div>
@@ -2144,7 +2155,9 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
         </div>
       `}
       ${showHistory && html`<${ChangeLog} kind="conduit" id=${conduitId} />`}
+      ${mixNotice && html`<div class="warning-banner" style="white-space: pre-line" data-testid="conduit-mix-notice"><strong>Added, but check this:</strong> ${mixNotice}</div>`}
       ${conduit && html`
+        ${mixText && !mixNotice && html`<div class="warning-banner" style="white-space: pre-line" data-testid="conduit-mix-warning">${mixText}</div>`}
         <h3>Cables in this conduit (${cables.length})</h3>
         ${cables.length === 0 && html`<div class="empty-state">No cables assigned yet.</div>`}
         ${cables.map((run) => {
