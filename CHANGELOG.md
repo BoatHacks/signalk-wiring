@@ -5,6 +5,24 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-08
+
+### Changed
+
+- Schematic router rules are strict: no line runs on top of or hides another,
+  including wires between the same two devices (separate lanes), and lines
+  cross only with a bridge. Parallel lines keep at least two line widths of
+  clear space.
+- Wires and stubs leave a port straight out of the device for a visible
+  length, so every connection shows at its port.
+- The line from a device to an off-page tab is routed like any wire and never
+  overlaps other lines, tabs or devices.
+
+### Added
+
+- Off-page "to" tabs can be dragged; the position is saved on the page
+  (database migration 13) and kept by Auto-arrange and Tidy.
+
 ## [0.6.0] - 2026-11-08
 
 ### Added
