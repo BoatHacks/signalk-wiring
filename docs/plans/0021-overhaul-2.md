@@ -263,7 +263,7 @@ These are open to change in review:
 - [x] Loading text: the entities and the scan test.
 - [x] Gauge: `gauge.js`, the three forms, display everywhere, the zero gauge
       audit, store rule, CSV import.
-- [ ] Ratings: migration 12, store, resource, device form and page.
+- [x] Ratings: migration 12, store, resource, device form and page.
 - [ ] Permanent deletion: the three purge methods, routes, UI, show removed on
       conduits and schematics.
 - [ ] Version: the version route, the update hint, the pack-time stamping.

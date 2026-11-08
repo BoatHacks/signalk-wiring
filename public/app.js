@@ -32,7 +32,7 @@ import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
-import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset } from './deviceFields.js'
+import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import {
   CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
@@ -410,7 +410,8 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
   return html`
     <form class="inline-form" onSubmit=${submit}>
       <${ErrorBanner} message=${error} />
-      ${fields.filter((f) => !f.showWhen || f.showWhen(values, context)).map((f) => html`
+      ${fields.filter((f) => !f.showWhen || f.showWhen(values, context)).map((f, i, shown) => html`
+        ${f.group && (i === 0 || shown[i - 1].group !== f.group) && html`<div class="form-group-title" key=${'group-' + f.group}>${f.group}</div>`}
         <label class="form-field" key=${f.key}>
           <span>${f.label}${f.required ? ' *' : ''}</span>
           ${f.type === 'terminals' && html`
@@ -764,6 +765,20 @@ const DEVICE_FIELDS = [
     showWhen: (values, ctx) => deviceFieldVisible('tripRatingA', values, ctx),
     hint: 'Read it off the fuse or breaker. A device with a rating protects the circuit it feeds; a switch or bus bar has none and only passes it through.'
   },
+  ...[
+    ['ratedAcA', 'AC rated current (A)', 'Printed on the device, for the AC side. Leave empty for a DC device.'],
+    ['ratedAcV', 'AC rated voltage (V)', null],
+    ['ratedDcA', 'DC rated current (A)', 'Printed on the device, for the DC side. Leave empty for an AC device. The trip rating above is separate: it is what makes a device protect a circuit.'],
+    ['ratedDcV', 'DC rated voltage (V)', null]
+  ].map(([key, label, hint]) => ({
+    key,
+    label,
+    type: 'number',
+    clearable: true,
+    group: 'Ratings',
+    showWhen: (values, ctx) => deviceFieldVisible(key, values, ctx),
+    ...(hint ? { hint } : {})
+  })),
   {
     key: 'chemistry',
     label: 'Chemistry',
@@ -2129,6 +2144,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
           <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
           ${device.tripRatingA && html`<div class="meta">Trip rating: ${device.tripRatingA} A</div>`}
+          ${ratedLine(device) && html`<div class="meta" data-testid="rated-line">${ratedLine(device)}</div>`}
           ${device.nominalVoltage && html`<div class="meta">Nominal voltage: ${device.nominalVoltage} V</div>`}
           ${device.powerFactor && html`<div class="meta">Power factor: ${device.powerFactor}</div>`}
           ${(device.terminals || []).length > 0 && html`

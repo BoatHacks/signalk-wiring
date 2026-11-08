@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { deviceFieldVisible, acConsumerIds, cleanTerminals, portNames, describeTerminal } from '../public/deviceFields.js'
+import { deviceFieldVisible, acConsumerIds, cleanTerminals, portNames, describeTerminal, ratedLine } from '../public/deviceFields.js'
 
 test('trip rating shows on distribution devices, nominal voltage on batteries and sources', () => {
   assert.equal(deviceFieldVisible('tripRatingA', { role: 'distribution' }), true)
@@ -66,4 +66,21 @@ test('standard terminals: DC-DC converter and MultiPlus, none for a plain type',
   assert.equal(new Set(multi.terminals.map((t) => t.name)).size, multi.terminals.length)
   assert.equal(terminalPreset('Bilge pump'), null)
   assert.equal(terminalPreset('MPPT charger').terminals[2].port, 'Battery')
+})
+
+test('rating fields show for the distribution role only', () => {
+  for (const key of ['ratedAcA', 'ratedAcV', 'ratedDcA', 'ratedDcV']) {
+    assert.equal(deviceFieldVisible(key, { role: 'distribution' }), true)
+    for (const role of ['consumer', 'storage', 'source', 'converter']) {
+      assert.equal(deviceFieldVisible(key, { role }), false)
+    }
+  }
+})
+
+test('ratedLine writes the AC and DC ratings as one line', () => {
+  assert.equal(ratedLine({ ratedDcA: 300, ratedDcV: 58 }), 'Rated: DC 300 A, 58 V')
+  assert.equal(ratedLine({ ratedAcA: 16, ratedAcV: 230, ratedDcA: 16, ratedDcV: 48 }), 'Rated: AC 16 A, 230 V; DC 16 A, 48 V')
+  assert.equal(ratedLine({ ratedAcV: 230 }), 'Rated: AC 230 V')
+  assert.equal(ratedLine({ ratedDcA: null, ratedAcA: null }), null)
+  assert.equal(ratedLine({}), null)
 })

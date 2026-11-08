@@ -10,6 +10,8 @@ export function deviceFieldVisible (key, values, context = {}) {
   const role = values.role || 'consumer'
   switch (key) {
     case 'tripRatingA': return role === 'distribution'
+    // Ratings are printed on switches, breakers, fuses, bus bars and panels.
+    case 'ratedAcA': case 'ratedAcV': case 'ratedDcA': case 'ratedDcV': return role === 'distribution'
     case 'nominalVoltage': return role === 'storage' || role === 'source'
     case 'powerFactor':
       return role === 'consumer' && Boolean(context.deviceId) &&
@@ -89,4 +91,21 @@ const TERMINAL_PRESETS = [
 export function terminalPreset (type) {
   const found = TERMINAL_PRESETS.find((p) => p.match.test(String(type || '')))
   return found ? { label: found.label, terminals: found.terminals().map((t) => ({ ...t, voltage: '' })) } : null
+}
+
+// The rated values of a device as one line, "Rated: DC 300 A, 58 V" or
+// "Rated: AC 16 A, 230 V; DC 16 A, 48 V", or null when none is set. A side
+// with only a current or only a voltage shows just that value.
+export function ratedLine (device) {
+  const side = (label, amps, volts) => {
+    const parts = []
+    if (amps != null) parts.push(`${amps} A`)
+    if (volts != null) parts.push(`${volts} V`)
+    return parts.length ? `${label} ${parts.join(', ')}` : null
+  }
+  const sides = [
+    side('AC', device.ratedAcA, device.ratedAcV),
+    side('DC', device.ratedDcA, device.ratedDcV)
+  ].filter(Boolean)
+  return sides.length ? `Rated: ${sides.join('; ')}` : null
 }

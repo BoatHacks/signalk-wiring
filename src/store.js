@@ -30,7 +30,7 @@ const TABLES = {
     table: 'devices',
     columns: [
       'id', 'name', 'type', 'role', 'icon_attachment_id', 'zone', 'rated_power_w', 'signalk_path',
-      'trip_rating_a', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
+      'trip_rating_a', 'rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
       'meter_path', 'meter_unit', 'chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
       'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path',
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
@@ -418,9 +418,20 @@ const MIGRATIONS = [
         if (purpose) setPurpose.run(purpose, d.id)
       }
     }
+  },
+  {
+    version: 12,
+    description: 'plan 0021: devices + AC and DC rated current and voltage',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      for (const col of ['rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v']) {
+        if (!has('devices', col)) db.exec(`ALTER TABLE devices ADD COLUMN ${col} REAL`)
+      }
+    }
   }
 ]
 
+const RATING_COLUMNS = ['rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v']
 const METER_UNITS = ['A', 'W']
 const RUN_METHODS = ['delta', 'watch']
 const RUN_STATUSES = ['running', 'done', 'failed', 'cancelled']
@@ -548,7 +559,7 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
-    if (kind === 'device') row = this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(row)), true))
+    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(row)), true)))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null); row = this._checkGauge(row, null) }
     if (kind === 'schematic') row.name = this._checkSchematicName(row.name)
@@ -919,7 +930,7 @@ class Store {
     if (kind === 'schematic') return this._updateSchematic(id, patch, existing)
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(patch)), false))
+    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(patch)), false)))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
     if (kind === 'wireRun') {
@@ -1070,6 +1081,22 @@ class Store {
        ON CONFLICT (wire_run_id, conduit_id) DO UPDATE SET position = excluded.position`
     )
     conduitIds.forEach((id, i) => upsert.run(wireRunId, id, i))
+  }
+
+  // Plan 0021 ratings: the AC and DC rated current and voltage printed on a
+  // switch, breaker or fuse. Optional, positive numbers, an empty value clears
+  // them. They are documentation only and never change how circuits derive.
+  _checkRatings (fields) {
+    let out = fields
+    for (const key of RATING_COLUMNS) {
+      if (!(key in out)) continue
+      const v = out[key]
+      if (v === null || v === undefined || v === '') { out = { ...out, [key]: null }; continue }
+      const n = typeof v === 'string' ? Number(v) : v
+      if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) throw new Error(`${key} must be a positive number`)
+      out = { ...out, [key]: n }
+    }
+    return out
   }
 
   // Plan 0020 battery fields. Lists and the date are checked, numbers must be
