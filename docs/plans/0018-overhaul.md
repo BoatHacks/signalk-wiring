@@ -248,3 +248,41 @@ because they use it.
 
 None. The three open design questions (URL scope, undo, canvas delete) are
 settled above; the defaults list is for review.
+
+## Decisions made during implementation
+
+Implemented and released as 0.4.5. Where the plan left a detail open, or the
+code asked for something different:
+
+- **Routing.** The floorplan route carries one plan id, which selects that
+  plan in its own view (top or side); the other view keeps its local choice.
+  A detail page reports "not found" on any HTTP error status from its fetch,
+  not only 404.
+- **Undo.** `useUndo()` allows one open offer at a time; a new offer first ends
+  the previous one (running its `onExpire`). Every navigation through `App`
+  flushes the open offer, so changing tab finishes a pending purge. Clicking a
+  plain anchor link does not flush it, because the removal flow depends on the
+  order of hash changes; the timer still expires normally.
+- **Lists.** Search also matches the names of the two end devices of a cable or
+  circuit. "Show removed" off by default hides removed records that used to
+  always show, which is a visible change (in the CHANGELOG under Changed).
+- **Duplicate.** The device Duplicate button sits on the device page, since the
+  devices list has no row actions. A device copy leaves out its measured
+  calibration; a cable copy leaves out length and notes as well as route and
+  attachments.
+- **Load summary.** It shows only a count of devices, no names, so there is no
+  device link there; only the circuit link was added.
+- **Schematic canvas.** `public/canvasRemoval.js` holds the shared
+  remove, Undo and purge helper. If the purge fails after the view is gone, the
+  notice shows as a page toast. Keys are also ignored while the cable form is
+  open.
+- **Floorplan.** Continuation links go only to plans of the same view (side
+  plans show every point, so linking to them would be noise); when no plan shows
+  the next point the stub says "continues, not shown on any plan" with no link.
+  The route-end click is skipped for a run that follows its conduits with no
+  own route, so it does not replace that with a straight line. "Remove
+  placement" has no confirm and offers Undo. Selecting a device and selecting a
+  waypoint clear each other, so the Delete key is unambiguous.
+- **Not verified.** Real touch input, phone camera capture, the red night theme
+  of the new elements, the real server's status for a missing record, and the
+  permanent delete with a real admin login (a mock purge was used).
