@@ -71,6 +71,8 @@ to someone else doesn't depend on the current owner being present.
   another and the cable and its circuit exist; wires are right-angled and
   coloured by conductor, can be bent, and cables to devices on other pages
   show as labelled stubs. Auto-arrange lays a page out from the supply.
+  Delete removes the selected wire (with an Undo message; it is deleted for
+  good when the message ends) or takes a selected device off the page only.
 - A **connect tool** on the floorplan: pick the From and To devices, click
   the route, and the cable gets the drawn route and its measured length.
 - A **floorplan view**: upload a top-down or side drawing (SVG, PNG,
@@ -78,7 +80,10 @@ to someone else doesn't depend on the current owner being present.
   then place devices by clicking (one 3D position shown in both views)
   and draw wire run routes over it. The route's measured length is
   offered next to the recorded length. Several deck plans are supported,
-  each with an optional height range.
+  each with an optional height range. A route that leaves a plan shows
+  "continues on <plan>" as a link to the next one, clicking the To device
+  ends a route drawn for a wire run, and a wire run can be deleted from the
+  route panel (with Undo).
 - **Device icons**: mark one of a device's images as its icon, shown in
   device lists, on circuit diagrams and on floorplan markers.
 - **Photo/file attachments** per cable, device or conduit (JPEG/PNG/WebP/HEIC/

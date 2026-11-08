@@ -5,8 +5,13 @@ import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
   moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
   metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints, conduitRoutePoints, unroutedCables,
-  conduitMembers, effectiveCableRoute
+  conduitMembers, effectiveCableRoute, cornerArrows, routeEndAction, routeWithEnd, continuationMarks,
+  escapeStep, deleteStep
 } from './floorplan.js'
+import { hashForState } from './router.js'
+import { isTypingTarget } from './schematic.js'
+import { useUndo } from './undoBar.js'
+import { offerCableUndo } from './canvasRemoval.js'
 import { cableName } from './conduits.js'
 import {
   initialConnect, connectPickDevice, connectAddWaypoint, connectUndo, connectCanFinish, connectHint, connectionFields
@@ -365,6 +370,13 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const members = ctx.members
   const runLines = []
   const waypointMarkers = []
+  // Where a route leaves this plan, a stub with a link to the plan it continues on.
+  const continuations = []
+  const addContinuations = (ownerId, points) => {
+    for (const m of continuationMarks(points, plan, data.plans || [])) {
+      continuations.push({ ...m, key: `${ownerId}:${m.index}:${m.dir.join(',')}` })
+    }
+  }
   if (cal) {
     for (const run of data.wireRuns) {
       if (run.status === 'removed') continue
@@ -384,6 +396,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       for (const seg of visibleSegments(pxs)) {
         runLines.push({ id: run.id, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' ') })
       }
+      addContinuations(run.id, points)
       if (isActive && ownRoute) {
         const offset = points.length - (run.route || []).length
         points.slice(offset).forEach((p, i) => {
@@ -418,6 +431,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       for (const seg of visibleSegments(pxs)) {
         conduitLines.push({ id: conduit.id, active: isActive, points: seg.map((p) => p.join(',')).join(' ') })
       }
+      addContinuations(conduit.id, points)
       if (isActive) {
         points.forEach((p, i) => {
           const px = pxFor('waypoint', i, p)
@@ -468,6 +482,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         </div>
       `}
 
+      <div class="floorplan-canvas-wrap">
       <svg ref=${svgRef} class="floorplan-canvas ${calibrating || ctx.tool !== 'select' ? 'crosshair' : ''}"
         viewBox="${box.x} ${box.y} ${box.width} ${box.height}"
         onWheel=${onWheel} onPointerDown=${onPointerDown} onPointerMove=${onPointerMove}
@@ -520,21 +535,24 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           `
         })}
 
-        ${cal && !calibrating && (() => {
-          const o = metersToPx(cal, 0, 0)
-          const xEnd = metersToPx(cal, 3, 0)
-          const bEnd = metersToPx(cal, 0, 1.5)
-          const head = (from, to) => arrowHeadPoints(from, to, unit * 2.2).map((p) => p.join(',')).join(' ')
+        ${continuations.map((m) => {
+          const end = [m.at[0] + m.dir[0] * unit * 5, m.at[1] + m.dir[1] * unit * 5]
+          const head = arrowHeadPoints(m.at, end, unit * 1.6).map((p) => p.join(',')).join(' ')
+          const left = m.dir[0] < 0
+          const label = m.target ? `continues on ${m.target.name}` : 'continues, not shown on any plan'
+          const text = html`<text x=${end[0] + (left ? -unit * 0.6 : unit * 0.6)} y=${end[1] + unit * 0.5}
+            text-anchor=${left ? 'end' : 'start'} font-size=${unit * 1.6} class="continuation-label">${label}</text>`
           return html`
-            <g class="axis-indicator">
-              <line x1=${o[0]} y1=${o[1]} x2=${xEnd[0]} y2=${xEnd[1]} stroke-width=${unit * 0.5} />
-              <polygon points=${head(o, xEnd)}><title>Toward the bow</title></polygon>
-              <line x1=${o[0]} y1=${o[1]} x2=${bEnd[0]} y2=${bEnd[1]} stroke-width=${unit * 0.5} />
-              <polygon points=${head(o, bEnd)}><title>${plan.view === 'top' ? 'Positive y' : 'Up'}</title></polygon>
-              <circle cx=${o[0]} cy=${o[1]} r=${unit * 0.9} />
+            <g key=${m.key} class="continuation" data-testid="continuation" onPointerDown=${(e) => e.stopPropagation()}>
+              <line x1=${m.at[0]} y1=${m.at[1]} x2=${end[0]} y2=${end[1]} stroke-width=${unit * 0.4} />
+              <polygon points=${head} />
+              ${m.target
+                ? html`<a href=${hashForState({ tab: 'floorplan', id: m.target.id })} data-testid="continuation-link"
+                    onClick=${(e) => { e.preventDefault(); actions.goToPlan(m.target.id) }}>${text}</a>`
+                : text}
             </g>
           `
-        })()}
+        })}
         ${clicks.length === 2 && html`
           <line x1=${clicks[0][0]} y1=${clicks[0][1]} x2=${clicks[1][0]} y2=${clicks[1][1]}
             class="calibration-line" stroke-width=${unit / 2} />
@@ -543,11 +561,30 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           <circle key=${'c' + i} cx=${x} cy=${y} r=${unit} class="calibration-point" />
         `)}
       </svg>
+      ${cal && !calibrating && (() => {
+        const arrows = cornerArrows(cal, 18)
+        const poly = (a) => a.head.map((p) => p.join(',')).join(' ')
+        const labelAt = (a) => [a.to[0] * 1.5, a.to[1] * 1.5 + 2.5]
+        const bow = labelAt(arrows.bow)
+        const up = labelAt(arrows.up)
+        return html`
+          <svg class="axis-corner" viewBox="-36 -36 72 72" data-testid="axis-corner">
+            <line x1="0" y1="0" x2=${arrows.bow.to[0]} y2=${arrows.bow.to[1]} stroke-width="2" />
+            <polygon points=${poly(arrows.bow)}><title>Toward the bow</title></polygon>
+            <line x1="0" y1="0" x2=${arrows.up.to[0]} y2=${arrows.up.to[1]} stroke-width="2" />
+            <polygon points=${poly(arrows.up)}><title>${plan.view === 'top' ? 'Positive y' : 'Up'}</title></polygon>
+            <circle cx="0" cy="0" r="3" />
+            <text x=${bow[0]} y=${bow[1]} text-anchor="middle">bow</text>
+            <text x=${up[0]} y=${up[1]} text-anchor="middle">${plan.view === 'top' ? '+y' : 'up'}</text>
+          </svg>
+        `
+      })()}
+      </div>
     </div>
   `
 }
 
-function Select ({ label, value, onChange, options }) {
+function Select({ label, value, onChange, options }) {
   return html`
     <label class="form-field compact"><span>${label}</span>
       <select value=${value || ''} onChange=${(e) => onChange(e.target.value || null)}>
@@ -595,6 +632,10 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
   const [runId, setRunId] = useState(null)
   const [conduitId, setConduitId] = useState(null)
   const [waypointIndex, setWaypointIndex] = useState(null)
+  const [hint, setHint] = useState(null) // a short hint in the route panel
+  const undo = useUndo()
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])
 
   const active = plans.filter((p) => p.status !== 'removed' && p.filename)
   const topPlans = active.filter((p) => p.view === 'top')
@@ -627,11 +668,12 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
   const members = circuit
     ? circuitMembers(circuit, wireRuns)
     : (conduit ? conduitMembers(conduit, wireRuns) : null)
-  const data = { devices, wireRuns, devicesById, circuitsById, conduits, conduitsById }
+  const data = { devices, wireRuns, devicesById, circuitsById, conduits, conduitsById, plans: active }
 
+  // Runs a write, then reloads; resolves to false when it failed (and says so).
   const guard = async (fn) => {
     setError(null)
-    try { await fn(); reload() } catch (err) { setError(err.message) }
+    try { await fn(); reload(); return true } catch (err) { setError(err.message); return false }
   }
 
   const saveDevicePosition = (device, view, a, b) => guard(() => {
@@ -639,9 +681,35 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
     return putResource('wiringDevices', device.id, { ...device, posX: pos.x, posY: pos.y, posZ: pos.z })
   })
 
+  // The device becomes "not placed" on every plan; it is never removed from
+  // the record. Undo puts the old position back.
   const clearPlacement = (device) => {
-    if (!window.confirm(`Remove "${device.name}" from the plans? Its recorded position is cleared in every view.`)) return
-    guard(() => putResource('wiringDevices', device.id, { ...device, posX: null, posY: null, posZ: null }))
+    const old = { posX: device.posX ?? null, posY: device.posY ?? null, posZ: device.posZ ?? null }
+    guard(() => putResource('wiringDevices', device.id, { ...device, posX: null, posY: null, posZ: null })).then((ok) => {
+      if (ok) undo.offer({
+        message: `"${device.name}" is no longer placed on the plans.`,
+        onUndo: async () => { await putResource('wiringDevices', device.id, old); reload() }
+      })
+    })
+  }
+
+  // No confirm dialog: the cable is marked removed, an Undo message is offered,
+  // and when the window ends the cable is deleted for good.
+  const removeRun = async (cable) => {
+    const title = cableName(cable, new Map(devices.map((d) => [d.id, d.name])))
+    try {
+      await deleteResource('wiringWireRuns', cable.id)
+    } catch (err) { setError(err.message); return }
+    setError(null)
+    setRunId(null)
+    setWaypointIndex(null)
+    setHint(null)
+    reload()
+    offerCableUndo({
+      undo, cable, title,
+      notice: (message) => { if (!mounted.current) return false; setError(message); return true },
+      restore: async () => { await putResource('wiringWireRuns', cable.id, { status: 'active' }); reload() }
+    })
   }
 
   // The route being drawn belongs to the selected conduit, else the selected
@@ -677,7 +745,30 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
       if (!window.confirm(`Remove the plan "${plan.name}"? Placed devices and routes are kept; the plan stays in the record as removed.`)) return
       guard(() => deleteResource('wiringPlans', plan.id))
     },
-    selectDevice: (id) => { setDeviceId(id); setError(null) },
+    selectDevice: (id) => {
+      setError(null)
+      // With a wire run chosen in the Draw route tool, its To device ends the route.
+      if (tool === 'route' && run && !conduit && effectiveCableRoute(run, null, devicesById, conduitsById).source !== 'conduits') {
+        const act = routeEndAction(run, id, devicesById)
+        if (act.kind === 'hint') { setHint(act.message); return }
+        if (act.kind === 'finish') {
+          setHint(null)
+          setWaypointIndex(null)
+          saveRoute(routeWithEnd(run.route, act.point)).then((ok) => {
+            if (ok) { setRunId(null); setTool('select') }
+          })
+          return
+        }
+      }
+      setHint(null)
+      setDeviceId(id)
+      setWaypointIndex(null)
+    },
+    goToPlan: (id) => {
+      const target = plans.find((p) => p.id === id)
+      if (target && target.view === 'side') pickSide(id)
+      else pickTop(id)
+    },
     liveToggle: async (id) => {
       setError(null)
       try { await live.toggle(id) } catch (err) { setError(err.message) }
@@ -690,7 +781,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
         : (connectFrom ? devicePosition(connectFrom) : null)
       setConnect((s) => connectAddWaypoint(s, waypointFromClick(previous, view, a, b)))
     },
-    selectWaypoint: (index) => setWaypointIndex(index),
+    selectWaypoint: (index) => { setWaypointIndex(index); if (tool !== 'place') setDeviceId(null) },
     clearSelection: () => { setDeviceId(null); setWaypointIndex(null) }
   }
 
@@ -751,6 +842,39 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
     length: metersToLengthUnit(measured.length, run.lengthUnit),
     lengthUnit: run.lengthUnit || 'm'
   }))
+
+  useEffect(() => { setHint(null) }, [runId, tool])
+
+  // Keyboard: attached for as long as the tab is mounted, so it is gone when
+  // another tab is shown. Re-attached every render to see the latest state.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return
+      if (e.key === 'Escape') {
+        const step = escapeStep({
+          tool, finishing, waypointIndex, runId, conduitId, deviceId,
+          connectActive: !!(connect.fromId || connect.toId || connect.waypoints.length)
+        })
+        if (!step) return
+        e.preventDefault()
+        if (step === 'close-finish') setFinishing(null)
+        else if (step === 'reset-connect') resetConnect()
+        else if (step === 'clear-waypoint') setWaypointIndex(null)
+        else if (step === 'clear-route-target') { setRunId(null); setConduitId(null); setHint(null) }
+        else if (step === 'clear-device') setDeviceId(null)
+        else chooseTool('select')
+      } else if (e.key === 'Delete') {
+        const selected = deviceId ? devicesById.get(deviceId) : null
+        const step = deleteStep({ waypointIndex, deviceId, devicePlaced: !!selected && isPlaced(selected) })
+        if (!step) return
+        e.preventDefault()
+        if (step === 'delete-waypoint') deleteWaypoint()
+        else clearPlacement(selected)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  })
 
   const circuitOptions = circuits.filter((c) => c.status !== 'removed').map((c) => ({ value: c.id, label: c.name }))
   const deviceOptions = liveDevices.map((d) => ({
@@ -866,13 +990,16 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
             </div>
           `}
           ${run && html`
-            <div class="route-info">
+            <div class="route-info" data-testid="route-panel">
+              <span>Cable: <strong>${cableName(run, deviceNameById)}</strong></span>
+              ${hint && html`<span class="route-hint" data-testid="route-hint" role="status">${hint}</span>`}
               <span>Measured route: <strong>${measured.length.toFixed(2)} m</strong>${measured.complete ? '' : ' (incomplete, some heights unset or a conduit has no route)'}${effective.source === 'conduits' ? ', following its conduits' : ''}</span>
               <span>Recorded length: ${run.length != null ? `${run.length} ${run.lengthUnit || ''}` : 'none'}</span>
               <div class="row-actions">
                 <button disabled=${measured.length === 0} onClick=${useMeasured}>Use measured length</button>
                 <button disabled=${!(run.route || []).length} onClick=${undoLast}>Undo last point</button>
                 <button disabled=${waypointIndex === null} onClick=${deleteWaypoint}>Delete selected point</button>
+                <button data-testid="delete-run" onClick=${() => removeRun(run)}>Delete wire run</button>
               </div>
             </div>
           `}

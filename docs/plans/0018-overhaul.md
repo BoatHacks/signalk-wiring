@@ -219,7 +219,7 @@ because they use it.
 - [x] Load summary explanations and legend.
 - [x] Schematic canvas: delete wire with Undo and permanent deletion when the
       window ends, take a device off the page with Undo, keyboard handling.
-- [ ] Floorplan: smaller corner arrows, route tool ending on the To device,
+- [x] Floorplan: smaller corner arrows, route tool ending on the To device,
       continuation marks, cable removal with Undo, keyboard handling.
 - [ ] SPEC.md (§3.2: the undo exception, and that a cable removed on the
       canvas is deleted when the undo window ends), ARCHITECTURE.md, README,

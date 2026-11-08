@@ -33,6 +33,19 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   is on it). Undo puts the record back to active and the change log records it
   as "restored (undo)". This is the one allowed way from removed back to
   active.
+- Schematic: Delete wire (button or Delete key) removes the cable with no
+  confirmation, shows Undo, and deletes it for good when the message ends;
+  "Remove from this page" (or the Delete key) takes a device off the page only,
+  with Undo. Escape cancels a drag, popover or selection.
+- Floorplan: the bow and up arrows are smaller and fixed in the top right
+  corner of the plan view, not drawn at the origin.
+- Floorplan: in the Draw route tool, clicking a wire run's To device ends the
+  route there; clicking another device shows "This route ends at <device>".
+- Floorplan: continuation marks, a stub labelled "continues on <plan>" that
+  links to the plan where a route goes on after leaving a deck's height range.
+- Floorplan: "Delete wire run" in the route panel (Undo, then deleted for good).
+- Floorplan: Escape cancels the tool or route; Delete removes the selected
+  waypoint or clears a device's placement (with Undo).
 - Hash routing. The address bar follows the tab and the open circuit, device,
   conduit, schematic or floorplan plan, so reload, back, forward and pasted
   links keep the view. An unknown tab falls back to Circuits, and an unknown

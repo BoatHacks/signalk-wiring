@@ -417,7 +417,22 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   views), draw wire run routes over it (click to add, drag to adjust),
   and read the measured cable length, offered as a suggestion next to
   the recorded length and never applied automatically. Selecting a
-  circuit highlights its devices and routes in both views.
+  circuit highlights its devices and routes in both views. The bow and up
+  arrows sit in a small fixed box in the top right corner of each plan view
+  and do not scale with the zoom. In the Draw route tool, with a wire run
+  chosen, clicking its To device appends that device's position as the last
+  route point and finishes the route (the run selection clears and the tool
+  goes idle); clicking any other device only shows "This route ends at <To
+  device>". Where a route leaves a plan (a point outside the plan's height
+  range) a short stub with an arrow and the link "continues on <plan name>"
+  is drawn at the last visible point; the link switches to the first plan,
+  by name, of the same view that shows the next point, and points without a
+  height never produce one. The route panel names the chosen cable and has a
+  "Delete wire run" button that works like deleting a wire on the schematic
+  (no confirmation, Undo, permanent delete when the Undo window ends); there
+  is no key shortcut for it. Escape cancels the in-progress route or the
+  current tool; Delete removes the selected waypoint or clears the selected
+  device's placement (it becomes "not placed", with Undo).
 - Conduits on the floorplan: draw a conduit's route like a cable's (it is
   drawn as a thick line under the cables), and see its cables highlighted.
   A cable with no route of its own is drawn along its conduits and its
@@ -446,7 +461,15 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   a wire or picking a circuit highlights the devices and wires of that
   circuit. A cable whose other end is not on the page is a short stub with a
   tab "to <device>": clicking it jumps to a page that shows that device or
-  adds it here. Deleting a wire removes the cable after a confirmation.
+  adds it here. Deleting a wire (the button or the Delete or Backspace key)
+  removes the cable at once with no confirmation: an "Undo" message is shown
+  and, when it ends without a click, the cable is deleted permanently with
+  its history and attachments (admin only; if that fails the cable stays
+  removed and a notice says so). "Remove from this page" or the Delete key
+  on a selected device only takes it off this page, with Undo; the device
+  itself is never removed from a canvas. Escape cancels a drag, a popover or
+  the selection; keys are ignored while an input, select or textarea has
+  focus.
 - A Connect tool on the floorplan, beside Select, Place device and Draw
   route: click the From device (supply side), then the To device, then the
   route waypoints on the plan, then Finish. The same popover asks the

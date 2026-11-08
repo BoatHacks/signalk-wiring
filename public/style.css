@@ -579,9 +579,16 @@ main:has(.floorplan-pair) { max-width: none; }
   filter: invert(1) sepia(1) saturate(4) hue-rotate(-50deg) brightness(0.6);
 }
 
-.axis-indicator line { stroke: var(--link); stroke-linecap: round; }
-.axis-indicator circle, .axis-indicator polygon { fill: var(--link); }
-.axis-indicator polygon { stroke: none; }
+.floorplan-canvas-wrap { position: relative; }
+/* The bow and up markers: a small fixed box in the top right corner of the plan view, not scaled with the zoom. */
+.axis-corner { position: absolute; top: 18px; right: 6px; width: 64px; height: 64px; pointer-events: none; }
+.axis-corner line { stroke: var(--link); stroke-linecap: round; }
+.axis-corner circle, .axis-corner polygon { fill: var(--link); stroke: none; }
+.axis-corner text { fill: var(--link); font-size: 9px; font-weight: 600; }
+.continuation line { stroke: var(--danger); stroke-linecap: round; }
+.continuation polygon { fill: var(--danger); stroke: none; }
+.continuation-label { fill: var(--link); text-decoration: underline; cursor: pointer; paint-order: stroke; stroke: var(--surface); stroke-width: 0.4px; }
+.route-hint { font-weight: 600; color: var(--warn); }
 
 .list-item-main { display: flex; align-items: center; gap: 10px; }
 .device-icon { width: 32px; height: 32px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-alt); }

@@ -340,3 +340,123 @@ export function effectiveCableRoute (wireRun, circuit, devicesById, conduitsById
   const measured = routeLength(points)
   return { source: 'conduits', points, length: measured.length, complete: complete && measured.complete }
 }
+
+// ---- Corner arrows ---------------------------------------------------------
+
+// The bow and up markers drawn in a fixed corner of the plan view, in a small
+// box of its own (not in drawing space, so they do not scale with the zoom).
+// Both start at [0, 0] and point the way the plan's x axis and second axis
+// run on screen; `length` is their reach in the same units as the box.
+export function cornerArrows (cal, length, headSize = length * 0.35) {
+  const o = metersToPx(cal, 0, 0)
+  const unitVector = (a, b) => {
+    const p = metersToPx(cal, a, b)
+    const dx = p[0] - o[0]
+    const dy = p[1] - o[1]
+    const len = Math.hypot(dx, dy) || 1
+    return [dx / len, dy / len]
+  }
+  const build = (v) => {
+    const to = [roundTo(v[0] * length), roundTo(v[1] * length)]
+    return { to, head: arrowHeadPoints([0, 0], to, headSize) }
+  }
+  return { bow: build(unitVector(1, 0)), up: build(unitVector(0, 1)) }
+}
+
+function roundTo (value) {
+  return Math.round(value * 1000) / 1000
+}
+
+// ---- Route tool: ending on the To device -----------------------------------
+
+// What a click on a device marker does while a wire run is chosen in the Draw
+// route tool. A cable with no To device keeps the old behaviour (select the
+// device). Clicking the To device ends the route there; any other device only
+// shows a hint.
+//   { kind: 'select' } | { kind: 'hint', message } | { kind: 'finish', point }
+export function routeEndAction (wireRun, clickedDeviceId, devicesById) {
+  if (!wireRun.toDeviceId) return { kind: 'select' }
+  const to = devicesById.get(wireRun.toDeviceId)
+  const name = to?.name || 'the To device'
+  if (!to || to.status === 'removed') return { kind: 'select' }
+  if (!isPlaced(to)) {
+    return { kind: 'hint', message: `This route ends at ${name}, which is not placed on a plan yet. Place it first, then click it to finish the route.` }
+  }
+  if (clickedDeviceId !== to.id) return { kind: 'hint', message: `This route ends at ${name}` }
+  return { kind: 'finish', point: positionOf(to) }
+}
+
+// The route with the To device's position as its last point (not repeated if
+// the route already ends exactly there).
+export function routeWithEnd (route, point) {
+  const points = (route || []).map(pointOf)
+  const last = points[points.length - 1]
+  if (last && AXES.every((axis) => last[axis] === (point[axis] ?? null))) return points
+  return [...points, pointOf(point)]
+}
+
+// ---- Continuation marks ----------------------------------------------------
+
+// Where a route leaves a plan. For each pair of neighbouring points where one
+// is shown on this plan and the other is hidden by the deck range, a mark sits
+// at the shown point: a short stub toward the hidden one, labelled with the
+// first plan (by name) of the same view that shows the hidden point. Points
+// without a height are shown everywhere, so they never start a mark; neither
+// does a point with no position in this plan's view (it cannot be drawn).
+//   points  the route as 3D points
+//   plan    the plan being drawn (needs a calibration)
+//   plans   all plans that can be linked to
+// Returns [{ index, at: [px, py], dir: [ux, uy], target: { id, name } | null }].
+export function continuationMarks (points, plan, plans) {
+  const cal = plan.calibration
+  if (!cal) return []
+  const marks = []
+  const pxOf = (p) => pointToPx(cal, plan.view, p)
+  const shown = (p) => planShowsPoint(plan, p) && pxOf(p) !== null
+  const hidden = (p) => !planShowsPoint(plan, p)
+  const others = plans
+    .filter((p) => p.id !== plan.id && p.view === plan.view && p.calibration && p.status !== 'removed')
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  const add = (index, neighbour) => {
+    const a = points[index]
+    const at = pxOf(a)
+    const b = points[neighbour]
+    const bPx = pxOf(b)
+    let dir = [1, 0]
+    if (bPx) {
+      const dx = bPx[0] - at[0]
+      const dy = bPx[1] - at[1]
+      const len = Math.hypot(dx, dy)
+      if (len > 0) dir = [dx / len, dy / len]
+    }
+    const target = others.find((p) => planShowsPoint(p, b) && pointToPx(p.calibration, p.view, b) !== null)
+    marks.push({ index, at, dir, target: target ? { id: target.id, name: target.name } : null })
+  }
+  for (let i = 0; i < points.length; i++) {
+    if (!shown(points[i])) continue
+    if (i > 0 && hidden(points[i - 1])) add(i, i - 1)
+    if (i < points.length - 1 && hidden(points[i + 1])) add(i, i + 1)
+  }
+  return marks
+}
+
+// ---- Keyboard --------------------------------------------------------------
+
+// What Escape does on the floorplan, one step per press, innermost first.
+// state: { tool, finishing, connectActive, waypointIndex, runId, conduitId, deviceId }
+export function escapeStep (state) {
+  if (state.finishing) return 'close-finish'
+  if (state.tool === 'connect' && state.connectActive) return 'reset-connect'
+  if (state.waypointIndex != null) return 'clear-waypoint'
+  if (state.tool === 'route' && (state.runId || state.conduitId)) return 'clear-route-target'
+  if (state.tool === 'select') return state.deviceId ? 'clear-device' : null
+  return 'tool-select'
+}
+
+// What Delete does: the selected waypoint, else the selected device's placement.
+// state: { waypointIndex, deviceId, devicePlaced }
+export function deleteStep (state) {
+  if (state.waypointIndex != null) return 'delete-waypoint'
+  if (state.deviceId && state.devicePlaced) return 'clear-placement'
+  return null
+}
