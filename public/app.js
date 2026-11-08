@@ -22,7 +22,8 @@ import { deviceBox, endTerminals } from './schematic.js'
 import { PortBlocks } from './ports.js'
 import { useSettings, colorPlaceholder } from './settings.js'
 import { useTheme } from './theme.js'
-import { typeOptions, isCriticalType } from './deviceTypes.js'
+import { typeOptions, isCriticalType, typeCurrent } from './deviceTypes.js'
+import { suggestKind, mismatchText } from './current.js'
 import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
@@ -59,13 +60,25 @@ async function fetchResource (type, id) {
   return res.json()
 }
 
+// A refused write (400) says why in its body, for example a cable that mixes
+// AC and DC; anything else keeps the generic text.
+async function refusalMessage (res, fallback) {
+  if (res.status !== 400 || typeof res.json !== 'function') return fallback
+  try {
+    const body = await res.json()
+    return body && typeof body.message === 'string' && body.message ? body.message : fallback
+  } catch (_) {
+    return fallback
+  }
+}
+
 async function putResource (type, id, value) {
   const res = await fetch(`${RESOURCE_BASE}/${type}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(value)
   })
-  if (!res.ok) throw new Error(apiErrorMessage(res.status))
+  if (!res.ok) throw new Error(await refusalMessage(res, apiErrorMessage(res.status)))
 }
 
 // Undo of a removal: a plain write of status active, which the store logs as a restore.
@@ -406,7 +419,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
           `}
           ${f.type === 'select' && html`
             <select value=${values[f.key]} onChange=${(e) => setField(f.key, e.target.value)}>
-              ${!f.noBlank && html`<option value="">—</option>`}
+              ${!f.noBlank && html`<option value="">${f.blankLabel || '—'}</option>`}
               ${f.options.map((o) => {
                 const option = typeof o === 'string' ? { value: o, label: o } : o
                 return html`<option value=${option.value} key=${option.value}>${option.label}</option>`
@@ -667,6 +680,13 @@ function criticalDefault (key, value, values, touched) {
   return extra
 }
 
+// For a new device the Current select follows the type until the user sets it.
+function newDeviceDefaults (key, value, values, touched) {
+  const extra = criticalDefault(key, value, values, touched) || {}
+  if (key === 'type' && !touched.current) extra.current = typeCurrent(value) || ''
+  return extra
+}
+
 const DEVICE_FIELDS = [
   { key: 'name', label: 'Name', type: 'text', required: true },
   {
@@ -695,6 +715,15 @@ const DEVICE_FIELDS = [
     label: 'Tags',
     type: 'tags',
     hint: 'Anything else you want to group by, such as an audio zone. Free text, several allowed, separated by commas.'
+  },
+  {
+    key: 'current',
+    label: 'Current',
+    type: 'select',
+    options: [{ value: 'ac', label: 'AC' }, { value: 'dc', label: 'DC' }],
+    blankLabel: 'Either',
+    clearable: true,
+    hint: 'Whether this device is AC or DC. Cables drawn to it get the matching cable type, and a warning appears when the two ends disagree. Starts from the type (a battery is DC, a shore power inlet AC). Leave it on Either for converters and for devices whose terminals say it already.'
   },
   { key: 'ratedPowerW', label: 'Rated power (W)', type: 'number' },
   {
@@ -1021,7 +1050,25 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
   const [more, setMore] = useState(() => (cable || prefill) ? kindByValue(values.kind).more : false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  // Until the user picks a kind themselves, the kind follows the two ends. A
+  // cable being edited, or one that arrives with a kind chosen elsewhere
+  // (the quick popover), keeps its kind.
+  const [kindTouched, setKindTouched] = useState(Boolean(cable || (prefill && prefill.kind)))
   const set = (key, value) => setValues((v) => ({ ...v, [key]: value }))
+  const setKind = (kind) => { setKindTouched(true); set('kind', kind) }
+  const setEnd = (key, id) => {
+    const next = { ...values, [key]: id }
+    if (!kindTouched && !cable) {
+      const from = devices.find((d) => d.id === next.fromDeviceId)
+      const to = devices.find((d) => d.id === next.toDeviceId)
+      if (from && to) {
+        const { kind } = suggestKind(from, '', to, '')
+        if (kindByValue(kind).more) setMore(true)
+        next.kind = kind
+      }
+    }
+    setValues(next)
+  }
   const setColor = (conductor, value) => setValues((v) => ({ ...v, colors: { ...v.colors, [conductor]: value } }))
   const setTerminal = (conductor, end, value) => setValues((v) => ({
     ...v,
@@ -1035,6 +1082,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
     ? values.existingConductors.map((c) => c.conductor)
     : kindByValue(values.kind).conductors
   const askTerminals = needsTerminal(fromDevice) || needsTerminal(toDevice)
+  const mismatch = !cable && fromDevice && toDevice ? suggestKind(fromDevice, '', toDevice, '').mismatch : null
   const kinds = CABLE_KINDS.filter((k) => !k.more || more || k.value === values.kind)
 
   const submit = async (e) => {
@@ -1058,20 +1106,21 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
     <form class="inline-form cable-form" onSubmit=${submit}>
       <${ErrorBanner} message=${error} />
       <${DevicePicker} label="From (supply side)" required=${true} value=${values.fromDeviceId}
-        onChange=${(v) => set('fromDeviceId', v)} devices=${devices} onCreated=${onDevicesChanged}
+        onChange=${(v) => setEnd('fromDeviceId', v)} devices=${devices} onCreated=${onDevicesChanged}
         defaultRole="distribution"
         hint="The side the power comes from: a fuse, breaker, bus bar, battery or source." />
       <${DevicePicker} label="To (load side)" required=${true} value=${values.toDeviceId}
-        onChange=${(v) => set('toDeviceId', v)} devices=${devices} onCreated=${onDevicesChanged}
+        onChange=${(v) => setEnd('toDeviceId', v)} devices=${devices} onCreated=${onDevicesChanged}
         defaultRole="consumer" />
 
       <div class="form-field">
         <span>Conductors</span>
+        ${mismatch && html`<div class="warning-banner" data-testid="current-mismatch">${mismatchText(mismatch, fromDevice, toDevice)}</div>`}
         <div class="kind-choice">
           ${kinds.map((k) => html`
             <label key=${k.value} class="radio-chip">
               <input type="radio" name="cable-kind" value=${k.value} checked=${values.kind === k.value}
-                onChange=${() => set('kind', k.value)} />
+                onChange=${() => setKind(k.value)} />
               ${k.label}
             </label>
           `)}
@@ -1767,7 +1816,7 @@ function DevicesList ({ onSelect }) {
       ${showForm && html`
         <${Form}
           fields=${DEVICE_FIELDS}
-          onFieldChange=${criticalDefault}
+          onFieldChange=${newDeviceDefaults}
           onSubmit=${createDevice}
           onCancel=${() => setShowForm(false)}
           submitLabel="Create device"
@@ -1886,6 +1935,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
               <ul>${device.terminals.map((t, i) => html`<li key=${i}>${describeTerminal(t)}</li>`)}</ul>
             </div>
           `}
+          ${device.current && html`<div class="meta">Current: ${device.current === 'ac' ? 'AC' : 'DC'}</div>`}
           ${device.signalkPath && html`
             <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>
           `}

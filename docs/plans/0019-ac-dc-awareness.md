@@ -222,7 +222,7 @@ These are open to change in review:
 - [x] The rule: `endCurrent` and `suggestKind`, used by the quick popover with
       the mismatch warning, and the rejection of mixed AC and DC cables in the
       store, the forms and the import, with tests.
-- [ ] Device form and page: the Current select and the type-driven default; the
+- [x] Device form and page: the Current select and the type-driven default; the
       full cable form suggestion and warning.
 - [ ] Line style: AC pattern and markers on the schematic, the AC pattern on the
       floorplan, thinner paired second conductor, night theme check.

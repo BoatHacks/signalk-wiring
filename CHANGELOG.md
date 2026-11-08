@@ -5,6 +5,31 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- A "Current" field on every device (Either, AC or DC), with presets from the
+  type: shore power inlets, generators and isolation transformers are AC;
+  solar panels, alternators, wind and hydro generators, fuel cells, batteries,
+  shunts, battery isolators and battery switches are DC. New devices get the
+  preset (also through the API and CSV import), and a one-time migration fills
+  existing devices from their type and terminals without touching a mark set
+  by hand.
+- The cable type is chosen from the two ends. A new cable in the quick popover
+  or the full cable form starts as AC (line, neutral, earth) or DC from the
+  dropped-on terminal, the device mark or the device terminals. When one end
+  is AC and the other DC, a warning names both devices and asks for the type to
+  be chosen; nothing is blocked. In the full form a kind you pick yourself
+  stays, and editing a cable never changes its kind.
+
+### Changed
+
+- A cable can no longer carry both AC and DC conductors (line or neutral with
+  positive or negative). The store refuses it with "A cable cannot carry both
+  AC and DC" on create and update, through the API, the forms and the quick
+  popover. Earth and signal conductors are allowed in either kind. A CSV import
+  reports a refused cable as an error row and carries on with the others, and
+  the forms now show the reason a write was refused.
+
 ## [0.4.5] - 2026-11-08
 
 ### Added

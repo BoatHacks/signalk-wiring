@@ -310,3 +310,35 @@ test('importToStore writes devices first, cables with their conductor, and names
     globalThis.fetch = realFetch
   }
 })
+
+test('importToStore reports a cable the store refuses as an error row and carries on', async () => {
+  const { importToStore } = await import('../public/import.js')
+  const realFetch = globalThis.fetch
+  const written = []
+  globalThis.fetch = async (url, init) => {
+    const u = String(url).replace('/signalk/v2/api/resources/', '')
+    if (!init) return { ok: true, status: 200, json: async () => ({}) }
+    const body = JSON.parse(init.body)
+    if (u.startsWith('wiringWireRuns/') && body.conductors[0].conductor === 'neutral') {
+      return { ok: false, status: 400, json: async () => ({ state: 'FAILED', message: 'A cable cannot carry both AC and DC' }) }
+    }
+    written.push(u)
+    return { ok: true, status: 200 }
+  }
+  try {
+    const headers = ['Device', 'Fuse', 'Cond']
+    const rows = [
+      { Device: 'Lamp', Fuse: '2', Cond: 'positive' },
+      { Device: 'Socket', Fuse: '2', Cond: 'neutral' },
+      { Device: 'Pump', Fuse: '2', Cond: 'negative' }
+    ]
+    const mapping = { Device: 'deviceName', Fuse: 'circuitGroupKey', Cond: 'wireConductor' }
+    const result = await importToStore(groupImportRows(rows, headers, mapping, [], []))
+    assert.equal(result.rowErrors.length, 1)
+    assert.match(result.rowErrors[0].message, /A cable cannot carry both AC and DC/)
+    assert.equal(result.wireRunsCreated, written.filter((u) => u.startsWith('wiringWireRuns/')).length)
+    assert.ok(result.wireRunsCreated >= 1)
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})

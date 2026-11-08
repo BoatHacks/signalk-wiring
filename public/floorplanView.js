@@ -41,13 +41,25 @@ async function fetchList (type) {
   return Object.values(await res.json())
 }
 
+// A refused write (400) says why in its body, for example a cable that mixes
+// AC and DC; anything else keeps the generic text.
+async function refusalMessage (res, fallback) {
+  if (res.status !== 400 || typeof res.json !== 'function') return fallback
+  try {
+    const body = await res.json()
+    return body && typeof body.message === 'string' && body.message ? body.message : fallback
+  } catch (_) {
+    return fallback
+  }
+}
+
 async function putResource (type, id, value) {
   const res = await fetch(`${RESOURCE_BASE}/${type}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(value)
   })
-  if (!res.ok) throw new Error(failureMessage(res.status))
+  if (!res.ok) throw new Error(await refusalMessage(res, failureMessage(res.status)))
 }
 
 async function deleteResource (type, id) {

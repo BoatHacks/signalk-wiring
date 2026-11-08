@@ -352,9 +352,16 @@ async function putResource (type, id, value) {
     body: JSON.stringify(value)
   })
   if (!res.ok) {
-    const message = res.status === 401
+    let message = res.status === 401
       ? 'You need to be logged into the SignalK admin UI to do this.'
       : `Import failed (server responded ${res.status}).`
+    // A refused write says why (for example a cable that mixes AC and DC).
+    if (res.status === 400 && typeof res.json === 'function') {
+      try {
+        const body = await res.json()
+        if (body && typeof body.message === 'string' && body.message) message = body.message
+      } catch (_) { /* keep the generic message */ }
+    }
     throw new Error(message)
   }
 }
@@ -399,24 +406,34 @@ export async function importToStore (grouped) {
     devicesCreated++
   }
 
+  // A cable the store refuses (it mixes AC and DC, say) is reported as an
+  // error row and does not stop the others.
   const cableIdByTempId = new Map()
+  const rowErrors = []
+  const deviceName = (tempId) => (grouped.devices.find((d) => d.tempId === tempId) || {}).name || '?'
   for (const wr of grouped.wireRuns) {
     const id = newId()
-    await putResource('wiringWireRuns', id, {
-      fromDeviceId: deviceIdByTempId.get(wr.fromTempId),
-      toDeviceId: deviceIdByTempId.get(wr.toTempId),
-      conductors: [{ conductor: wr.conductor || 'positive', color: wr.color || undefined }],
-      gauge: wr.gauge ?? undefined,
-      gaugeUnit: wr.gaugeUnit || undefined,
-      length: wr.length ?? undefined,
-      lengthUnit: wr.lengthUnit || undefined,
-      zone: wr.zone || undefined,
-      cableLabel: wr.cableLabel || undefined,
-      switchRef: wr.switchRef || undefined,
-      conduitIds: (wr.conduitTempIds || []).length > 0
-        ? wr.conduitTempIds.map((t) => conduitIdByTempId.get(t))
-        : undefined
-    })
+    try {
+      await putResource('wiringWireRuns', id, {
+        fromDeviceId: deviceIdByTempId.get(wr.fromTempId),
+        toDeviceId: deviceIdByTempId.get(wr.toTempId),
+        conductors: [{ conductor: wr.conductor || 'positive', color: wr.color || undefined }],
+        gauge: wr.gauge ?? undefined,
+        gaugeUnit: wr.gaugeUnit || undefined,
+        length: wr.length ?? undefined,
+        lengthUnit: wr.lengthUnit || undefined,
+        zone: wr.zone || undefined,
+        cableLabel: wr.cableLabel || undefined,
+        switchRef: wr.switchRef || undefined,
+        conduitIds: (wr.conduitTempIds || []).length > 0
+          ? wr.conduitTempIds.map((t) => conduitIdByTempId.get(t))
+          : undefined
+      })
+    } catch (err) {
+      if (/logged into/.test(err.message)) throw err
+      rowErrors.push({ cable: `${deviceName(wr.fromTempId)} to ${deviceName(wr.toTempId)}`, message: err.message })
+      continue
+    }
     cableIdByTempId.set(wr.tempId, id)
   }
 
@@ -425,7 +442,8 @@ export async function importToStore (grouped) {
   return {
     devicesCreated,
     devicesMatched: grouped.devices.length - devicesCreated,
-    wireRunsCreated: grouped.wireRuns.length,
+    wireRunsCreated: cableIdByTempId.size,
+    rowErrors,
     unconnectedRows: grouped.unconnectedRows || 0,
     circuitsNamed,
     conduitsCreated
@@ -618,6 +636,12 @@ export function CsvImport ({ onDone, onCancel }) {
             Imported ${result.devicesCreated} new device(s) (${result.devicesMatched} matched by name)
             and ${result.wireRunsCreated} cable(s)${result.circuitsNamed > 0 ? `; ${result.circuitsNamed} circuit(s) named from the circuit column` : ''}${result.conduitsCreated > 0 ? `, plus ${result.conduitsCreated} new conduit(s)` : ''}.
           </p>
+          ${(result.rowErrors || []).length > 0 && html`
+            <div class="error-banner" data-testid="import-row-errors">
+              ${result.rowErrors.length} cable(s) were not imported:
+              <ul>${result.rowErrors.map((e, i) => html`<li key=${i}>${e.cable}: ${e.message}</li>`)}</ul>
+            </div>
+          `}
           <div class="form-actions">
             <button type="button" onClick=${onDone}>Done</button>
           </div>
