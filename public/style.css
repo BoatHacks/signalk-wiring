@@ -657,20 +657,26 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-terminal.c-neutral { fill: var(--wire-neutral); }
 .sch-terminal.c-earth { fill: var(--wire-earth); }
 
-.sch-wire-line, .sch-wire-over, .sch-stub-line { fill: none; stroke-width: 3; stroke-linejoin: round; }
+.sch-wire-line, .sch-wire-pair, .sch-stub-line { fill: none; stroke-width: 3; stroke-linejoin: round; }
 .sch-wire-line.c-positive { stroke: var(--wire-positive); }
 .sch-wire-line.c-negative { stroke: var(--wire-negative); }
 .sch-wire-line.c-line { stroke: var(--wire-line); }
 .sch-wire-line.c-neutral { stroke: var(--wire-neutral); }
 .sch-wire-line.c-earth { stroke: var(--wire-earth); }
 .sch-wire-line.c-signal { stroke: var(--wire-signal); }
-.sch-wire-over { stroke-dasharray: 6 6; }
-.sch-wire-over.c-positive { stroke: var(--wire-positive); }
-.sch-wire-over.c-negative { stroke: var(--wire-negative); }
-.sch-wire-over.c-line { stroke: var(--wire-line); }
-.sch-wire-over.c-neutral { stroke: var(--wire-neutral); }
-.sch-wire-over.c-earth { stroke: var(--wire-earth); }
+.sch-wire-pair { stroke-width: 1.5; }
+.sch-wire-pair.c-positive { stroke: var(--wire-positive); }
+.sch-wire-pair.c-negative { stroke: var(--wire-negative); }
+.sch-wire-pair.c-line { stroke: var(--wire-line); }
+.sch-wire-pair.c-neutral { stroke: var(--wire-neutral); }
+.sch-wire-pair.c-earth { stroke: var(--wire-earth); }
+.sch-wire-pair.c-signal { stroke: var(--wire-signal); }
+.sch-marker-pad { fill: var(--surface); fill-opacity: 0.9; stroke: none; }
+.sch-marker-stroke { fill: none; stroke: var(--text-muted-strong); stroke-width: 1.4; stroke-linecap: round; }
+.sch-wire-marker { pointer-events: none; }
+.schematic-legend { margin: 2px 0 6px; }
 .sch-wire.selected .sch-wire-line { stroke-width: 5; }
+.sch-wire.selected .sch-wire-pair, .sch-wire.lit .sch-wire-pair { stroke-width: 2.5; }
 .sch-wire.dim { opacity: 0.2; }
 .sch-wire.lit .sch-wire-line { stroke-width: 5; }
 .sch-stub-line { stroke: var(--text-muted-strong); stroke-dasharray: 4 3; stroke-width: 2; }

@@ -24,8 +24,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   conduit page naming the cables under AC and DC, a "Mixes AC and DC" line in
   the Conduits list, and the same notice after adding the cable that creates the
   mix. Adding is never blocked.
+- AC and DC line style. On the schematic, AC cables are drawn with a long-dash
+  pattern and DC cables solid, and each wire carries a marker at its midpoint
+  (a tilde for AC, the DC symbol for DC). Floorplan routes use the same dash
+  pattern for AC, without markers. A small legend under the schematic toolbar
+  explains it.
 
 ### Changed
+
+- The second conductor of a cable on the schematic is now a thin paired line
+  drawn beside the first instead of a dashed overlay, so dashes mean AC only.
 
 - A cable can no longer carry both AC and DC conductors (line or neutral with
   positive or negative). The store refuses it with "A cable cannot carry both

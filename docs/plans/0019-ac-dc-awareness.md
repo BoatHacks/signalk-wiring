@@ -224,7 +224,7 @@ These are open to change in review:
       store, the forms and the import, with tests.
 - [x] Device form and page: the Current select and the type-driven default; the
       full cable form suggestion and warning.
-- [ ] Line style: AC pattern and markers on the schematic, the AC pattern on the
+- [x] Line style: AC pattern and markers on the schematic, the AC pattern on the
       floorplan, thinner paired second conductor, night theme check.
 - [x] Conduit warning: `conduitCurrentMix`, the conduit page, the Conduits list
       and the assign notice, with tests.

@@ -1,3 +1,4 @@
+import { cableCurrent } from './current.js'
 // Pure geometry for the schematic canvas (plan 0016): device boxes and their
 // terminal anchors, right-angle wire routing with lane offsets, wires through
 // bend points, off-page stubs, hit testing, default conductors and the
@@ -542,6 +543,51 @@ export function cablesBetween (cables, idA, idB) {
 export function conductorTypes (cable) {
   const types = (cable.conductors || []).map((c) => c.conductor)
   return types.length ? types : ['positive']
+}
+
+// The long-dash pattern that marks AC cables, shared by the schematic and the
+// floorplan (the floorplan scales it to its line width).
+export const AC_DASH = [10, 6]
+
+// How a cable's current shows: `current` is 'ac', 'dc' or null, `dasharray` a
+// stroke-dasharray string (AC only, DC and the rest stay solid) and `marker`
+// the midpoint symbol on the schematic ('ac' tilde, 'dc' symbol, null).
+export function wireLineStyle (cable) {
+  const current = cableCurrent(cable)
+  return {
+    current,
+    dasharray: current === 'ac' ? AC_DASH.join(' ') : null,
+    marker: current
+  }
+}
+
+// The same dash pattern scaled by a factor, as a stroke-dasharray string.
+export function scaledDash (dasharray, factor) {
+  if (!dasharray) return null
+  return dasharray.split(' ').map((n) => Math.round(Number(n) * factor * 100) / 100).join(' ')
+}
+
+// A copy of a polyline moved sideways by `dist` (positive is to the right of
+// the direction of travel), corners mitred, for drawing the second conductor
+// of a cable beside the first.
+export function offsetPath (points, dist) {
+  if (points.length < 2) return points.map((p) => ({ ...p }))
+  const normals = []
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x
+    const dy = points[i].y - points[i - 1].y
+    const len = Math.hypot(dx, dy)
+    normals.push(len > 0 ? { x: -dy / len, y: dx / len } : null)
+  }
+  const fallback = normals.find(Boolean) || { x: 0, y: 0 }
+  const at = (i) => normals[i] || normals[i - 1] || fallback
+  return points.map((p, i) => {
+    const a = i === 0 ? at(0) : at(i - 1)
+    const b = i === points.length - 1 ? a : at(i)
+    const dot = a.x * b.x + a.y * b.y
+    const k = dist / Math.max(1 + dot, 0.2)
+    return { x: p.x + (a.x + b.x) * k, y: p.y + (a.y + b.y) * k }
+  })
 }
 
 // ---- Highlighting -----------------------------------------------------------

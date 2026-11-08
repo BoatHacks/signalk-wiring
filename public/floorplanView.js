@@ -9,7 +9,7 @@ import {
   escapeStep, deleteStep
 } from './floorplan.js'
 import { hashForState } from './router.js'
-import { isTypingTarget } from './schematic.js'
+import { isTypingTarget, wireLineStyle, scaledDash } from './schematic.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo } from './canvasRemoval.js'
 import { cableName } from './conduits.js'
@@ -406,7 +406,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         return ownRoute && key >= 0 && isActive ? pxFor('waypoint', key, p) : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)
       })
       for (const seg of visibleSegments(pxs)) {
-        runLines.push({ id: run.id, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' ') })
+        runLines.push({ id: run.id, dash: wireLineStyle(run).dasharray, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' ') })
       }
       addContinuations(run.id, points)
       if (isActive && ownRoute) {
@@ -509,7 +509,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         ${runLines.map((l, i) => html`
           <polyline key=${l.id + ':' + i} points=${l.points} fill="none"
             class="run-line ${l.active ? 'active' : ''} ${l.highlighted ? 'highlighted' : ''}"
-            stroke-width=${unit * (l.active ? 0.9 : 0.5)} />
+            stroke-width=${unit * (l.active ? 0.9 : 0.5)}
+            stroke-dasharray=${scaledDash(l.dash, unit * (l.active ? 0.9 : 0.5) / 3) || undefined} />
         `)}
 
         ${connectLines.map((points, i) => html`
