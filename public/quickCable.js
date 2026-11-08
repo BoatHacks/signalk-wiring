@@ -40,8 +40,10 @@ export function resolveTerminals (kind, from, fromTerminal, to, toTerminal) {
 // A dragged wire from device A (terminal ta) to device B (terminal tb)
 // becomes a cable From the supply side To the load side. Returns the starting
 // values for the popover and for the full form.
-export function startValues ({ a, ta, b, tb, cables, defaults = {} }) {
-  const [from, to] = supplyOrder(a, b)
+// `keepOrder` takes a and b as From and To as given (the floorplan tool asks
+// for them in that order) instead of putting the supply side first.
+export function startValues ({ a, ta, b, tb, cables, defaults = {}, keepOrder = false }) {
+  const [from, to] = keepOrder ? [a, b] : supplyOrder(a, b)
   const swapped = from.id !== a.id
   const fromTerminal = swapped ? tb : ta
   const toTerminal = swapped ? ta : tb

@@ -8,6 +8,12 @@ import {
   conduitMembers, effectiveCableRoute
 } from './floorplan.js'
 import { cableName } from './conduits.js'
+import {
+  initialConnect, connectPickDevice, connectAddWaypoint, connectUndo, connectCanFinish, connectHint, connectionFields
+} from './connectTool.js'
+import { startValues } from './quickCable.js'
+import { CablePopover } from './cablePopover.js'
+import { useSettings, wireRunInitialValues } from './settings.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -263,6 +269,10 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const onMarkerDown = (e, target) => {
     e.stopPropagation()
     if (calibrating) return
+    if (ctx.tool === 'connect') {
+      if (target.kind === 'device') actions.connectDevice(target.key)
+      return
+    }
     startDrag(e, target)
   }
 
@@ -311,6 +321,9 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     } else if (ctx.tool === 'route') {
       const [a, b] = metersAt(e)
       actions.addWaypoint(plan.view, a, b)
+    } else if (ctx.tool === 'connect') {
+      const [a, b] = metersAt(e)
+      actions.connectWaypoint(plan.view, a, b)
     } else {
       actions.clearSelection()
     }
@@ -373,6 +386,17 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         })
       }
     }
+  }
+
+  // The connection being drawn: from the From device through its waypoints.
+  const connectLines = []
+  if (cal && ctx.connectPoints) {
+    const pxs = ctx.connectPoints.map((p) => (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null))
+    for (const seg of visibleSegments(pxs)) connectLines.push(seg.map((p) => p.join(',')).join(' '))
+    ctx.connectPoints.slice(ctx.connectStartCount).forEach((p, i) => {
+      const px = planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null
+      if (px) waypointMarkers.push({ index: 1000 + i, px })
+    })
   }
 
   // Conduits are drawn under the cables, thicker, so cables along them show on top.
@@ -455,6 +479,10 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
             stroke-width=${unit * (l.active ? 0.9 : 0.5)} />
         `)}
 
+        ${connectLines.map((points, i) => html`
+          <polyline key=${'cn' + i} points=${points} fill="none" class="run-line active connecting" stroke-width=${unit * 0.9} />
+        `)}
+
         ${waypointMarkers.map((w) => html`
           <rect key=${'w' + w.index} x=${w.px[0] - unit} y=${w.px[1] - unit} width=${unit * 2} height=${unit * 2}
             class="waypoint ${ctx.waypointIndex === w.index ? 'selected' : ''}"
@@ -465,7 +493,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           if (device.status === 'removed') return null
           const px = pxFor('device', device.id, devicePosition(device))
           if (!px) return null
-          const lit = ctx.deviceId === device.id || (members && members.deviceIds.has(device.id))
+          const lit = ctx.deviceId === device.id || (members && members.deviceIds.has(device.id)) ||
+            (ctx.connect && (ctx.connect.fromId === device.id || ctx.connect.toId === device.id))
           return html`
             <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''}"
               onPointerDown=${(e) => onMarkerDown(e, { kind: 'device', key: device.id })}>
@@ -537,8 +566,12 @@ function useFloorplanData (reloadKey, onError) {
   return state
 }
 
-export function FloorplanTab () {
+export function FloorplanTab ({ renderCableForm }) {
+  const settings = useSettings()
   const [error, setError] = useState(null)
+  const [connect, setConnect] = useState(initialConnect)
+  const [finishing, setFinishing] = useState(null) // null | { more: values | null }
+  const [notice, setNotice] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const reload = () => setReloadKey((k) => k + 1)
   const { loading, plans, devices, circuits, wireRuns, conduits } = useFloorplanData(reloadKey, setError)
@@ -620,11 +653,54 @@ export function FloorplanTab () {
       guard(() => deleteResource('wiringPlans', plan.id))
     },
     selectDevice: (id) => { setDeviceId(id); setError(null) },
+    connectDevice: (id) => { setConnect((s) => connectPickDevice(s, id)); setNotice(null); setError(null) },
+    connectWaypoint: (view, a, b) => {
+      if (connect.stage !== 'route') { setError('Pick the From and To devices first.'); return }
+      const previous = connect.waypoints.length
+        ? connect.waypoints[connect.waypoints.length - 1]
+        : (connectFrom ? devicePosition(connectFrom) : null)
+      setConnect((s) => connectAddWaypoint(s, waypointFromClick(previous, view, a, b)))
+    },
     selectWaypoint: (index) => setWaypointIndex(index),
     clearSelection: () => { setDeviceId(null); setWaypointIndex(null) }
   }
 
-  const ctx = { tool, deviceId, runId, conduitId, members, waypointIndex }
+  // ---- Connect tool ----
+  const connectFrom = devicesById.get(connect.fromId)
+  const connectTo = devicesById.get(connect.toId)
+  const connecting = tool === 'connect'
+  const connectStart = connecting && connectFrom
+    ? routePoints({ fromDeviceId: connect.fromId, route: [] }, null, devicesById)
+    : []
+  const connectPoints = connecting ? [...connectStart, ...connect.waypoints] : null
+  // Meters along the drawn route, ending at the To device when it is placed.
+  const measureConnection = (waypoints) => {
+    const pts = routePoints({ fromDeviceId: connect.fromId, route: waypoints }, null, devicesById)
+    if (connectTo && isPlaced(connectTo)) pts.push(devicePosition(connectTo))
+    return routeLength(pts).length
+  }
+  const connectLengthUnit = settings.defaultLengthUnit || 'm'
+  const connectLength = connect.waypoints.length ? measureConnection(connect.waypoints) : null
+  const resetConnect = () => { setConnect(initialConnect()); setFinishing(null) }
+  const chooseTool = (id) => { setTool(id); setError(null); if (id !== 'connect') resetConnect() }
+  const connectNames = Object.fromEntries(devices.map((d) => [d.id, d.name]))
+
+  const createConnected = async (payload, id, withLength) => {
+    const extra = withLength
+      ? connectionFields(connect, payload.lengthUnit || connectLengthUnit, measureConnection, metersToLengthUnit)
+      : (connect.waypoints.length ? { route: connect.waypoints } : {})
+    await putResource('wiringWireRuns', id || newId(), { ...payload, ...extra })
+    resetConnect()
+    setNotice('Cable created.')
+    reload()
+  }
+
+  const ctx = {
+    tool, deviceId, runId, conduitId, members, waypointIndex,
+    connect: connecting ? connect : null,
+    connectPoints,
+    connectStartCount: connectStart.length
+  }
 
   const deleteWaypoint = () => {
     saveRoute(removeWaypoint(currentRoute(), waypointIndex))
@@ -676,8 +752,8 @@ export function FloorplanTab () {
       ${active.length > 0 && html`
         <div class="floorplan-toolbar">
           <div class="row-actions">
-            ${[['select', 'Select'], ['place', 'Place device'], ['route', 'Draw route']].map(([id, label]) => html`
-              <button key=${id} class=${tool === id ? 'active' : ''} onClick=${() => { setTool(id); setError(null) }}>${label}</button>
+            ${[['select', 'Select'], ['place', 'Place device'], ['route', 'Draw route'], ['connect', 'Connect']].map(([id, label]) => html`
+              <button key=${id} class=${tool === id ? 'active' : ''} data-testid=${'tool-' + id} onClick=${() => chooseTool(id)}>${label}</button>
             `)}
           </div>
           <div class="toolbar-fields">
@@ -686,7 +762,13 @@ export function FloorplanTab () {
             ${tool === 'place' && html`
               <${Select} label="Device to place" value=${deviceId} options=${deviceOptions} onChange=${setDeviceId} />
             `}
-            ${tool !== 'place' && html`
+            ${connecting && html`
+              <${Select} label="From (supply side)" value=${connect.fromId} options=${deviceOptions}
+                onChange=${(v) => { if (connect.stage === 'from') setConnect(connectPickDevice(connect, v)) }} />
+              <${Select} label="To (load side)" value=${connect.toId} options=${deviceOptions}
+                onChange=${(v) => { if (connect.stage === 'to') setConnect(connectPickDevice(connect, v)) }} />
+            `}
+            ${tool !== 'place' && !connecting && html`
               <${Select} label="Wire run" value=${runId} options=${runOptions}
                 onChange=${(v) => { setRunId(v); setConduitId(null); setWaypointIndex(null) }} />
               <${Select} label="Conduit" value=${conduitId} options=${conduitOptions}
@@ -694,7 +776,42 @@ export function FloorplanTab () {
             `}
           </div>
           ${tool === 'place' && html`<p class="meta">Choose a device, then click a calibrated plan to place it. A click in one view sets only the two axes it shows. Drag a marker in Select mode to adjust it.</p>`}
+          ${connecting && html`<p class="meta">Pick the From and To devices by clicking their markers on a plan (or with the lists), then click the route on the plan and finish. The cable gets the drawn route and its measured length.</p>`}
           ${tool === 'route' && html`<p class="meta">Choose a wire run or a conduit, then click to add waypoints. A conduit route is just its points. A wire run route starts at the run's from-device when that is placed. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
+          ${connecting && html`
+            <div class="route-info" data-testid="connect-panel">
+              <span data-testid="connect-hint">${connectHint(connect, connectNames)}</span>
+              ${connect.waypoints.length > 0 && html`<span>Measured route: <strong>${(connectLength || 0).toFixed(2)} m</strong></span>`}
+              ${notice && html`<span class="meta" data-testid="notice">${notice}</span>`}
+              ${!finishing && html`
+                <div class="row-actions">
+                  <button data-testid="connect-undo" disabled=${connect.stage === 'from'} onClick=${() => setConnect(connectUndo(connect))}>Undo</button>
+                  <button data-testid="connect-finish" disabled=${!connectCanFinish(connect)} onClick=${() => setFinishing({ more: null })}>Finish</button>
+                  <button onClick=${resetConnect}>Cancel</button>
+                </div>`}
+              ${finishing && !finishing.more && html`<${CablePopover}
+                start=${startValues({ a: connectFrom, b: connectTo, cables: liveRuns, defaults: wireRunInitialValues(settings), keepOrder: true })}
+                style="position:static"
+                lengthNote=${connect.waypoints.length
+                  ? `Length: ${metersToLengthUnit(connectLength || 0, connectLengthUnit)} ${connectLengthUnit}, measured from the drawn route.`
+                  : 'No route drawn, so no length is recorded.'}
+                onCreate=${(payload) => createConnected(payload, null, true).catch((err) => { throw err })}
+                onMore=${(values) => setFinishing({ more: {
+                  ...values,
+                  ...(connect.waypoints.length && connectLength ? { length: metersToLengthUnit(connectLength, values.lengthUnit || connectLengthUnit), lengthUnit: values.lengthUnit || connectLengthUnit } : {})
+                } })}
+                onCancel=${() => setFinishing(null)} />`}
+              ${finishing && finishing.more && renderCableForm({
+                prefill: finishing.more,
+                devices,
+                cables: wireRuns,
+                circuits,
+                onDevicesChanged: reload,
+                onSaved: (payload, id) => createConnected(payload, id, false),
+                onCancel: () => setFinishing(null)
+              })}
+            </div>
+          `}
           ${deviceId && devicesById.get(deviceId) && html`
             <div class="route-info">
               <span>Selected: <strong>${devicesById.get(deviceId).name}</strong>${isPlaced(devicesById.get(deviceId)) ? '' : ' (not placed)'}</span>

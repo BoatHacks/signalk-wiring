@@ -125,7 +125,7 @@ the load check and everything else follow without changes.
 - [x] Drawing wires: drag between devices or terminals, the quick popover,
       cable creation, derived circuit shown, highlighting, bend points,
       deleting a wire, removing a device from a page.
-- [ ] Floorplan connect tool with the shared popover.
+- [x] Floorplan connect tool with the shared popover.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 
 ## Follow-ups (not in this plan)
@@ -187,3 +187,13 @@ None. The design is settled; the next step is the schema and store work.
   dragging one adds a bend, dragging a bend moves it, double-click removes it,
   and Straighten clears them. Bends are saved when the drag ends.
 - Where an off-page tab overlaps a wire, the tab wins the click.
+- The connect tool takes From and To exactly in the order they are picked
+  (From is the supply side), unlike the schematic where the drag direction
+  is free. The devices are picked by clicking their markers on a plan or from
+  two lists, for devices not yet placed.
+- Waypoints are stored as the cable's `route` and the start follows the From
+  device as for any drawn route. The measured length runs from the From device
+  through the waypoints to the To device when that is placed, in the default
+  length unit. Finishing with no waypoints records no route and no length.
+- "More..." in the connect tool opens the full cable form with the measured
+  length prefilled; the route is added on save and the form's own length wins.

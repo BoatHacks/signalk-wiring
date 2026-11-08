@@ -63,3 +63,12 @@ test('withKind re-resolves terminals for the new kind', () => {
   assert.equal(v.kind, 'positive')
   assert.deepEqual(Object.keys(v.terminals), ['positive'])
 })
+
+test('startValues keepOrder keeps From and To as given', () => {
+  const bat = dev('bat', { role: 'storage' })
+  const lamp = dev('lamp')
+  assert.equal(startValues({ a: lamp, b: bat, cables: [] }).values.fromDeviceId, 'bat')
+  const kept = startValues({ a: lamp, b: bat, cables: [], keepOrder: true })
+  assert.equal(kept.values.fromDeviceId, 'lamp')
+  assert.equal(kept.values.toDeviceId, 'bat')
+})

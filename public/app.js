@@ -1780,7 +1780,7 @@ function App () {
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
       ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${(props) => html`<${CableForm} ...${props} />`} />`}
-      ${tab === 'floorplan' && html`<${FloorplanTab} />`}
+      ${tab === 'floorplan' && html`<${FloorplanTab} renderCableForm=${(props) => html`<${CableForm} ...${props} />`} />`}
       </main>
     </div>
   `
