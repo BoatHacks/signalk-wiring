@@ -39,7 +39,7 @@ this plugin's own code — see §2.4).
 Registers the resource types via
 `app.registerResourceProvider({ type, methods })`:
 `wiringCircuits`, `wiringWireRuns`, `wiringDevices`, `wiringPlans`,
-`wiringZones` and `wiringConduits`. Owns CRUD against the SQLite store for
+`wiringZones`, `wiringConduits` and `wiringSchematics`. Owns CRUD against the SQLite store for
 those tables. A circuit resource is its record plus a `derived` object
 from the derivation (`src/circuits.js`, see §2.5); setting one accepts only
 its name, notes, voltage override and convention, and creating or deleting
@@ -53,6 +53,11 @@ have to know them. Served at
 `/signalk/v2/api/resources/<type>`, per SignalK's standard resource API
 (see SPEC.md §6.1 for the contract, §2 of the `signalk-plugin` skill for
 why this pattern over a raw router).
+
+A schematic resource carries its `devices` (`deviceId`, `x`, `y`) and its
+bent `wires` (`wireRunId`, `points`) as lists on the record, written with the
+parent like conductors: a write that carries a list replaces it, one without
+it leaves it alone. Deleting soft-deletes the page.
 
 A fourth, read-only type, `wiringSettings` (`src/settings.js`), serves
 the plugin configuration as a single `config` resource. The webapp loads
@@ -171,6 +176,19 @@ Talks only to the two API surfaces in §2.1/§2.2 over `fetch`. Owns all UI
 described in SPEC.md §7, including the diagram rendering (client-side,
 via `dagre` for layout + hand-rolled SVG, per §4).
 
+**Schematic canvas** (plan 0016). `public/schematic.js` is pure geometry
+(device boxes and terminal anchors, right-angle routing with lane offsets,
+wires through bend points, off-page stubs, hit testing, default conductors,
+the dagre-based auto layout taking dagre as an argument) and is tested
+directly. `schematicView.js` is hand-rolled SVG with Pointer Events, panned
+and zoomed through the viewBox like the floorplan; it computes hits itself
+from the geometry module rather than from DOM targets, so moving a device,
+drawing a wire and bending a wire share one pointer handler. Cables are
+created through `buildCablePayload` (`cableForm.js`) by the quick popover
+(`quickCable.js`, `cablePopover.js`), which the floorplan connect tool
+(`connectTool.js`, a state machine of From, To, waypoints, finish) shares.
+The full cable form is passed in as a render prop from `app.js` for "More...".
+
 **`public/import.js` and `public/loadSummary.js`** (plan 0008) are
 separate modules from `app.js` rather than more code inside it, each
 self-contained (their own tiny `fetch`/resource-list helpers rather than
@@ -288,6 +306,30 @@ CREATE TABLE wire_run_conduits (  -- 0015: the conduits a cable passes through
   PRIMARY KEY (wire_run_id, conduit_id)
 );
 
+CREATE TABLE schematics (  -- 0016: named diagrams of the electrical system
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  notes TEXT
+);
+
+CREATE TABLE schematic_devices (  -- 0016: the devices on a page and where they sit
+  id TEXT PRIMARY KEY,
+  schematic_id TEXT NOT NULL REFERENCES schematics(id),
+  position INTEGER NOT NULL,
+  device_id TEXT NOT NULL REFERENCES devices(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL
+);
+
+CREATE TABLE schematic_wires (    -- 0016: only cables the user bent
+  id TEXT PRIMARY KEY,
+  schematic_id TEXT NOT NULL REFERENCES schematics(id),
+  position INTEGER NOT NULL,
+  wire_run_id TEXT NOT NULL REFERENCES wire_runs(id),
+  points TEXT                     -- JSON list of {x, y} bend points
+);
+
 CREATE TABLE plans (       -- 0009
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -330,7 +372,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are seven migrations (the third to seventh are described below): plan 0008's field
+every subsequent restart. There are eight migrations (the third to eighth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -382,6 +424,15 @@ and drops the retired `source_label`, `breaker_rating`, `panel_ref` and
 marks it removed (name and notes kept). Every step guards itself, and the
 rebuild only runs while `wire_runs.circuit_id` still exists, so the
 migration is safe to run twice.
+
+Plan 0016's migration (version 8) adds `schematics`, `schematic_devices`
+(device, x, y, position) and `schematic_wires` (cable, bend points as JSON,
+position). They come from `schema.sql` on every open; the migration guards the
+version. A wire row exists only for a bent cable, and a wire whose bend points
+are emptied is dropped. `store.js` writes the two lists with the parent in one
+transaction. Only a change in which devices are on a page is logged (a
+`devices` diff of ids); moving a device or a bend point is layout and adds no
+entry, and a cable carries its own wiring history.
 
 Conductors and terminals live in child tables but are written, validated
 and change-logged as part of their parent: a write that carries the list
@@ -476,6 +527,11 @@ signalk-wiring/
     roles.js                   # device roles: labels and hints
     zones.js                   # tags parsing, zone and tag filters
     floorplan.js               # pure geometry: calibration, projection, routes
+    schematic.js               # pure geometry: boxes, terminals, routing, stubs, hit tests
+    schematicView.js           # schematics tab: pages, canvas, palette, wires, bends
+    quickCable.js              # pure: values for the quick cable popover
+    cablePopover.js            # the quick cable popover shared by both tools
+    connectTool.js             # pure state machine of the floorplan connect tool
     floorplanView.js           # floorplan tab: upload, viewer, placement, routes
     style.css
     vendor/                  # preact-standalone.module.js, dagre — vendored, no CDN (§2.4)

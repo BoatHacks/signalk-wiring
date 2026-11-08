@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Schematics: a new tab with several named diagrams of the electrical system.
+  Place existing devices or create new ones from a palette by role, drag
+  them around, or Auto-arrange them left to right from the supply. Drag a
+  wire from a device or terminal to another and the cable exists at once: a
+  small popover asks Positive, Negative or Positive + negative (with an
+  optional gauge and length, and "More..." for the full cable form), and the
+  derived circuit is shown. Wires are right-angled, coloured by conductor
+  (with red-shifted colours at night), can be bent with draggable points, and
+  highlight their circuit when selected. A cable to a device that is not on
+  the page is a stub with a tab that jumps to a page showing that device or
+  adds it. Deleting a wire removes the cable after a confirmation; taking a
+  device off a page never deletes it. Schematics are served as the new
+  `wiringSchematics` resource.
+- Floorplan: a Connect tool beside Select, Place device and Draw route. Click
+  the From device, the To device and the route on the plan, then Finish; the
+  cable gets the drawn route and its measured length.
+
 ## [0.4.2] - 2026-11-07
 
 ### Added

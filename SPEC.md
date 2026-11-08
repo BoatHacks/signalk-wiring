@@ -208,6 +208,17 @@ A wire run or device is either:
     Assignments are made from the conduit's page (or by writing `cableIds`
     on the conduit or `conduitIds` on the wire run). Removing a conduit or
     a cable keeps its assignments.
+- **Schematic**
+  - `id`, `name`, `status`, `notes`, and two lists written with the record:
+    `devices` (`deviceId`, `x`, `y`: the devices on this page and where they
+    sit; a device can be on several pages, each with its own place) and
+    `wires` (`wireRunId`, `points`: only the cables the user bent, with their
+    bend points as a list of `{x, y}`). A wire is the cable record: it shows
+    on a page by itself when both of the cable's devices are on it, and a
+    cable with one end on the page is drawn as an off-page stub. Removing a
+    schematic keeps it as removed; taking a device off a page never touches
+    the device or its cables. Adding or removing a device on a page is a
+    change-log entry; moving a device or a bend point is layout and is not.
 - **Zone**
   - `id`, `name` (unique ignoring case). Renaming changes it everywhere
     because items link by id. A zone in use cannot be removed; merging two
@@ -233,7 +244,7 @@ import is a deferred feature (see 10.2), not an MVP input source.
 - `Circuit` (read-only in effect, see §4), `WireRun`, and `Device` are served as SignalK resource types
   (`/signalk/v2/api/resources/wiringCircuits`, `.../wiringWireRuns`,
   `.../wiringDevices`, `.../wiringPlans`, `.../wiringZones`,
-  `.../wiringConduits`) via standard `listResources` / `getResource` /
+  `.../wiringConduits`, `.../wiringSchematics`) via standard `listResources` / `getResource` /
   `setResource` / `deleteResource` semantics.
 - The plugin configuration (§9) is served read-only as
   `/signalk/v2/api/resources/wiringSettings/config`, so the anonymously
@@ -340,6 +351,31 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   route of its own keeps it. A cable with neither shows nothing; the
   floorplan says how many cables are not drawn and lets you pick one to
   draw.
+- A Schematics tab: several named diagrams of the electrical system, for
+  example "12 V system" or "Shore power and inverter". Create, rename and
+  remove pages. A page is an SVG canvas with pan (drag the background) and
+  zoom (wheel or buttons). Place existing devices from a list, or make new
+  ones from a palette by role (battery or source, consumer, fuse or switch,
+  converter) by clicking or dragging a type onto the canvas; a new device is
+  named in place. Drag devices to arrange them, or Auto-arrange them left to
+  right from the supply. Devices show their terminals as dots. Drag from a
+  terminal or from a device's connect handle to another device or terminal
+  to draw a wire: the cable exists as soon as it is dropped, a popover asks
+  Positive, Negative or Positive + negative with an optional gauge and
+  length, "More..." opens the full cable form, and the derived circuit is
+  shown at once. Wires are routed with right angles and coloured by
+  conductor (red positive, black negative, brown line, blue neutral, green
+  earth, red-shifted shades at night), with gauge and label on hover; a
+  selected wire shows handles to add, move and remove bend points. Selecting
+  a wire or picking a circuit highlights the devices and wires of that
+  circuit. A cable whose other end is not on the page is a short stub with a
+  tab "to <device>": clicking it jumps to a page that shows that device or
+  adds it here. Deleting a wire removes the cable after a confirmation.
+- A Connect tool on the floorplan, beside Select, Place device and Draw
+  route: click the From device (supply side), then the To device, then the
+  route waypoints on the plan, then Finish. The same popover asks the
+  conductors, and the cable gets the drawn route and its measured length.
+  Finishing with no waypoints records no route and no length.
 - A panel load summary: per derived circuit, the rated wattage of the
   consumers it ends at converted to amps via the circuit's voltage (watts
   divided by volts; on AC circuits a consumer's power factor is applied
@@ -395,6 +431,8 @@ configuration.
 - CSV import with column mapping (moved out of deferred — see below).
 - Panel load summary.
 - Floorplan view with device positions and measured wire routes.
+- Schematics: drawn diagrams from which cables are created, and a connect
+  tool on the floorplan.
 
 ### 10.2 Post-MVP / Deferred
 
@@ -447,6 +485,15 @@ configuration.
   it, so a cable only partly in a conduit is handled by giving it a route
   or by splitting it at a junction. Fill estimates and derating are left
   for later.
+- **A schematic draws the cables, it does not own wiring.** A wire on a
+  schematic is the cable record, so drawing one creates the cable through the
+  same payload the cable form builds, and circuits, the load check and the
+  change log follow without a second source of truth. A page stores only
+  layout (which devices, where, and any bend points), so the same device can
+  sit on several pages and the pages stay small and readable; a cable shows
+  on a page when both its devices are there, and as a labelled stub when only
+  one is, so nothing is hidden. Layout moves are not logged, because the
+  wiring facts are logged on the cable.
 - **Zones are a managed list, with free-text tags beside them.** The MVP
   kept zones as free text so documentation could start without defining a
   list. Real data then showed the same area spelled several ways, so zones

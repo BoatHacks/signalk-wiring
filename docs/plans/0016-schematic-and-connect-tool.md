@@ -126,7 +126,7 @@ the load check and everything else follow without changes.
       cable creation, derived circuit shown, highlighting, bend points,
       deleting a wire, removing a device from a page.
 - [x] Floorplan connect tool with the shared popover.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 
 ## Follow-ups (not in this plan)
 

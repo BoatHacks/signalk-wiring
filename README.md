@@ -53,6 +53,13 @@ to someone else doesn't depend on the current owner being present.
   strip, and a red-shifted **night theme** that protects night vision,
   switched by a button or, with the `autoTheme` option, by the vessel's
   `environment.sun` or `environment.mode`.
+- **Schematics**: several named diagrams of the electrical system. Place
+  devices (or create them from a palette by role), drag a wire from one to
+  another and the cable and its circuit exist; wires are right-angled and
+  coloured by conductor, can be bent, and cables to devices on other pages
+  show as labelled stubs. Auto-arrange lays a page out from the supply.
+- A **connect tool** on the floorplan: pick the From and To devices, click
+  the route, and the cable gets the drawn route and its measured length.
 - A **floorplan view**: upload a top-down or side drawing (SVG, PNG,
   JPEG or WebP), calibrate it once with two clicks and a real distance,
   then place devices by clicking (one 3D position shown in both views)
