@@ -7,6 +7,7 @@ const Database = require('better-sqlite3')
 const { deriveCircuits } = require('./circuits')
 const { isCriticalType } = require('./safety')
 const { CHEMISTRIES, PURPOSES, LINKS, typeChemistry, typePurpose } = require('./batteries')
+const { deriveBanks } = require('./banks')
 const { CURRENTS, typeCurrent, terminalsCurrent, mixesAcAndDc } = require('./current')
 const { deriveSwitchability } = require('./switchability')
 
@@ -772,16 +773,22 @@ class Store {
       status: d.status,
       tripRatingA: d.trip_rating_a,
       nominalVoltage: d.nominal_voltage,
-      terminals: d.terminals
+      terminals: d.terminals,
+      chemistry: d.chemistry,
+      capacityAh: d.capacity_ah,
+      usableFraction: d.usable_fraction,
+      monitorDeviceId: d.monitor_device_id
     }))
     const cables = this.list('wireRun').map((w) => ({
       id: w.id,
       fromDeviceId: w.from_device_id,
       toDeviceId: w.to_device_id,
       status: w.status,
+      link: w.link,
       conductors: w.conductors
     }))
-    return deriveCircuits({ devices, cables })
+    const derived = deriveCircuits({ devices, cables })
+    return { ...derived, banks: deriveBanks({ devices, cables, circuits: derived.circuits }) }
   }
 
   // Which consumers can be switched remotely and which meters measure them

@@ -190,7 +190,7 @@ These are open to change in review:
 
 - [x] Migration 11, the new device and cable fields, validation, the one-time
       fill, the storage type suggestions, with tests.
-- [ ] `src/banks.js` and the richer `/derived` banks, with tests.
+- [x] `src/banks.js` and the richer `/derived` banks, with tests.
 - [ ] Device form and page fields with the chemistry defaults; the link type in
       the popover, the full cable form and the cables table.
 - [ ] The Batteries tab and its route.

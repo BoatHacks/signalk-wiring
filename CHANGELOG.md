@@ -5,6 +5,30 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Battery details on storage devices: chemistry (flooded, AGM, gel, LiFePO4,
+  other lithium, other), purpose (house, starter, thruster, windlass, motor,
+  other), capacity in amp-hours, usable fraction, make and model, install
+  date, a monitoring device and four optional SignalK paths (voltage, current,
+  state of charge, time remaining). Every value is validated and logged. A
+  one-time migration fills chemistry and purpose from the old type names
+  (Lead-acid, AGM, LiFePO4, Starter and House battery) without touching a
+  value set by hand.
+- A link type on a cable between two batteries: series or parallel (a cable
+  with none counts as parallel). Any other cable refuses it.
+- Banks now have a computed voltage, layout (such as 2S2P), total and usable
+  amp-hours and energy, their chemistries, monitors and the protectors of the
+  circuits they feed, plus warnings for uneven strings, differing voltages,
+  mixed chemistries and links that cannot be reduced. A battery on its own is
+  a bank of one. Served by `GET /derived`.
+
+### Changed
+
+- The storage type suggestions are now Battery and Battery bank, since
+  chemistry and purpose are fields. Devices that already use the other type
+  names keep them.
+
 ## [0.4.6] - 2026-11-08
 
 ### Added
