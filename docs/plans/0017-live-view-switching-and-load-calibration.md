@@ -156,7 +156,7 @@ breaker checks become based on what the boat actually draws.
 - [x] Schema, migration, store and resources: switch and meter fields, safety
       flags, calibration runs, with tests.
 - [x] Switchability derivation and the switching route, with tests.
-- [ ] Calibration: pure statistics, then the run state machine, then the
+- [x] Calibration: pure statistics, then the run state machine, then the
       routes to start, poll, cancel, accept and reject, with tests.
 - [ ] Device forms: switch path, flags, meter path, measured values.
 - [ ] Live mode on the floorplan, then on the circuit diagram.

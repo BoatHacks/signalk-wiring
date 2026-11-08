@@ -52,10 +52,12 @@ module.exports = function (app) {
   }
 
   let store = null
+  let live = null
 
   plugin.start = function (options) {
     const dbPath = path.join(app.getDataDirPath(), 'wiring.db')
     store = new Store(dbPath)
+    store.abandonRunningRuns()
 
     const providers = [
       createResourceProvider(store, 'circuit', 'wiringCircuits'),
@@ -73,10 +75,11 @@ module.exports = function (app) {
   }
 
   plugin.stop = function () {
-    if (store) {
-      store.close()
-      store = null
-    }
+    // A run in progress is cancelled first: it writes to the store as it stops.
+    const stopping = live ? live.stopRuns().catch(() => {}) : Promise.resolve()
+    const closing = store
+    store = null
+    if (closing) stopping.then(() => closing.close())
   }
 
   // Called once at server boot for every installed plugin regardless of
@@ -84,7 +87,7 @@ module.exports = function (app) {
   // through this getter rather than a captured value.
   plugin.registerWithRouter = function (router) {
     registerRoutes(router, () => store, app.getDataDirPath())
-    registerLiveRoutes(router, () => store, { app })
+    live = registerLiveRoutes(router, () => store, { app })
   }
 
   return plugin
