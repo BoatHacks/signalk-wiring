@@ -381,13 +381,20 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   the order a cable passes through its conduits, and attach photos. The
   cable table on the Cables tab names the conduits of each cable.
 - A zones manager to rename, merge and remove zones, and zone and tag
-  filters on the circuit, wire run and device lists.
+  filters on the circuit, wire run and device lists. These three lists also
+  have a search box (name, label, type, zone, tags) and a "Show removed"
+  toggle, off by default and remembered per list in the browser. Device names
+  in the cable table and on a circuit page link to the device, a load summary
+  row links to its circuit, and a circuit's cable rows link to the Cables tab.
+  A device or a cable can be duplicated; a cable copy opens in the cable form
+  prefilled so its ends can be changed before saving.
 - Photo/file attachment upload and viewing per wire run or device: any
   number of photos, and PDF schematics or other files alongside them.
   Images open full size; PDFs and other files show as labelled tiles. On a
   device, one image can be marked as its icon (and cleared again), which is
   then shown in device lists, on the circuit diagram and on floorplan
-  markers. Deleting the icon image clears the icon.
+  markers. Deleting the icon image clears the icon. A "Take photo" button
+  next to "Add file" opens the phone camera.
 - An auto-generated circuit diagram (devices joined by cables, negative
   returns dotted) rendered from the derived circuit, per circuit.
 - A change log view per record, showing prior edits.
@@ -483,7 +490,9 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   protects it. A consumer with an accepted calibration run counts at its
   measured peak for the breaker check, and the measured average is shown
   for energy; the table says whether a circuit is measured, partly measured
-  or rated, and whether any figure is an estimate. A group figure is counted
+  or rated, and whether any figure is an estimate. An "incomplete" circuit
+  says under its badge what is missing (voltage, rating or both) and what to
+  do, the badges have tooltips and a legend sits under the table. A group figure is counted
   once per circuit, and a measured figure takes no power factor. The summary
   states its own known limitations in the UI (a device fed by more than one
   circuit counts its full wattage on each; peaks are summed as if they

@@ -119,6 +119,33 @@ export function calculateCircuitLoad (circuit, deviceById) {
   }
 }
 
+// What an "incomplete" circuit is missing and what to do about it, or null
+// when nothing is. Shown as a line under the badge and as its tooltip.
+export function incompleteReason (load) {
+  const parts = []
+  if (load.missingVoltage) parts.push('No voltage: set the nominal voltage on the supply')
+  if (load.missingRating) parts.push('No rating: set the trip rating of the fuse or breaker')
+  return parts.length ? parts.join('. ') : null
+}
+
+// Short explanations for the status badges and the load source labels, used
+// as tooltips and in the legend under the table.
+export const BADGE_HELP = {
+  'over rating': 'The summed load is more than the fuse or breaker is rated for.',
+  ok: 'The summed load is within the rating of the fuse or breaker.',
+  incomplete: 'The check cannot be made yet: see the line under the badge.',
+  measured: 'The total uses figures measured in an accepted calibration run.',
+  estimate: 'A measured figure that is still an estimate, from a short or uncertain run.'
+}
+
+export const LEGEND = [
+  ['over rating', BADGE_HELP['over rating']],
+  ['ok', BADGE_HELP.ok],
+  ['incomplete', 'Voltage or rating is missing, so no check can be made.'],
+  ['measured', BADGE_HELP.measured],
+  ['estimate', BADGE_HELP.estimate]
+]
+
 function formatAmps (amps) {
   return amps == null ? '—' : `${amps.toFixed(2)} A`
 }
@@ -171,19 +198,20 @@ export function LoadSummary () {
                   </td>
                   <td>
                     ${Math.round(load.totalWatts * 10) / 10} W
-                    ${load.source !== 'rated' && html`<div class="meta" data-testid="load-source">${load.source === 'measured' ? 'measured' : 'partly measured'}${load.estimateCount > 0 ? ', estimate' : ''}</div>`}
+                    ${load.source !== 'rated' && html`<div class="meta" data-testid="load-source" title=${load.estimateCount > 0 ? BADGE_HELP.measured + ' ' + BADGE_HELP.estimate : BADGE_HELP.measured}>${load.source === 'measured' ? 'measured' : 'partly measured'}${load.estimateCount > 0 ? ', estimate' : ''}</div>`}
                   </td>
                   <td>${load.source === 'rated' ? '-' : `${Math.round(load.averageWatts * 10) / 10} W`}</td>
                   <td>${load.voltage ? `${load.voltage} V${load.ac ? ' AC' : ''}` : '-'}</td>
                   <td>${formatAmps(load.amps)}</td>
                   <td>${load.ratingA ? `${load.ratingA} A` : 'none'}</td>
                   <td>
-                    ${load.overRating && html`<span class="badge over-rating">over rating</span>`}
-                    ${!load.overRating && (load.missingVoltage || load.missingRating) && html`
-                      <span class="badge">incomplete</span>
+                    ${load.overRating && html`<span class="badge over-rating" title=${BADGE_HELP['over rating']}>over rating</span>`}
+                    ${!load.overRating && incompleteReason(load) && html`
+                      <span class="badge" title=${incompleteReason(load)}>incomplete</span>
+                      <div class="meta incomplete-reason" data-testid="incomplete-reason">${incompleteReason(load)}</div>
                     `}
-                    ${!load.overRating && !load.missingVoltage && !load.missingRating && html`
-                      <span class="badge ok">ok</span>
+                    ${!load.overRating && !incompleteReason(load) && html`
+                      <span class="badge ok" title=${BADGE_HELP.ok}>ok</span>
                     `}
                   </td>
                 </tr>
@@ -191,6 +219,9 @@ export function LoadSummary () {
             })}
           </tbody>
         </table>
+        <p class="meta load-legend" data-testid="load-legend">
+          ${LEGEND.map(([name, text], i) => html`<span key=${name}>${i > 0 ? ' ' : ''}<strong>${name}</strong>: ${text}</span>`)}
+        </p>
       `}
     </div>
   `

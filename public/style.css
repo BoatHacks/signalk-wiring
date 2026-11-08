@@ -732,3 +732,6 @@ main:has(.schematic-editor) { max-width: none; }
   border: 1px solid var(--border-strong); border-left: 4px solid var(--warn);
   border-radius: 4px;
 }
+
+.incomplete-reason { max-width: 22em; white-space: normal; }
+.load-legend span { margin-right: 12px; }

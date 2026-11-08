@@ -7,6 +7,27 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Search box on the devices, cables and circuits lists (name, label, type,
+  zone, tags, and the device names at the ends), combined with the zone and tag
+  filter, and a "Show removed" toggle, off by default and remembered per list.
+- Links between views: device names in the cables table and circuit detail open
+  the device, a load summary row opens its circuit, and a circuit's cable rows
+  open the Cables tab.
+- Duplicate a device (button on its page) or a cable (icon in the table). A
+  device copy is named "<name> copy" and opens in the edit form; a cable copy
+  opens in the cable form prefilled, so the ends can be changed before saving.
+- "Take photo" button next to "Add file" in the attachment list, for phone
+  cameras.
+- Load summary: an "incomplete" circuit now says what is missing and what to do
+  right under the badge, the badges have tooltips, and a legend sits under the
+  table.
+
+### Changed
+
+- The row icons on the Cables table stay on one line, so rows are one line high.
+- Removed cables, devices and circuits are hidden from the lists until "Show
+  removed" is turned on.
+
 - Undo for removals. Removing a cable, device or conduit shows an "X removed.
   Undo" message at the top for about eight seconds (it waits while the pointer
   is on it). Undo puts the record back to active and the change log records it

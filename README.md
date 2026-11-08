@@ -37,7 +37,9 @@ to someone else doesn't depend on the current owner being present.
   use power. Only consumers count towards a circuit's load.
 - **Zones** (e.g. "engine room") on cables and devices, chosen from a
   managed list you can rename and merge, plus free-text **tags** for other
-  groupings such as an audio zone, with zone and tag filters on the lists.
+  groupings such as an audio zone, with zone and tag filters on the lists,
+  plus a search box and a "Show removed" toggle on the device, cable and
+  circuit lists, and links between views.
   Wire gauge/length recorded with explicit units (AWG or mm²; meters or
   feet) — boats often mix US and EU-sourced equipment.
 - Full CRUD via the admin webapp: inline create/edit forms, no page
@@ -51,7 +53,8 @@ to someone else doesn't depend on the current owner being present.
 - **Panel load summary**: per derived circuit, the rated wattage of its
   consumers converted to amps via the voltage of its supply (with an
   optional power factor on AC) and checked against the rating of the fuse or
-  breaker that protects it, flagging circuits over their rating.
+  breaker that protects it, flagging circuits over their rating and saying what
+  is missing on incomplete ones.
 - **Removing keeps the record.** "Removing" a record marks it `removed`
   rather than dropping it, so the wiring's history stays intact — a refit
   doesn't erase what used to be there. The one exception is a cable that is
@@ -79,7 +82,8 @@ to someone else doesn't depend on the current owner being present.
 - **Device icons**: mark one of a device's images as its icon, shown in
   device lists, on circuit diagrams and on floorplan markers.
 - **Photo/file attachments** per cable, device or conduit (JPEG/PNG/WebP/HEIC/
-  PDF, 15MB cap).
+  PDF, 15MB cap), with a "Take photo" button for phone cameras. Devices and
+  cables can be duplicated.
 - An **auto-generated diagram** per circuit (devices joined by cables), laid out and rendered client-side.
 - A configurable **wiring convention** setting (ABYC E-11 / DIN EN ISO
   13297 / freestyle) — drives labeling hints in the UI only, never

@@ -216,7 +216,7 @@ because they use it.
 - [x] Lists and cables: row icons on one line, search box, show removed,
       links between views.
 - [x] Duplicate device and cable, and the "Take photo" button.
-- [ ] Load summary explanations and legend.
+- [x] Load summary explanations and legend.
 - [x] Schematic canvas: delete wire with Undo and permanent deletion when the
       window ends, take a device off the page with Undo, keyboard handling.
 - [ ] Floorplan: smaller corner arrows, route tool ending on the To device,

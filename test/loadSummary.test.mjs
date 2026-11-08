@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { calculateCircuitLoad } from '../public/loadSummary.js'
+import { calculateCircuitLoad, incompleteReason, BADGE_HELP, LEGEND } from '../public/loadSummary.js'
 
 function device (id, ratedPowerW, extra = {}) {
   return { id, ratedPowerW, status: 'active', ...extra }
@@ -131,4 +131,22 @@ test('a circuit that no longer exists has an empty load', () => {
   const load = calculateCircuitLoad({ id: 'x', derived: null }, byId())
   assert.equal(load.deviceCount, 0)
   assert.equal(load.amps, null)
+})
+
+test('incompleteReason says what is missing and what to do', () => {
+  const noVoltage = calculateCircuitLoad(circuit(['d1'], { voltage: null }), byId(device('d1', 20)))
+  assert.equal(incompleteReason(noVoltage), 'No voltage: set the nominal voltage on the supply')
+  const noRating = calculateCircuitLoad(circuit(['d1'], { ratingA: null }), byId(device('d1', 20)))
+  assert.equal(incompleteReason(noRating), 'No rating: set the trip rating of the fuse or breaker')
+  const both = calculateCircuitLoad(circuit(['d1'], { ratingA: null, voltage: null }), byId(device('d1', 20)))
+  assert.equal(incompleteReason(both),
+    'No voltage: set the nominal voltage on the supply. No rating: set the trip rating of the fuse or breaker')
+  const fine = calculateCircuitLoad(circuit(['d1']), byId(device('d1', 20)))
+  assert.equal(incompleteReason(fine), null)
+})
+
+test('every badge has a short tooltip and a legend entry', () => {
+  for (const name of ['over rating', 'ok', 'measured', 'estimate']) assert.ok(BADGE_HELP[name], name)
+  assert.deepEqual(LEGEND.map(([n]) => n), ['over rating', 'ok', 'incomplete', 'measured', 'estimate'])
+  for (const text of [...Object.values(BADGE_HELP), ...LEGEND.map(([, t]) => t)]) assert.ok(!/[\u2013\u2014]/.test(text))
 })
