@@ -329,3 +329,17 @@ test('clicks are rounded to the centimeter', () => {
   assert.equal(roundCm(3.14159), 3.14)
   assert.deepEqual(applyClick(null, 'top', 4.123456, 1.987654), { x: 4.12, y: 1.99, z: null })
 })
+
+test('a route starts where the enclosure around its from-device is placed (plan 0024)', () => {
+  const placed = (id, extra = {}) => ({ id, name: id, status: 'active', posX: 1, posY: 2, posZ: 0.5, ...extra })
+  const box = placed('box', { role: 'enclosure' })
+  const inner = { id: 'inner', name: 'inner', status: 'active', parentId: 'box' }
+  const devices = new Map([['box', box], ['inner', inner], ['deep', { id: 'deep', status: 'active', parentId: 'inner' }]])
+  assert.deepEqual(resolveRouteStart({ fromDeviceId: 'inner' }, null, devices), { x: 1, y: 2, z: 0.5 })
+  // an older position on a device that now sits inside an enclosure is not used
+  devices.set('inner', placed('inner', { parentId: 'box', posX: 9, posY: 9, posZ: 9 }))
+  assert.deepEqual(resolveRouteStart({ fromDeviceId: 'inner' }, null, devices), { x: 1, y: 2, z: 0.5 })
+  // an enclosure that is not placed gives nothing
+  devices.set('box', { ...box, posX: null, posY: null, posZ: null })
+  assert.equal(resolveRouteStart({ fromDeviceId: 'deep' }, null, devices), null)
+})

@@ -115,3 +115,12 @@ export function matchesInside (devices, device, inside) {
 
 // Devices that cannot be placed on the floorplan because an enclosure holds them.
 export const isInside = (device) => Boolean(device && device.parentId)
+
+// Why a device cannot be placed on a plan, or null when it can: its enclosure
+// is placed instead.
+export function placementBlock (devices, device) {
+  if (!isInside(device)) return null
+  const chain = pathOf(devices, device.id)
+  const outer = devices.find((d) => d.id === chain[0])
+  return `${device.name} is inside ${outer ? outer.name : 'an enclosure'}. Place the enclosure instead.`
+}

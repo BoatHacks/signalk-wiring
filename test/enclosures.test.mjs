@@ -46,3 +46,10 @@ test('insideText names the enclosures innermost first; the filter matches at any
   assert.equal(web.isInside(devices[2]), true)
   assert.equal(web.isInside(devices[3]), false)
 })
+
+test('placementBlock says why a device inside an enclosure is not placed', () => {
+  const inside = devices.find((d) => d.id === 'breaker')
+  assert.equal(web.placementBlock(devices, inside), 'breaker is inside cabinet. Place the enclosure instead.')
+  assert.equal(web.placementBlock(devices, devices.find((d) => d.id === 'battery')), null)
+  assert.equal(web.placementBlock(devices, devices.find((d) => d.id === 'cabinet')), null)
+})

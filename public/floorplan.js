@@ -144,6 +144,14 @@ function positionOf (device) {
 // is kept (ignored) so callers do not change.
 export function resolveRouteStart (wireRun, _circuit, devicesById) {
   const fromDevice = devicesById.get(wireRun.fromDeviceId)
+  // A device inside an enclosure (plan 0024) is not placed itself: the
+  // route starts where the nearest placed enclosure around it is.
+  const seen = new Set()
+  for (let at = fromDevice; at && at.parentId && !seen.has(at.id); ) {
+    seen.add(at.id)
+    at = devicesById.get(at.parentId)
+    if (isPlaced(at)) return positionOf(at)
+  }
   if (isPlaced(fromDevice)) return positionOf(fromDevice)
   return null
 }

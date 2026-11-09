@@ -21,6 +21,7 @@ import { CablePopover } from './cablePopover.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
+import { placementBlock, isInside, childrenOf, contentsOf } from './enclosures.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -528,7 +529,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         `)}
 
         ${cal && data.devices.map((device) => {
-          if (device.status === 'removed') return null
+          // A device inside an enclosure is shown by the enclosure's marker.
+          if (device.status === 'removed' || isInside(device)) return null
           const px = pxFor('device', device.id, devicePosition(device))
           if (!px) return null
           const lit = ctx.deviceId === device.id || (members && members.deviceIds.has(device.id)) ||
@@ -539,7 +541,13 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
               data-live=${liveState ? liveState.look : undefined}
               onPointerDown=${(e) => onMarkerDown(e, { kind: 'device', key: device.id })}>
               ${liveState && html`<title>${liveState.title}</title>`}
-              <circle cx=${px[0]} cy=${px[1]} r=${unit * 1.3} />
+              ${device.role === 'enclosure'
+                ? html`<rect class="enclosure-box" x=${px[0] - unit * 1.5} y=${px[1] - unit * 1.5} width=${unit * 3} height=${unit * 3} rx=${unit * 0.5} />`
+                : html`<circle cx=${px[0]} cy=${px[1]} r=${unit * 1.3} />`}
+              ${device.role === 'enclosure' && html`
+                <text class="enclosure-count" data-testid="enclosure-count" x=${px[0]} y=${px[1] + unit * 0.7} font-size=${unit * 2} text-anchor="middle">${contentsOf(data.devices, device.id).length}</text>
+                <title>${device.name}: holds ${contentsOf(data.devices, device.id).length}</title>
+              `}
               ${deviceIconUrl(device) && html`
                 <image href=${deviceIconUrl(device)} x=${px[0] - unit * 1.1} y=${px[1] - unit * 1.1}
                   width=${unit * 2.2} height=${unit * 2.2} preserveAspectRatio="xMidYMid slice"
@@ -749,9 +757,15 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
     placeDevice: (view, a, b) => {
       const device = devicesById.get(deviceId)
       if (!device) { setError('Choose a device to place first.'); return }
+      const block = placementBlock(devices, device)
+      if (block) { setError(block); return }
       saveDevicePosition(device, view, a, b)
     },
-    moveDevice: (id, view, a, b) => saveDevicePosition(devicesById.get(id), view, a, b),
+    moveDevice: (id, view, a, b) => {
+      const block = placementBlock(devices, devicesById.get(id))
+      if (block) { setError(block); return }
+      return saveDevicePosition(devicesById.get(id), view, a, b)
+    },
     addWaypoint: (view, a, b) => {
       if (!run && !conduit) { setError('Choose a wire run or a conduit to draw first.'); return }
       saveRoute([...currentRoute(), waypointFromClick(lastPoint(), view, a, b)])
@@ -790,7 +804,15 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
       setError(null)
       try { await live.toggle(id) } catch (err) { setError(err.message) }
     },
-    connectDevice: (id) => { setConnect((s) => connectPickDevice(s, id)); setNotice(null); setError(null) },
+    connectDevice: (id) => {
+      setError(null)
+      // Cables go to what is inside an enclosure, not to the box.
+      if ((devicesById.get(id) || {}).role === 'enclosure') {
+        setNotice('Cables go to the devices inside an enclosure. Pick one of them from the list.')
+        return
+      }
+      setConnect((s) => connectPickDevice(s, id)); setNotice(null)
+    },
     connectWaypoint: (view, a, b) => {
       if (connect.stage !== 'route') { setError('Pick the From and To devices first.'); return }
       const previous = connect.waypoints.length
@@ -894,10 +916,17 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
   })
 
   const circuitOptions = circuits.filter((c) => c.status !== 'removed').map((c) => ({ value: c.id, label: c.name }))
-  const deviceOptions = liveDevices.map((d) => ({
+  // Devices inside an enclosure are not placed: the enclosure is. They stay in
+  // the connect lists, since cables end on them, but not in the placement list.
+  const deviceOptions = liveDevices.filter((d) => d.role !== 'enclosure').map((d) => ({
+    value: d.id,
+    label: d.name + (isInside(d) ? ' (inside an enclosure)' : d.posX != null || d.posY != null || d.posZ != null ? '' : ' (not placed)')
+  }))
+  const placeOptions = liveDevices.filter((d) => !isInside(d)).map((d) => ({
     value: d.id,
     label: d.name + (d.posX != null || d.posY != null || d.posZ != null ? '' : ' (not placed)')
   }))
+  const insideCount = liveDevices.filter(isInside).length
   const runOptions = liveRuns
     .filter((r) => !members || members.runIds.has(r.id))
     .map((r) => ({ value: r.id, label: cableName(r, new Map(devices.map((d) => [d.id, d.name]))) }))
@@ -931,7 +960,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
             <${Select} label="Highlight circuit" value=${circuitId} options=${circuitOptions}
               onChange=${(v) => { setCircuitId(v); setRunId(null); setWaypointIndex(null) }} />
             ${tool === 'place' && html`
-              <${Select} label="Device to place" value=${deviceId} options=${deviceOptions} onChange=${setDeviceId} />
+              <${Select} label="Device to place" value=${deviceId} options=${placeOptions} onChange=${setDeviceId} />
             `}
             ${connecting && html`
               <${Select} label="From (supply side)" value=${connect.fromId} options=${deviceOptions}
@@ -948,6 +977,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
           </div>
           ${tool === 'live' && html`<${LiveBar} live=${live} error=${live.error} />`}
           ${tool === 'place' && html`<p class="meta">Choose a device, then click a calibrated plan to place it. A click in one view sets only the two axes it shows. Drag a marker in Select mode to adjust it.</p>`}
+          ${tool === 'place' && insideCount > 0 && html`<p class="meta" data-testid="inside-note">${insideCount} ${insideCount === 1 ? 'device is' : 'devices are'} inside an enclosure and not listed: place the enclosure instead, its marker stands for what is inside it.</p>`}
           ${connecting && html`<p class="meta">Pick the From and To devices by clicking their markers on a plan (or with the lists), then click the route on the plan and finish. The cable gets the drawn route and its measured length.</p>`}
           ${tool === 'route' && html`<p class="meta">Choose a wire run or a conduit, then click to add waypoints. A conduit route is just its points. A wire run route starts at the run's from-device when that is placed. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
           ${connecting && html`
@@ -982,6 +1012,16 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
                 onSaved: (payload, id) => createConnected(payload, id, false),
                 onCancel: () => setFinishing(null)
               })}
+            </div>
+          `}
+          ${deviceId && devicesById.get(deviceId) && devicesById.get(deviceId).role === 'enclosure' && html`
+            <div class="route-info" data-testid="enclosure-popover">
+              <span><strong>${devicesById.get(deviceId).name}</strong> holds ${contentsOf(devices, deviceId).length === 0 ? 'nothing' : contentsOf(devices, deviceId).length}:</span>
+              <ul class="enclosure-contents">
+                ${childrenOf(devices, deviceId).map((id) => html`
+                  <li key=${id}><a href=${hashForState({ tab: 'devices', id })} data-testid="enclosure-content-link">${(devicesById.get(id) || {}).name || id}</a>${(devicesById.get(id) || {}).role === 'enclosure' ? ` (holds ${contentsOf(devices, id).length})` : ''}</li>
+                `)}
+              </ul>
             </div>
           `}
           ${deviceId && devicesById.get(deviceId) && html`

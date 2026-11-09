@@ -563,6 +563,10 @@ main:has(.floorplan-pair) { max-width: none; }
 .device-marker.role-storage circle { fill: var(--marker-storage); }
 .device-marker.role-distribution circle { fill: var(--marker-distribution); }
 .device-marker.role-converter circle { fill: var(--marker-converter); }
+/* Plan 0024: an enclosure is a square marker with the count of what it holds. */
+.device-marker .enclosure-box { fill: var(--surface); fill-opacity: 0.9; stroke: var(--marker-distribution); stroke-width: 0.9; cursor: grab; }
+.device-marker .enclosure-count { stroke: none; font-weight: 600; }
+.device-marker.highlighted .enclosure-box { stroke: var(--link); }
 
 .filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
 .filter-bar .form-field { min-width: 180px; }
