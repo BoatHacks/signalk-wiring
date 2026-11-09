@@ -678,7 +678,7 @@ class Store {
   // Validates and normalises the lists of a schematic write. A list that was
   // not given is null (left alone). A wire without bend points is dropped,
   // since an unbent wire needs no row.
-  _checkSchematicLists (fields) {
+  _checkSchematicLists (fields, existing = null) {
     const out = { devices: null, wires: null, stubs: null, zone_shapes: null }
     const finite = (v, what) => {
       const n = Number(v)
@@ -688,13 +688,21 @@ class Store {
     if (fields.devices !== undefined) {
       if (!Array.isArray(fields.devices)) throw new Error('devices must be a list')
       const seen = new Set()
+      const had = new Set(((existing && existing.devices) || []).map((d) => d.deviceId))
+      const insideOf = existing ? existing.enclosure_id : fields.enclosure_id
       out.devices = fields.devices.map((item) => {
         const deviceId = item && item.deviceId
-        if (!deviceId || !this.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(deviceId)) {
-          throw new Error(`device not found: ${deviceId}`)
-        }
+        const device = deviceId && this.db.prepare('SELECT name, parent_id FROM devices WHERE id = ?').get(deviceId)
+        if (!device) throw new Error(`device not found: ${deviceId}`)
         if (seen.has(deviceId)) throw new Error(`device listed twice: ${deviceId}`)
         seen.add(deviceId)
+        // Plan 0024: what an enclosure holds goes on its inside page only (a
+        // placement made before it was put inside stays), and an enclosure is
+        // not placed on its own inside page.
+        if (insideOf && deviceId === insideOf) throw new Error('an enclosure is not placed on its own inside page')
+        if (!had.has(deviceId) && device.parent_id && device.parent_id !== insideOf) {
+          throw new Error(`${device.name} is inside an enclosure: place it on that enclosure's inside page`)
+        }
         return { deviceId, x: finite(item.x, 'x'), y: finite(item.y, 'y') }
       })
     }
@@ -791,7 +799,7 @@ class Store {
     const fields = { ...patch }
     if ('name' in fields) fields.name = this._checkSchematicName(fields.name)
     Object.assign(fields, this._checkEnclosureId(fields, existing))
-    const lists = this._checkSchematicLists(fields)
+    const lists = this._checkSchematicLists(fields, existing)
     const cols = TABLES.schematic.columns.filter((c) => c !== 'id' && c in fields)
     const idsOf = (list, key) => (list || []).map((i) => i[key]).sort()
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)

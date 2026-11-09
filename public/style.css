@@ -804,3 +804,10 @@ main:has(.schematic-editor) { max-width: none; }
 .bulk-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 .bulk-bar select { min-width: 180px; }
 .enclosure-contents ul { margin: 4px 0 0; padding-left: 1.2em; }
+
+/* Plan 0024: an enclosure box on a schematic, with the names of its derived ports. */
+.sch-device.sch-enclosure .sch-device-box { stroke-dasharray: 7 3; }
+.sch-terminal-label { font-size: 9px; fill: var(--text); pointer-events: none; }
+.sch-enclosure-link rect { fill: none; stroke: var(--link); stroke-width: 1.2; }
+.sch-enclosure-link path { fill: none; stroke: var(--link); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.schematic-inside { margin: 4px 0 8px; }

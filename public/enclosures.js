@@ -124,3 +124,103 @@ export function placementBlock (devices, device) {
   const outer = devices.find((d) => d.id === chain[0])
   return `${device.name} is inside ${outer ? outer.name : 'an enclosure'}. Place the enclosure instead.`
 }
+
+// ---- A schematic page with enclosures (plan 0024) ----
+
+export const PORT_IN = 'In'
+export const PORT_OUT = 'Out'
+const PORT_CHAR_W = 6.2
+
+// What a page draws, given the devices placed on it. An enclosure placed on
+// the page stands for what is inside it: the devices it holds are hidden, a
+// cable with one end inside is drawn to a port of the box (one port per
+// cable, named after the inner device and terminal), and a cable with both
+// ends inside is left out. Everything else passes through unchanged, so the
+// router and the checks see an ordinary page. `source` on a changed cable is
+// the stored cable, which is what editing must write.
+//   devices, cables: the resources; placedIds: the ids of the devices placed on the page
+//   -> { devices: Map (id -> the device to draw, a placed enclosure gets
+//        ports as terminals), cables, hidden: Set of ids, repOf(id) }
+export function pageModel (devices, cables, placedIds) {
+  const placed = new Set(placedIds)
+  const byId = new Map(devices.map((d) => [d.id, d]))
+  const chainOf = (id) => {
+    const chain = []
+    const seen = new Set([id])
+    for (let at = byId.get(id); at && at.parentId && !seen.has(at.parentId) && byId.has(at.parentId); at = byId.get(at.parentId)) {
+      seen.add(at.parentId)
+      chain.unshift(at.parentId)
+    }
+    return chain
+  }
+  // The box a device is drawn in on this page: the outermost placed
+  // enclosure around it, else itself when placed, else none.
+  const repOf = (id) => {
+    if (!id) return null
+    for (const c of chainOf(id)) if (placed.has(c)) return c
+    return placed.has(id) ? id : null
+  }
+  const hidden = new Set([...placed].filter((id) => repOf(id) !== id))
+
+  const ports = new Map() // enclosure id -> Map(cable id -> { name, side, conductor })
+  const nameOf = (id) => (byId.get(id) || {}).name || id
+  const portFor = (enclosureId, cable, deviceId, side) => {
+    if (!ports.has(enclosureId)) ports.set(enclosureId, new Map())
+    const mine = ports.get(enclosureId)
+    if (mine.has(cable.id)) return mine.get(cable.id)
+    const terminals = [...new Set((cable.conductors || [])
+      .filter((c) => (c[side === 'right' ? 'fromDeviceId' : 'toDeviceId'] || cable[side === 'right' ? 'fromDeviceId' : 'toDeviceId']) === deviceId)
+      .map((c) => c[side === 'right' ? 'fromTerminal' : 'toTerminal']).filter(Boolean))]
+    const base = terminals.length > 0 ? `${nameOf(deviceId)} ${terminals.join('/')}` : nameOf(deviceId)
+    const taken = new Set([...mine.values()].map((p) => p.name))
+    let name = base
+    for (let i = 2; taken.has(name); i++) name = `${base} (${i})`
+    const first = (cable.conductors || [])[0]
+    const port = { name, side, conductor: (first && first.conductor) || 'positive' }
+    mine.set(cable.id, port)
+    return port
+  }
+
+  const out = []
+  for (const cable of cables) {
+    if (cable.status === 'removed') { out.push(cable); continue }
+    const a = repOf(cable.fromDeviceId)
+    const b = repOf(cable.toDeviceId)
+    const fromE = a && a !== cable.fromDeviceId ? a : null
+    const toE = b && b !== cable.toDeviceId ? b : null
+    if (!fromE && !toE) { out.push(cable); continue }
+    if (a && a === b) continue // both ends inside one box: drawn on its inside page only
+    if (fromE) portFor(fromE, cable, cable.fromDeviceId, 'right')
+    if (toE) portFor(toE, cable, cable.toDeviceId, 'left')
+    const conductors = (cable.conductors || []).map((c) => {
+      const next = { ...c }
+      for (const [end, side] of [['from', 'right'], ['to', 'left']]) {
+        const device = c[end + 'DeviceId'] || cable[end + 'DeviceId']
+        const r = repOf(device)
+        if (r && r !== device) {
+          next[end + 'DeviceId'] = r
+          next[end + 'Terminal'] = portFor(r, cable, device, side).name
+        }
+      }
+      return next
+    })
+    out.push({ ...cable, fromDeviceId: fromE || cable.fromDeviceId, toDeviceId: toE || cable.toDeviceId, conductors, source: cable })
+  }
+
+  const drawn = new Map()
+  for (const id of placed) {
+    const device = byId.get(id)
+    if (!device || device.role !== 'enclosure' || hidden.has(id)) continue
+    const mine = [...(ports.get(id) || new Map()).values()]
+    const sorted = [...mine.filter((p) => p.side === 'left'), ...mine.filter((p) => p.side === 'right')]
+    const widest = (side) => Math.max(0, ...sorted.filter((p) => p.side === side).map((p) => p.name.length))
+    drawn.set(id, {
+      ...device,
+      isEnclosure: true,
+      holds: contentsOf(devices, id).length,
+      terminals: sorted.map((p) => ({ name: p.name, conductor: p.conductor, voltage: null, port: p.side === 'left' ? PORT_IN : PORT_OUT })),
+      boxW: Math.min(520, Math.max(170, Math.ceil(48 + (widest('left') + widest('right')) * PORT_CHAR_W)))
+    })
+  }
+  return { devices: drawn, cables: out, hidden, repOf }
+}

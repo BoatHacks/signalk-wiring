@@ -171,3 +171,47 @@ test('purge: an enclosure with devices in it is refused, its inside page goes wi
   assert.equal(store.get('device', box.id), null)
   assert.equal(store.get('schematic', page.id), null)
 })
+
+test('what an enclosure holds is placed on its inside page only; an enclosure not on its own', () => {
+  const { store, box, inner, breaker, lamp } = setup()
+  const outer = store.create('schematic', { name: 'Outer' })
+  const insidePage = store.create('schematic', { name: 'Inside', enclosure_id: inner.id })
+  // contents cannot be added to a page that is not their enclosure's inside page
+  assert.throws(() => store.update('schematic', outer.id, { devices: [{ deviceId: breaker.id, x: 0, y: 0 }] }), /place it on that enclosure's inside page/)
+  assert.throws(() => store.update('schematic', insidePage.id, { devices: [{ deviceId: inner.id, x: 0, y: 0 }] }), /not placed on its own inside page/)
+  assert.throws(() => store.create('schematic', { name: 'X', devices: [{ deviceId: breaker.id, x: 0, y: 0 }] }), /inside page/)
+  assert.equal(store.update('schematic', insidePage.id, { devices: [{ deviceId: breaker.id, x: 1, y: 2 }] }).devices.length, 1)
+  // the enclosure itself and unrelated devices go on the outer page
+  assert.equal(store.update('schematic', outer.id, { devices: [{ deviceId: box.id, x: 0, y: 0 }, { deviceId: lamp.id, x: 5, y: 5 }] }).devices.length, 2)
+  // a placement made before the device was put inside stays, and can be rewritten
+  store.update('device', lamp.id, { parent_id: box.id })
+  const kept = store.update('schematic', outer.id, { devices: [{ deviceId: box.id, x: 3, y: 3 }, { deviceId: lamp.id, x: 9, y: 9 }] })
+  assert.equal(kept.devices.length, 2)
+  // a new inside page can be created with its contents in one write
+  const page = store.create('schematic', { name: 'Box (inside)', enclosure_id: box.id, devices: [{ deviceId: lamp.id, x: 0, y: 0 }, { deviceId: inner.id, x: 100, y: 0 }] })
+  assert.equal(page.devices.length, 2)
+})
+
+test('regression: putting devices inside an enclosure changes no circuit, warning or bank', () => {
+  const store = new Store(':memory:')
+  const t = (name, conductor) => ({ name, conductor })
+  const battery = store.create('device', { name: 'Battery', role: 'storage', nominal_voltage: 12, terminals: [t('+', 'positive'), t('-', 'negative')] })
+  const fuse = store.create('device', { name: 'Fuse', role: 'distribution', trip_rating_a: 10 })
+  const bar = store.create('device', { name: 'Bar', role: 'distribution' })
+  const lamp = store.create('device', { name: 'Lamp', rated_power_w: 20 })
+  const feed = (from, to) => store.create('wireRun', { from_device_id: from.id, to_device_id: to.id, conductors: [{ conductor: 'positive' }] })
+  feed(battery, fuse); feed(fuse, bar); feed(bar, lamp)
+  const snapshot = () => JSON.stringify({
+    derived: store.deriveAll(),
+    circuits: store.list('circuit').map(({ id, key, name, status, cable_ids: cableIds }) => ({ id, key, name, status, cableIds })),
+    switching: store.deriveSwitching()
+  })
+  const before = snapshot()
+  const box = store.create('device', { name: 'Panel', role: 'enclosure' })
+  assert.equal(snapshot(), before)
+  for (const d of [fuse, bar, lamp]) store.update('device', d.id, { parent_id: box.id })
+  assert.equal(snapshot(), before)
+  store.update('device', fuse.id, { parent_id: null })
+  assert.equal(snapshot(), before)
+  store.close()
+})

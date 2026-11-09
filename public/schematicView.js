@@ -18,6 +18,8 @@ import { matchesRemoved, readShowRemoved, writeShowRemoved } from './zones.js'
 import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import * as Z from './zoneShapes.js'
 import { midpoints } from './polygon.js'
+import { pageModel, insideText } from './enclosures.js'
+import { ensureInsidePage } from './insidePage.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
@@ -133,13 +135,14 @@ export function SchematicsTab ({ renderCableForm, selectedId = null, onSelect = 
         ? html`<${SchematicEditor} key=${schematic.id} schematic=${schematic} data=${data}
             reload=${reload} onBack=${() => setSelectedId(null)} onOpen=${setSelectedId}
             onError=${setError} renderCableForm=${renderCableForm} />`
-        : html`<${SchematicList} schematics=${data.schematics} reload=${reload}
+        : html`<${SchematicList} schematics=${data.schematics} devices=${data.devices} reload=${reload}
             onOpen=${setSelectedId} onError=${setError} />`}
     </div>
   `
 }
 
-function SchematicList ({ schematics, reload, onOpen, onError }) {
+function SchematicList ({ schematics, devices = [], reload, onOpen, onError }) {
+  const deviceNameOf = (id) => (devices.find((d) => d.id === id) || {}).name || 'an enclosure'
   const [name, setName] = useState('')
   const [renaming, setRenaming] = useState(null)
   const [renameText, setRenameText] = useState('')
@@ -220,6 +223,7 @@ function SchematicList ({ schematics, reload, onOpen, onError }) {
                   onKeyDown=${(e) => { if (e.key === 'Enter') rename(s); if (e.key === 'Escape') setRenaming(null) }} />`
               : html`<a class="row-title" href="#" onClick=${(e) => { e.preventDefault(); onOpen(s.id) }}>${s.name}</a>`}
             <span class="meta">${s.devices.length} device${s.devices.length === 1 ? '' : 's'}</span>
+            ${s.enclosureId && html`<span class="meta" data-testid="inside-tag">Inside of ${deviceNameOf(s.enclosureId)}</span>`}
             <button type="button" class="link-btn" onClick=${() => { setRenaming(s.id); setRenameText(s.name) }}>Rename</button>
             <button type="button" class="link-btn" onClick=${() => remove(s)}>Remove</button>
           </li>
@@ -290,12 +294,19 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     setShapes(schematic.zoneShapes || [])
   }, [recordKey])
 
-  const pageDevices = schematic.devices
+  // An enclosure on the page stands for what it holds: its ports are the
+  // cables that cross its boundary, and the devices inside are not drawn.
+  const placedDevices = schematic.devices
     .map((d) => deviceById.get(d.deviceId))
     .filter((d) => isLive(d) && pos[d.id])
+  const model = pageModel(devices, cables, placedDevices.map((d) => d.id))
+  const pageDevices = placedDevices.filter((d) => !model.hidden.has(d.id)).map((d) => model.devices.get(d.id) || d)
+  const drawnById = new Map(pageDevices.map((d) => [d.id, d]))
+  const isEnclosureBox = (id) => !!(drawnById.get(id) && drawnById.get(id).isEnclosure)
   const boxes = pageDevices.map((d) => G.deviceBox(d, pos[d.id]))
   const boxById = new Map(boxes.map((b) => [b.id, b]))
-  const liveCables = cables.filter(isLive)
+  const wireBoxes = boxes.filter((b) => !isEnclosureBox(b.id)) // cables are drawn to what is inside, never to the box
+  const liveCables = model.cables.filter(isLive)
   const onPage = liveCables.filter((c) => boxById.has(c.fromDeviceId) && boxById.has(c.toDeviceId))
   const lanes = G.assignLanes(onPage.map((c) => ({ id: c.id, a: c.fromDeviceId, b: c.toDeviceId })))
   const stubsBase = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName }).map((st) => ({ ...st, cable: liveCables.find((c) => c.id === st.cableId), ...(stubPos[st.cableId] ? { pos: stubPos[st.cableId] } : {}) }))
@@ -328,7 +339,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       bridges: r ? r.bridges : [],
       path: r
         ? r.points
-        : G.wirePath({ fromBox: boxById.get(c.fromDeviceId), toBox: boxById.get(c.toDeviceId), fromTerminal: t.from, toTerminal: t.to, lane: lanes[c.id] || 0, points: bends[c.id] || [] })
+        : G.wirePath({ fromBox: boxById.get(c.fromDeviceId), toBox: boxById.get(c.toDeviceId), fromTerminal: t.from, toTerminal: t.to, lane: lanes[c.id] || 0, points: bends[c.id] || [] }),
+      stored: c.source || c
     }
   })
   const stubs = stubsBase.map((st) => {
@@ -443,7 +455,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const tidied = (layout, movable = null) => {
     const bx = []
     for (const id of Object.keys(layout)) {
-      const d = deviceById.get(id)
+      const d = drawnById.get(id) || deviceById.get(id)
       if (d) bx.push(G.deviceBox(d, layout[id]))
     }
     // tabs the user placed stay where they are; the others are placed after the devices
@@ -472,7 +484,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const c = at || centre()
     const id = newId()
     try {
-      await putResource('wiringDevices', id, { name: uniqueName(item.type), type: item.type, role: item.role })
+      // A device made on an inside page goes into that enclosure.
+      await putResource('wiringDevices', id, { name: uniqueName(item.type), type: item.type, role: item.role, ...(schematic.enclosureId ? { parentId: schematic.enclosureId } : {}) })
       const next = tidied({ ...pos, [id]: { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) } }, [id])
       setPos(next)
       await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id])
@@ -521,9 +534,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   // ---- Drawing wires ----
   // Where a dragged wire would land: a terminal, else any other device box.
   const wireTarget = (p, fromId) => {
-    const t = G.hitTerminal(boxes, p.x, p.y)
+    const t = G.hitTerminal(wireBoxes, p.x, p.y)
     if (t && t.deviceId !== fromId) return t
-    const b = G.hitDevice(boxes, p.x, p.y)
+    const b = G.hitDevice(wireBoxes, p.x, p.y)
     return b && b.id !== fromId ? { deviceId: b.id, terminal: '', x: p.x, y: p.y } : null
   }
 
@@ -631,7 +644,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       else if (cmd.kind === 'clear-selection') setSelection(null)
       else if (cmd.kind === 'delete-wire') {
         const w = wires.find((x) => x.id === cmd.id)
-        if (w) deleteWire(w.cable)
+        if (w) deleteWire(w.stored)
       } else if (cmd.kind === 'remove-device') removeFromPage(cmd.id)
       else if (cmd.kind === 'delete-zone-shape') removeShape(cmd.id)
     }
@@ -717,8 +730,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       const h = Z.hitHandle(selShape, p.x, p.y)
       if (h) { drag.current = { kind: 'shape-resize', orig: selShape, handle: h, sx: e.clientX, sy: e.clientY, moved: false }; return }
     }
-    const term = G.hitTerminal(boxes, p.x, p.y)
-    const handle = !term && boxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
+    const term = G.hitTerminal(wireBoxes, p.x, p.y)
+    const handle = !term && wireBoxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
     if (term || handle) {
       const id = term ? term.deviceId : handle.id
       drag.current = { kind: 'wire', fromId: id, fromTerminal: term ? term.terminal : '', sx: e.clientX, sy: e.clientY, moved: false }
@@ -730,7 +743,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       if (G.isDoubleTap(lastTap.current, { id: device.id, t: Date.now(), x: e.clientX, y: e.clientY })) {
         lastTap.current = null
         drag.current = null
-        openDevice(device.id)
+        openBox(device.id)
         return
       }
       setSelection({ type: 'device', id: device.id })
@@ -793,13 +806,27 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const openDevice = (id) => { window.location.hash = G.deviceHash(id) }
 
+  // An enclosure opens its inside page (made the first time); any other device opens its page.
+  const opening = useRef(false) // a double click arrives as a double tap and a click event: open once
+  const openInside = async (id) => {
+    if (opening.current) return
+    opening.current = true
+    onError(null)
+    try {
+      const pageId = await ensureInsidePage(id)
+      await reload()
+      onOpen(pageId)
+    } catch (err) { onError(err.message) } finally { opening.current = false }
+  }
+  const openBox = (id) => { if (isEnclosureBox(id)) openInside(id); else openDevice(id) }
+
   // A mouse double-click, for clicks slower than the double tap window.
   const onDblClick = (e) => {
     if (liveOn) return
     const p = toCanvas(e)
-    if (G.hitTerminal(boxes, p.x, p.y)) return
+    if (G.hitTerminal(wireBoxes, p.x, p.y)) return
     const device = G.hitDevice(boxes, p.x, p.y)
-    if (device) openDevice(device.id)
+    if (device) openBox(device.id)
   }
 
   const onPointerUp = (e) => {
@@ -856,13 +883,21 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     h.deviceIds.forEach((x) => hl.deviceIds.add(x))
     h.cableIds.forEach((x) => hl.cableIds.add(x))
   }
+  // A circuit through a device inside an enclosure lights the enclosure's box.
+  for (const id of [...hl.deviceIds]) { const r = model.repOf(id); if (r) hl.deviceIds.add(r) }
   const dimming = highlighted.length > 0 || (conduitLit && hl.cableIds.size > 0)
-  const pageCircuits = circuits.filter((c) => isLive(c) && c.derived && c.derived.deviceIds.some((id) => boxById.has(id)))
+  const pageCircuits = circuits.filter((c) => isLive(c) && c.derived && c.derived.deviceIds.some((id) => boxById.has(model.repOf(id) || id)))
 
-  const addable = devices.filter((d) => isLive(d) && !pos[d.id]).sort((a, b) => a.name.localeCompare(b.name))
+  // A device inside an enclosure is placed on that enclosure's inside page only.
+  const addable = devices.filter((d) => isLive(d) && !pos[d.id] && d.id !== schematic.enclosureId && (!d.parentId || d.parentId === schematic.enclosureId)).sort((a, b) => a.name.localeCompare(b.name))
   const otherPages = (deviceId) => schematics.filter((s) => isLive(s) && s.id !== schematic.id && s.devices.some((d) => d.deviceId === deviceId))
   const selectedShape = selection && selection.type === 'zone' ? shown.find((sh) => sh.zoneId === selection.id) : null
   const selectedDevice = selection && selection.type === 'device' ? deviceById.get(selection.id) : null
+  // The page this one is the inside of, and the pages that show that enclosure.
+  const insideOf = schematic.enclosureId ? deviceById.get(schematic.enclosureId) : null
+  const outerPages = schematic.enclosureId
+    ? schematics.filter((s) => isLive(s) && s.id !== schematic.id && s.devices.some((d) => d.deviceId === schematic.enclosureId))
+    : []
 
   const renameBox = renaming && boxById.get(renaming.id)
   const renameAt = renameBox && svgRef.current ? toScreen({ x: renameBox.x, y: renameBox.y }) : null
@@ -872,6 +907,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     <div class="schematic-editor">
       <div class="back-link" onClick=${onBack}>← All schematics</div>
       <h2 class="schematic-title">${schematic.name}</h2>
+      ${schematic.enclosureId && html`
+        <div class="meta schematic-inside" data-testid="inside-header">
+          ${'Inside of '}<a href=${G.deviceHash(schematic.enclosureId)}>${insideOf ? insideOf.name : 'an enclosure'}</a>${insideOf && insideText(devices, insideOf.id) ? ' (in ' + insideText(devices, insideOf.id) + ')' : ''}${'. '}
+          ${outerPages.length > 0
+            ? html`${'Back to '}${outerPages.map((p, i) => html`${i > 0 ? ', ' : ''}<a href="#" data-testid="outer-link" onClick=${(e) => { e.preventDefault(); onOpen(p.id) }}>${p.name}</a>`)}${'. '}`
+            : 'The enclosure is not on any other page yet. '}
+          ${'Cables that leave it end in "to" tabs.'}
+        </div>`}
       <div class="schematic-toolbar">
         <select value=${addId} data-testid="add-existing" onChange=${(e) => { setAddId(e.target.value); addExisting(e.target.value) }}>
           <option value="">Add existing device…</option>
@@ -896,7 +939,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${bands.map((b) => html`<option value=${'conduit:' + b.conduitId} key=${'conduit:' + b.conduitId}>${(conduitInfo.get(b.conduitId) || {}).name || b.label} (conduit)</option>`)}
         </select>
       </div>
-      <div class="meta schematic-legend" data-testid="schematic-legend">Double-click (or double-tap) a device to open it. Solid lines are DC, dashed lines are AC. The symbol on a port shows its conductor: = DC, ~ AC, a two-way arrow signal, the earth symbol earth or protective ground. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
+      <div class="meta schematic-legend" data-testid="schematic-legend">Double-click (or double-tap) a device to open it; an enclosure opens its inside page. Solid lines are DC, dashed lines are AC. The symbol on a port shows its conductor: = DC, ~ AC, a two-way arrow signal, the earth symbol earth or protective ground. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
       ${overlapping && html`<div class="meta schematic-notice" data-testid="overlap-notice">Some devices overlap. <button type="button" class="link-btn" data-testid="tidy" onClick=${tidyAll}>Tidy</button></div>`}
       ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
       ${notice && html`<div class="meta schematic-notice" data-testid="notice">${notice}</div>`}
@@ -940,7 +983,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
               dim=${dimming && !hl.cableIds.has(w.id)} lit=${dimming && hl.cableIds.has(w.id)} />`)}
             ${stubs.map((s) => html`<${StubShape} key=${s.cableId} stub=${s} />`)}
             ${selectedWireId && html`<${BendHandles} wire=${wires.find((w) => w.id === selectedWireId)} bends=${bends[selectedWireId] || []} />`}
-            ${boxes.map((b) => html`<${DeviceShape} key=${b.id} box=${b} device=${deviceById.get(b.id)}
+            ${boxes.map((b) => html`<${DeviceShape} key=${b.id} box=${b} device=${drawnById.get(b.id)}
               selected=${!!selection && selection.type === 'device' && selection.id === b.id}
               target=${!!preview && preview.targetId === b.id}
               live=${liveOn ? (live.info(b.id) || { look: 'none' }) : null}
@@ -970,12 +1013,12 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       </div>
       ${selectedWire && html`
         <div class="schematic-inspector" data-testid="wire-inspector">
-          <strong>${cableTitle(selectedWire.cable, new Map(devices.map((d) => [d.id, d.name])))}</strong>
+          <strong>${cableTitle(selectedWire.stored, new Map(devices.map((d) => [d.id, d.name])))}</strong>
           <span class="meta">${selectedWire.cable.conductors.length ? selectedWire.cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] || c.conductor).join(' + ') : 'Positive'}${selectedWire.cable.gauge != null ? ', ' + formatGauge(selectedWire.cable.gauge, selectedWire.cable.gaugeUnit) : ''}${selectedWire.cable.length != null ? ', ' + selectedWire.cable.length + ' ' + (selectedWire.cable.lengthUnit || '') : ''}</span>
           <span class="meta" data-testid="wire-circuits">${wireCircuits.length ? wireCircuits.map(circuitLine).join('; ') : 'Not part of a circuit yet.'}</span>
-          <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.cable })}>Edit cable</button>
+          <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.stored })}>Edit cable</button>
           ${(bends[selectedWire.id] || []).length > 0 && html`<button type="button" class="link-btn" onClick=${() => straighten(selectedWire.id)}>Straighten</button>`}
-          <button type="button" class="link-btn" data-testid="delete-wire" onClick=${() => deleteWire(selectedWire.cable)}>Delete wire</button>
+          <button type="button" class="link-btn" data-testid="delete-wire" onClick=${() => deleteWire(selectedWire.stored)}>Delete wire</button>
           <span class="meta">Drag the dots to bend the wire; double-click a dot to remove it.</span>
         </div>`}
       ${selectedShape && html`
@@ -989,6 +1032,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <div class="schematic-inspector" data-testid="inspector">
           <strong>${selectedDevice.name}</strong>
           <span class="meta">${roleLabel(selectedDevice.role)}${selectedDevice.type ? ', ' + selectedDevice.type : ''}</span>
+          ${selectedDevice.role === 'enclosure' && html`<button type="button" class="link-btn" data-testid="open-inside" onClick=${() => openInside(selectedDevice.id)}>Open inside schematic</button>`}
+          ${selectedDevice.role === 'enclosure' && html`<button type="button" class="link-btn" data-testid="open-device-page" onClick=${() => openDevice(selectedDevice.id)}>Open device page</button>`}
           <button type="button" class="link-btn" onClick=${() => setRenaming({ id: selectedDevice.id, text: selectedDevice.name, fresh: true })}>Rename</button>
           <button type="button" class="link-btn" data-testid="remove-from-page" onClick=${() => removeFromPage(selectedDevice.id)}>Remove from this page</button>
           <span class="meta">Takes it off this page only; the device and its cables stay.</span>
@@ -1038,17 +1083,20 @@ function ZoneHandles ({ shape }) {
 
 function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
   const liveClass = live ? ` live-${live.look}${live.clickable ? ' live-clickable' : ''}` : ''
-  const cls = `sch-device role-${device.role || 'consumer'}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}${liveClass}`
+  const cls = `sch-device role-${device.role || 'consumer'}${device.isEnclosure ? ' sch-enclosure' : ''}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}${liveClass}`
   return html`
     <g class=${cls} transform="translate(${box.x}, ${box.y})" data-device=${box.id} data-live=${live ? live.look : undefined}>
       ${live && live.title && html`<title>${live.title}</title>`}
       <rect width=${box.w} height=${box.h} rx="5" class="sch-device-box" />
       <text x=${box.w / 2} y="14" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
-      ${device.type && html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type">${shorten(device.type, 26)}</text>`}
+      ${device.isEnclosure
+        ? html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type" data-testid="enclosure-holds">${shorten(device.type || 'Enclosure', 18)}, holds ${device.holds}</text>
+            <g class="sch-enclosure-link" data-testid="enclosure-link" transform=${'translate(' + (box.w - 16) + ' 4)'}><title>Double-click to open the inside</title><rect width="12" height="12" rx="2" /><path d="M3 9 L9 3 M5 3 H9 V7" /></g>`
+        : device.type && html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type">${shorten(device.type, 26)}</text>`}
       ${live && live.look === 'locked' && html`<${LiveLock} x=${box.w - 10} y=${10} size=${13} />`}
       ${live && html`<${LiveReading} x=${box.w / 2} y=${box.bottomPorts ? 26 : box.h - 5} size=${live.reading && live.reading.length > 28 ? 8.5 : 10} text=${live.reading} stale=${live.stale} />`}
-      ${!live && html`<circle cx=${box.w / 2} cy=${box.bottomPorts ? 0 : box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>`}
-      <${PortBlocks} box=${box} />
+      ${!live && !device.isEnclosure && html`<circle cx=${box.w / 2} cy=${box.bottomPorts ? 0 : box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>`}
+      <${PortBlocks} box=${box} labels=${!!device.isEnclosure} />
     </g>
   `
 }
@@ -1068,7 +1116,7 @@ function WireShape ({ wire, deviceName, selected, dim, lit }) {
   const cls = `sch-wire${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
   return html`
     <g class=${cls} data-wire=${wire.id} data-current=${style.current || ''}>
-      <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.cable, deviceName)}</title></path>
+      <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.stored || wire.cable, deviceName)}</title></path>
       ${paired && html`<path d=${paired} class="sch-wire-pair c-${types[1]}" stroke-dasharray=${style.dasharray || undefined} />`}
     </g>
   `

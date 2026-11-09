@@ -119,7 +119,7 @@ the floorplan. On a schematic, such an enclosure acts as a link to its own
 - [x] Device form, page and list: role, the Inside picker, contents, filter,
       bulk Inside.
 - [x] Floorplan: skip contents when placing, the enclosure marker and popover.
-- [ ] Schematic: the enclosure box with derived ports, the inside page, the
+- [x] Schematic: the enclosure box with derived ports, the inside page, the
       stubs and links.
 - [ ] Removal and undo with contents.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #19.

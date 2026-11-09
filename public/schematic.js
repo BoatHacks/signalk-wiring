@@ -112,7 +112,7 @@ export function deviceBox (device, pos, opts = {}) {
   for (const s of sides) count[s]++
   const rows = Math.max(count.left, count.right)
   const h = Math.max(BOX_MIN_H, HEADER_H + rows * TERMINAL_ROW_H + 6)
-  const w = opts.w || BOX_W
+  const w = opts.w || device.boxW || BOX_W
   const seen = { left: 0, right: 0 }
   return {
     id: device.id,
@@ -145,7 +145,7 @@ function portBox (device, pos, opts) {
   let bottomW = 0
   const bottomGroups = groups.filter((g) => g.side === 'bottom')
   for (const g of bottomGroups) bottomW += Math.max(g.terminals.length * BOTTOM_ROW_W, g.name.length * 5.4) + PORT_GAP
-  const w = Math.max(opts.w || BOX_W, Math.ceil(bottomW + PORT_GAP))
+  const w = Math.max(opts.w || device.boxW || BOX_W, Math.ceil(bottomW + PORT_GAP))
   const hasBottom = bottomGroups.length > 0
 
   for (const g of groups.filter((x) => x.side !== 'bottom')) {

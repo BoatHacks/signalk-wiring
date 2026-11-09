@@ -13,7 +13,8 @@ function shorten (text, max) {
 
 // `box` comes from deviceBox; (originX, originY) is where the drawing's
 // local (0, 0) sits in the box's coordinates.
-export function PortBlocks ({ box, originX = box.x, originY = box.y }) {
+// `labels` writes each terminal's name beside its dot (an enclosure's ports).
+export function PortBlocks ({ box, originX = box.x, originY = box.y, labels = false }) {
   const hasPorts = (box.ports || []).length > 0
   if (box.terminals.length < 2 && !hasPorts) return null
   return html`
@@ -32,6 +33,7 @@ export function PortBlocks ({ box, originX = box.x, originY = box.y }) {
             <title>${t.name}${t.port ? ` (${t.port})` : ''}</title>
           </circle>
           ${mark && html`<path d=${MARK_PATHS[mark]} class="sch-port-mark c-${t.conductor}" />`}
+          ${labels && html`<text x=${t.side === 'right' ? -11 : 11} y="3.5" text-anchor=${t.side === 'right' ? 'end' : 'start'} class="sch-terminal-label">${t.name}</text>`}
         </g>`
       })}
     </g>
