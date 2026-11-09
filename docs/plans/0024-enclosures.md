@@ -121,7 +121,7 @@ the floorplan. On a schematic, such an enclosure acts as a link to its own
 - [x] Floorplan: skip contents when placing, the enclosure marker and popover.
 - [x] Schematic: the enclosure box with derived ports, the inside page, the
       stubs and links.
-- [ ] Removal and undo with contents.
+- [x] Removal and undo with contents.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #19.
 
 ## Files to Create/Modify

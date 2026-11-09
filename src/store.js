@@ -10,7 +10,7 @@ const { CHEMISTRIES, PURPOSES, LINKS, typeChemistry, typePurpose } = require('./
 const { deriveBanks } = require('./banks')
 const { CURRENTS, typeCurrent, terminalsCurrent, mixesAcAndDc } = require('./current')
 const { deriveSwitchability } = require('./switchability')
-const { wouldCycle, contentsOf, childrenOf, boundaryCables } = require('./enclosures')
+const { wouldCycle, contentsOf, childrenOf, boundaryCables, cablesTouching } = require('./enclosures')
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 
@@ -560,6 +560,7 @@ const CHILDREN = {
 // device means setting status to 'removed' so the history stays queryable.
 const REMOVED_STATUS = 'removed'
 const RESTORED_SUMMARY = 'restored (undo)'
+const REMOVED_WITH_CONTENTS = 'removed with contents'
 
 // The one allowed way back from removed to active is the undo message, so a
 // write that does it is logged as a restore (SPEC.md section 3.2).
@@ -1042,6 +1043,12 @@ class Store {
     if (!existing) return null
 
     if (kind === 'schematic') return this._updateSchematic(id, patch, existing)
+    // Plan 0024: removing an enclosure removes what it holds, and putting it
+    // back puts that back.
+    if (kind === 'device' && existing.role === 'enclosure' && !this._cascading) {
+      if (patch.status === REMOVED_STATUS && existing.status !== REMOVED_STATUS) return this._removeEnclosure(id, patch, existing)
+      if (patch.status === 'active' && existing.status === REMOVED_STATUS) return this._restoreEnclosure(id, patch, existing)
+    }
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
     if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing)), false)))
@@ -1083,6 +1090,55 @@ class Store {
     }
     this._afterWrite(kind)
     return updated
+  }
+
+  // Removes an enclosure with every device inside it (nested too), the live
+  // cables that end on those devices and the inside pages, as one action. The
+  // list goes into the enclosure's change log so the undo restores exactly
+  // that and nothing the user had removed before.
+  _removeEnclosure (id, patch, existing) {
+    const devices = this._enclosureDevices()
+    const contents = contentsOf(devices, id)
+    const cables = cablesTouching(this.list('wireRun').map((w) => ({
+      id: w.id, fromDeviceId: w.from_device_id, toDeviceId: w.to_device_id, status: w.status, conductors: w.conductors
+    })), contents)
+    const enclosures = new Set([id, ...contents.filter((c) => devices.find((d) => d.id === c).role === 'enclosure')])
+    const pages = this.list('schematic').filter((s) => s.status !== REMOVED_STATUS && enclosures.has(s.enclosure_id)).map((s) => s.id)
+    this._cascading = true
+    try {
+      return this.db.transaction(() => {
+        for (const cid of contents) this.update('device', cid, { status: REMOVED_STATUS })
+        for (const cid of cables) this.update('wireRun', cid, { status: REMOVED_STATUS })
+        for (const pid of pages) this.update('schematic', pid, { status: REMOVED_STATUS })
+        const updated = this.update('device', id, patch)
+        this._logChange('device', id, REMOVED_WITH_CONTENTS, { devices: contents, cables, schematics: pages })
+        return updated
+      })()
+    } finally { this._cascading = false }
+  }
+
+  // Undo of the above: the enclosure and what its latest removal took with it.
+  _restoreEnclosure (id, patch, existing) {
+    const entry = this.db.prepare(
+      "SELECT diff_json FROM change_log WHERE record_type = 'device' AND record_id = ? AND summary = ? ORDER BY rowid DESC LIMIT 1"
+    ).get(id, REMOVED_WITH_CONTENTS)
+    const took = entry && entry.diff_json ? JSON.parse(entry.diff_json) : { devices: [], cables: [], schematics: [] }
+    this._cascading = true
+    try {
+      return this.db.transaction(() => {
+        const updated = this.update('device', id, patch)
+        const back = (kind, ids) => {
+          for (const rid of ids || []) {
+            const row = this.get(kind, rid)
+            if (row && row.status === REMOVED_STATUS) this.update(kind, rid, { status: 'active' })
+          }
+        }
+        back('device', took.devices)
+        back('wireRun', took.cables)
+        back('schematic', took.schematics)
+        return updated
+      })()
+    } finally { this._cascading = false }
   }
 
   // A conduit needs a name; its kind is free text, trimmed.

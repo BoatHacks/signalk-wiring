@@ -2,7 +2,7 @@ import { html, render, useState, useEffect } from './vendor/preact-standalone.mo
 import { newId } from './ids.js'
 import { PathCombobox } from './signalkPaths.js'
 import { ROLES, roleLabel } from './roles.js'
-import { insideOptions, insideText, matchesInside, NOT_INSIDE, pathOf, childrenOf } from './enclosures.js'
+import { insideOptions, insideText, matchesInside, NOT_INSIDE, pathOf, childrenOf, contentsOf, cablesTouching, removalText } from './enclosures.js'
 import {
   NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches, matchesSearch, matchesRemoved,
   readShowRemoved, writeShowRemoved
@@ -2237,11 +2237,28 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
   }
 
   const removeDevice = async () => {
-    if (!device || !confirmRemove(device.name)) return
+    if (!device) return
     const name = device.name
+    // An enclosure takes what it holds with it: say what, before asking.
+    const inside = device.role === 'enclosure' ? contentsOf(allDevices, deviceId) : []
+    let facts = null
+    if (inside.length > 0) {
+      const cables = Object.values(await fetchResourceMap('wiringWireRuns'))
+      const cableIds = cablesTouching(cables, inside)
+      facts = {
+        names: inside.map((id) => deviceNames.get(id) || id),
+        cableTitles: cableIds.map((id) => cableTitle(cables.find((c) => c.id === id), deviceNames))
+      }
+      if (!window.confirm(removalText(name, facts))) return
+    } else if (!confirmRemove(name)) return
     await deleteResource('wiringDevices', deviceId)
     onBack() // leaving the page first: it would otherwise finish the message below
-    undo.offer({ message: `Device "${name}" removed.`, onUndo: () => restoreResource('wiringDevices', deviceId) })
+    undo.offer({
+      message: facts
+        ? `Enclosure "${name}" removed with ${facts.names.length} ${facts.names.length === 1 ? 'device' : 'devices'} and ${facts.cableTitles.length} ${facts.cableTitles.length === 1 ? 'cable' : 'cables'}. Undo puts them all back.`
+        : `Device "${name}" removed.`,
+      onUndo: () => restoreResource('wiringDevices', deviceId)
+    })
   }
 
   return html`

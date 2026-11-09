@@ -21,6 +21,19 @@ test('the browser copy matches the server copy', () => {
   assert.equal(web.wouldCycle(devices, 'cabinet', 'box'), server.wouldCycle(devices, 'cabinet', 'box'))
   assert.deepEqual(web.boundaryCables(devices, cables, 'box'), server.boundaryCables(devices, cables, 'box'))
   assert.equal(web.boundaryCables(devices, cables, 'box')[0].name, 'breaker IN')
+  const more = [...cables, { id: 'neg', fromDeviceId: 'battery', toDeviceId: 'battery', status: 'active', conductors: [{ conductor: 'negative', toDeviceId: 'breaker' }] },
+    { id: 'dead', fromDeviceId: 'breaker', toDeviceId: 'battery', status: 'removed', conductors: [] }]
+  assert.deepEqual(web.cablesTouching(more, ['breaker']), server.cablesTouching(more, ['breaker']))
+  assert.deepEqual(web.cablesTouching(more, ['breaker']), ['feed', 'neg'])
+})
+
+test('removalText lists the devices and the cables, shortened when long', () => {
+  const text = web.removalText('Panel', { names: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], cableTitles: ['x to y'] })
+  assert.match(text, /Remove the enclosure "Panel" and everything inside it\?/)
+  assert.match(text, /Devices inside \(8\): a, b, c, d, e, f and 2 more\./)
+  assert.match(text, /Their cables \(1\): x to y\./)
+  assert.match(web.removalText('P', { names: ['a'], cableTitles: [] }), /No cables end on them\./)
+  assert.match(text, /Undo puts everything back/)
 })
 
 test('the Inside picker offers live enclosures that are not the device or inside it', () => {

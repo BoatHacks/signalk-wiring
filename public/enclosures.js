@@ -88,6 +88,28 @@ export function boundaryCables (devices, cables, enclosureId) {
 
 
 
+// The live cables that end on any of the given devices, as the cable's own
+// ends or as the landing of one of its conductors. Removing an enclosure
+// removes these along with what it holds.
+export function cablesTouching (cables, deviceIds) {
+  const ids = new Set(deviceIds)
+  return cables.filter((c) => isLive(c) && (ids.has(c.fromDeviceId) || ids.has(c.toDeviceId) ||
+    (c.conductors || []).some((k) => ids.has(k.fromDeviceId) || ids.has(k.toDeviceId)))).map((c) => c.id)
+}
+
+// The confirmation before removing an enclosure: what goes with it.
+//   facts: { names: the devices inside, cableTitles: their cables }
+export function removalText (name, facts) {
+  const list = (items) => (items.length > 6 ? `${items.slice(0, 6).join(', ')} and ${items.length - 6} more` : items.join(', '))
+  const parts = [`Remove the enclosure "${name}" and everything inside it?`]
+  parts.push(`Devices inside (${facts.names.length}): ${list(facts.names)}.`)
+  parts.push(facts.cableTitles.length > 0
+    ? `Their cables (${facts.cableTitles.length}): ${list(facts.cableTitles)}.`
+    : 'No cables end on them.')
+  parts.push('Its inside schematic is removed too. They are all kept as removed records, and Undo puts everything back.')
+  return parts.join('\n\n')
+}
+
 // The Inside picker of a device: the live enclosures it may go in, which are
 // not the device itself or anything inside it. The enclosure it is in now is
 // kept in the list even when removed, so the form shows it.

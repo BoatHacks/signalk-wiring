@@ -215,3 +215,91 @@ test('regression: putting devices inside an enclosure changes no circuit, warnin
   assert.equal(snapshot(), before)
   store.close()
 })
+
+function withContents () {
+  const store = new Store(':memory:')
+  const panel = store.create('device', { name: 'Panel', role: 'enclosure' })
+  const sub = store.create('device', { name: 'Sub box', role: 'enclosure', parent_id: panel.id })
+  const fuse = store.create('device', { name: 'Fuse', role: 'distribution', trip_rating_a: 10, parent_id: sub.id })
+  const lamp = store.create('device', { name: 'Lamp', parent_id: panel.id })
+  const battery = store.create('device', { name: 'Battery', role: 'storage', nominal_voltage: 12 })
+  const other = store.create('device', { name: 'Other lamp' })
+  const run = (from, to) => store.create('wireRun', { from_device_id: from.id, to_device_id: to.id, conductors: [{ conductor: 'positive' }] })
+  const feed = run(battery, fuse)
+  const branch = run(fuse, lamp)
+  const outside = run(battery, other)
+  const old = run(battery, lamp)
+  store.remove('wireRun', old.id)
+  const page = store.create('schematic', { name: 'Panel (inside)', enclosure_id: panel.id })
+  const subPage = store.create('schematic', { name: 'Sub (inside)', enclosure_id: sub.id })
+  return { store, panel, sub, fuse, lamp, battery, other, feed, branch, outside, old, page, subPage }
+}
+
+test('removing an enclosure removes what it holds, their cables and the inside pages as one action', () => {
+  const { store, panel, sub, fuse, lamp, battery, other, feed, branch, outside, old, page, subPage } = withContents()
+  store.remove('device', panel.id)
+  const status = (kind, r) => store.get(kind, r.id).status
+  for (const d of [panel, sub, fuse, lamp]) assert.equal(status('device', d), 'removed', d.name)
+  for (const c of [feed, branch, old]) assert.equal(status('wireRun', c), 'removed')
+  assert.equal(status('wireRun', outside), 'active')
+  assert.equal(status('device', battery), 'active')
+  assert.equal(status('device', other), 'active')
+  assert.equal(status('schematic', page), 'removed')
+  assert.equal(status('schematic', subPage), 'removed')
+  // the contents keep their place in the enclosure, so undo can put them back
+  assert.equal(store.get('device', fuse.id).parent_id, sub.id)
+  // the enclosure's history says what went with it
+  const entry = store.changeLog('device', panel.id).find((e) => e.summary === 'removed with contents')
+  assert.deepEqual(JSON.parse(entry.diff_json).devices.sort(), [sub.id, fuse.id, lamp.id].sort())
+  assert.deepEqual(JSON.parse(entry.diff_json).cables.sort(), [feed.id, branch.id].sort())
+  // the circuits no longer see them
+  assert.equal(store.deriveAll().circuits.some((c) => c.cableIds.includes(feed.id)), false)
+})
+
+test('undo of an enclosure removal restores exactly what it took, not what was removed before', () => {
+  const { store, panel, sub, fuse, lamp, feed, branch, outside, old, page, subPage } = withContents()
+  store.remove('device', panel.id)
+  const restored = store.update('device', panel.id, { status: 'active' })
+  assert.equal(restored.status, 'active')
+  for (const d of [sub, fuse, lamp]) assert.equal(store.get('device', d.id).status, 'active', d.name)
+  for (const c of [feed, branch, outside]) assert.equal(store.get('wireRun', c.id).status, 'active')
+  assert.equal(store.get('wireRun', old.id).status, 'removed') // removed by the user earlier: stays removed
+  assert.equal(store.get('schematic', page.id).status, 'active')
+  assert.equal(store.get('schematic', subPage.id).status, 'active')
+  assert.equal(store.changeLog('device', panel.id).at(-1).summary, 'restored (undo)')
+  assert.ok(store.changeLog('device', panel.id).some((e) => e.summary === 'removed with contents'))
+  assert.ok(store.changeLog('device', fuse.id).some((e) => e.summary === 'restored (undo)'))
+  assert.ok(store.deriveAll().circuits.some((c) => c.cableIds.includes(feed.id)))
+  // removing again after the restore works the same
+  store.remove('device', panel.id)
+  assert.equal(store.get('device', fuse.id).status, 'removed')
+})
+
+test('removing a nested enclosure takes only its own contents; an empty enclosure is a plain removal', () => {
+  const { store, panel, sub, fuse, lamp } = withContents()
+  store.remove('device', sub.id)
+  assert.equal(store.get('device', fuse.id).status, 'removed')
+  assert.equal(store.get('device', lamp.id).status, 'active')
+  assert.equal(store.get('device', panel.id).status, 'active')
+  store.update('device', sub.id, { status: 'active' })
+  assert.equal(store.get('device', fuse.id).status, 'active')
+  const empty = store.create('device', { name: 'Empty', role: 'enclosure' })
+  store.remove('device', empty.id)
+  assert.equal(store.get('device', empty.id).status, 'removed')
+  assert.equal(store.changeLog('device', empty.id).filter((e) => e.summary === 'removed with contents').length, 1)
+})
+
+test('purge stays strict: the contents of a removed enclosure must be purged first, their cables first of all', () => {
+  const { store, panel, sub, fuse, lamp, feed, branch, old, page, subPage } = withContents()
+  store.remove('device', panel.id)
+  assert.throws(() => store.purgeDevice(panel.id), /Take out or delete these devices first/)
+  assert.throws(() => store.purgeDevice(fuse.id), /Delete these cables first/)
+  for (const c of [feed, branch, old]) store.purgeCable(c.id)
+  store.purgeDevice(fuse.id)
+  store.purgeDevice(lamp.id)
+  store.purgeDevice(sub.id)
+  store.purgeDevice(panel.id)
+  assert.equal(store.get('device', panel.id), null)
+  assert.equal(store.get('schematic', page.id), null)
+  assert.equal(store.get('schematic', subPage.id), null)
+})

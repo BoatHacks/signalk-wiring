@@ -88,4 +88,13 @@ function boundaryCables (devices, cables, enclosureId) {
   return out
 }
 
-module.exports = { childrenOf, contentsOf, pathOf, wouldCycle, boundaryCables }
+// The live cables that end on any of the given devices, as the cable's own
+// ends or as the landing of one of its conductors. Removing an enclosure
+// removes these along with what it holds.
+function cablesTouching (cables, deviceIds) {
+  const ids = new Set(deviceIds)
+  return cables.filter((c) => isLive(c) && (ids.has(c.fromDeviceId) || ids.has(c.toDeviceId) ||
+    (c.conductors || []).some((k) => ids.has(k.fromDeviceId) || ids.has(k.toDeviceId)))).map((c) => c.id)
+}
+
+module.exports = { childrenOf, contentsOf, pathOf, wouldCycle, boundaryCables, cablesTouching }
