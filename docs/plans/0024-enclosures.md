@@ -122,7 +122,7 @@ the floorplan. On a schematic, such an enclosure acts as a link to its own
 - [x] Schematic: the enclosure box with derived ports, the inside page, the
       stubs and links.
 - [x] Removal and undo with contents.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #19.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #19.
 
 ## Files to Create/Modify
 

@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-11-09
+
+### Added
+
+- Enclosures: a new Enclosure device role for breaker boxes and distribution
+  panels (database migration 15). Devices can be put inside an enclosure (the
+  Inside picker, a bulk Put inside action, an Inside filter on the Devices
+  tab), to any depth. Only the enclosure is placed on the floorplan, where its
+  marker shows a count and lists the contents.
+- On a schematic an enclosure is one box with a port per cable that crosses its
+  boundary. Double-click opens its inside page, created the first time, where
+  those cables end in "to ..." tabs; a link leads back to the outer page.
+- Removing an enclosure removes its contents, their cables and its inside page
+  after a confirmation, and Undo restores them.
+
 ## [0.6.5] - 2026-11-09
 
 ### Added

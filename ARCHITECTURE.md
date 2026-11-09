@@ -447,7 +447,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are fourteen migrations (the third to fourteenth are described below): plan 0008's field
+every subsequent restart. There are fifteen migrations (the third to fifteenth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -751,3 +751,5 @@ No external services or network dependencies at runtime.
 Plan 0022 tightened the router to hard rules (16 unit lane pitch, 18 unit outward legs, no shared stretches, bridges only) and added the `schematic_stubs` table (migration 13) for dragged off-page tabs.
 
 Plan 0023 added the `schematic_zones` table (migration 14) for zone shapes (rectangle, oval, polygon with a corner list), drawn on a background layer the router never sees, and moved the AC and DC marks from the wires to the port dots (`public/portMark.js`).
+
+Plan 0024 added `devices.parent_id` and `schematics.enclosure_id` (migration 15) and `src/enclosures.js` (contents, path and boundary cables, mirrored in `public/enclosures.js`). Circuit derivation is untouched: cables end on the contained devices.

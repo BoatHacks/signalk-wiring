@@ -7,6 +7,9 @@ to someone else doesn't depend on the current owner being present.
 
 ## Features
 
+- **Enclosures**: breaker boxes and panels can hold other devices, so only
+  the box goes on the floorplan; on a schematic the box opens its own inside
+  page.
 - **Zone shapes on schematics**: draw zones as rectangles, ovals or polygons
   behind a schematic page to show which devices sit where.
 - **Schematic routing**: wires are routed around device boxes with bridges at

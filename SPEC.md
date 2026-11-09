@@ -115,6 +115,17 @@ A wire run or device is either:
 - **removed** — documented as having existed, now taken out. Kept in the
   record rather than deleted, so history isn't lost.
 
+### 3.1b Enclosures
+
+An enclosure (a breaker box, a distribution panel) holds other devices through
+a `parent_id` on the contained device, to any depth, with no cycles. Only the
+enclosure is placed on the floorplan. Cables end on the contained devices, so
+circuits and the load summary are unchanged. On a schematic the enclosure is
+one box with a port per cable that crosses its boundary, and opening it creates
+its own inside page, where those cables end in "to ..." tabs. Removing an
+enclosure removes its contents, their cables and the inside page; Undo restores
+them.
+
 ### 3.2 Transitions
 
 - `active → removed`: user marks a wire run/device as removed (e.g.
@@ -221,7 +232,7 @@ A wire run or device is either:
   - `id`, `name`, `type` (free text, e.g. "bilge pump", "solar"), `iconAttachmentId`
     (optional: one of the device's own JPEG, PNG or WebP attachments, used as
     its icon), `role`
-    (consumer | source | storage | distribution | converter; consumer by
+    (consumer | source | storage | distribution | converter | enclosure; consumer by
     default, so devices recorded before roles existed stay valid), `current`
     (ac | dc, or unset for either: whether the device works on AC or DC, used
     to choose the type of a new cable; a new device gets it from its type, for
