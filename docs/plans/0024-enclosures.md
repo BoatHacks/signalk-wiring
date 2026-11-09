@@ -114,7 +114,7 @@ the floorplan. On a schematic, such an enclosure acts as a link to its own
 
 ## Implementation Steps
 
-- [ ] Migration 15, the store fields and validation, `src/enclosures.js`, with
+- [x] Migration 15, the store fields and validation, `src/enclosures.js`, with
       tests.
 - [ ] Device form, page and list: role, the Inside picker, contents, filter,
       bulk Inside.

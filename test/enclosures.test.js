@@ -1,0 +1,173 @@
+'use strict'
+
+// Plan 0024: enclosures, migration 15, parent validation, boundary cables.
+
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const Database = require('better-sqlite3')
+const { Store } = require('../src/store')
+const { createResourceProvider } = require('../src/resources')
+const { contentsOf, pathOf, wouldCycle, boundaryCables, childrenOf } = require('../src/enclosures')
+
+const dev = (id, extra = {}) => ({ id, name: id, role: 'consumer', status: 'active', parentId: null, ...extra })
+const cab = (id, from, to, extra = {}) => ({ id, fromDeviceId: from, toDeviceId: to, status: 'active', conductors: [], ...extra })
+
+// cabinet > box > breaker; cabinet > lamp; outside: battery
+const nested = [
+  dev('cabinet', { role: 'enclosure' }),
+  dev('box', { role: 'enclosure', parentId: 'cabinet' }),
+  dev('breaker', { role: 'distribution', parentId: 'box' }),
+  dev('lamp', { parentId: 'cabinet' }),
+  dev('gone', { parentId: 'box', status: 'removed' }),
+  dev('battery', { role: 'storage' })
+]
+
+test('contents are direct and nested, removed devices are left out', () => {
+  assert.deepEqual(childrenOf(nested, 'cabinet'), ['box', 'lamp'])
+  assert.deepEqual(contentsOf(nested, 'cabinet'), ['box', 'lamp', 'breaker'])
+  assert.deepEqual(contentsOf(nested, 'box'), ['breaker'])
+  assert.deepEqual(contentsOf(nested, 'battery'), [])
+})
+
+test('the path is the chain of enclosures, outermost first', () => {
+  assert.deepEqual(pathOf(nested, 'breaker'), ['cabinet', 'box'])
+  assert.deepEqual(pathOf(nested, 'cabinet'), [])
+})
+
+test('a cycle is detected', () => {
+  assert.equal(wouldCycle(nested, 'cabinet', 'box'), true)
+  assert.equal(wouldCycle(nested, 'box', 'box'), true)
+  assert.equal(wouldCycle(nested, 'box', 'cabinet'), false)
+  // a loop already in the data does not hang the walk
+  const loop = [dev('a', { parentId: 'b' }), dev('b', { parentId: 'a' })]
+  assert.deepEqual(contentsOf(loop, 'a').sort(), ['b'])
+  assert.equal(pathOf(loop, 'a').length <= 1, true)
+})
+
+test('boundary cables have exactly one end inside, at any depth', () => {
+  const cables = [
+    cab('feed', 'battery', 'breaker', { conductors: [{ conductor: 'positive', color: 'red', fromTerminal: 'B+', toTerminal: 'IN' }] }),
+    cab('inner', 'breaker', 'lamp'),
+    cab('mid', 'lamp', 'box'),
+    cab('removed', 'battery', 'lamp', { status: 'removed' }),
+    cab('outside', 'battery', 'battery')
+  ]
+  const cabinet = boundaryCables(nested, cables, 'cabinet')
+  assert.deepEqual(cabinet.map((p) => p.cableId), ['feed'])
+  assert.equal(cabinet[0].innerDeviceId, 'breaker')
+  assert.equal(cabinet[0].outerDeviceId, 'battery')
+  assert.equal(cabinet[0].innerEnd, 'to')
+  assert.deepEqual(cabinet[0].terminals, ['IN'])
+  assert.equal(cabinet[0].name, 'breaker IN')
+  assert.deepEqual(cabinet[0].conductors, [{ conductor: 'positive', color: 'red', terminal: 'IN' }])
+  // the box sees the feed and the cable to the lamp (inside the cabinet, outside the box)
+  assert.deepEqual(boundaryCables(nested, cables, 'box').map((p) => p.cableId).sort(), ['feed', 'inner'])
+})
+
+test('migration 15: a version 14 database gains the columns, twice over', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-wiring-m15-')), 'wiring.db')
+  new Store(file).close()
+  const raw = new Database(file)
+  raw.exec('DROP INDEX idx_devices_parent; DROP INDEX idx_schematics_enclosure; ALTER TABLE devices DROP COLUMN parent_id; ALTER TABLE schematics DROP COLUMN enclosure_id')
+  raw.pragma('user_version = 14')
+  raw.close()
+  for (let i = 0; i < 2; i++) {
+    const store = new Store(file)
+    assert.equal(store.db.pragma('user_version', { simple: true }), 15)
+    const box = store.create('device', { name: 'Box', role: 'enclosure' })
+    const lamp = store.create('device', { name: 'Lamp', parent_id: box.id })
+    assert.equal(store.get('device', lamp.id).parent_id, box.id)
+    store.close()
+    if (i === 0) { const r = new Database(file); r.pragma('user_version = 14'); r.close() }
+  }
+})
+
+function setup () {
+  const store = new Store(':memory:')
+  const box = store.create('device', { name: 'Box', role: 'enclosure' })
+  const inner = store.create('device', { name: 'Inner box', role: 'enclosure', parent_id: box.id })
+  const breaker = store.create('device', { name: 'Breaker', role: 'distribution', parent_id: inner.id })
+  const lamp = store.create('device', { name: 'Lamp' })
+  return { store, box, inner, breaker, lamp }
+}
+
+test('parent_id must be a live enclosure, not the device itself, with no cycle', () => {
+  const { store, box, inner, breaker, lamp } = setup()
+  assert.throws(() => store.update('device', lamp.id, { parent_id: breaker.id }), /only be put inside an enclosure/)
+  assert.throws(() => store.update('device', box.id, { parent_id: box.id }), /inside itself/)
+  assert.throws(() => store.update('device', box.id, { parent_id: inner.id }), /something it holds/)
+  assert.throws(() => store.update('device', lamp.id, { parent_id: 'nope' }), /device not found/)
+  assert.throws(() => store.create('device', { name: 'X', parent_id: lamp.id }), /only be put inside an enclosure/)
+  const moved = store.update('device', lamp.id, { parent_id: inner.id })
+  assert.equal(moved.parent_id, inner.id)
+  // logged like any field
+  const log = store.changeLog('device', lamp.id).at(-1)
+  assert.deepEqual(JSON.parse(log.diff_json).parent_id, { before: null, after: inner.id })
+  // taking it out
+  assert.equal(store.update('device', lamp.id, { parent_id: '' }).parent_id, null)
+  // a removed enclosure takes no new devices
+  store.remove('device', inner.id)
+  assert.throws(() => store.update('device', lamp.id, { parent_id: inner.id }), /removed enclosure/)
+})
+
+test('an enclosure that holds devices keeps its role', () => {
+  const { store, box, inner } = setup()
+  assert.throws(() => store.update('device', inner.id, { role: 'consumer' }), /still holds devices/)
+  store.update('device', inner.id, { notes: 'fine' })
+  store.update('device', store.list('device').find((d) => d.name === 'Breaker').id, { parent_id: null })
+  assert.equal(store.update('device', inner.id, { role: 'consumer' }).role, 'consumer')
+  assert.ok(box)
+})
+
+test('one inside page per enclosure, set only on creation', () => {
+  const { store, box, inner, lamp } = setup()
+  const page = store.create('schematic', { name: 'Box (inside)', enclosure_id: box.id })
+  assert.equal(page.enclosure_id, box.id)
+  assert.throws(() => store.create('schematic', { name: 'Again', enclosure_id: box.id }), /already has an inside page/)
+  assert.throws(() => store.create('schematic', { name: 'X', enclosure_id: lamp.id }), /belongs to an enclosure/)
+  assert.throws(() => store.update('schematic', page.id, { enclosure_id: inner.id }), /cannot be changed/)
+  assert.throws(() => store.update('schematic', page.id, { enclosure_id: null }), /cannot be changed/)
+  assert.equal(store.update('schematic', page.id, { enclosure_id: box.id, name: 'Renamed' }).name, 'Renamed')
+  assert.equal(store.create('schematic', { name: 'Plain' }).enclosure_id, null)
+})
+
+test('resources serve parentId, enclosureId, contents and boundary cables', async () => {
+  const { store, box, inner, breaker, lamp } = setup()
+  const c = store.create('wireRun', {
+    from_device_id: lamp.id, to_device_id: breaker.id,
+    conductors: [{ conductor: 'positive', toTerminal: 'IN' }]
+  })
+  const devices = createResourceProvider(store, 'device', 'wiringDevices')
+  const got = await devices.methods.getResource(box.id)
+  assert.deepEqual(got.contents, [inner.id])
+  assert.deepEqual(got.allContents, [inner.id, breaker.id])
+  assert.equal(got.boundaryCables[0].cableId, c.id)
+  assert.equal((await devices.methods.getResource(breaker.id)).parentId, inner.id)
+  assert.equal((await devices.methods.getResource(lamp.id)).contents, undefined)
+  const all = await devices.methods.listResources()
+  assert.deepEqual(all[inner.id].contents, [breaker.id])
+  const page = store.create('schematic', { name: 'In', enclosure_id: box.id })
+  const schematics = createResourceProvider(store, 'schematic', 'wiringSchematics')
+  assert.equal((await schematics.methods.getResource(page.id)).enclosureId, box.id)
+  // a put with the derived fields echoed back is accepted
+  await devices.methods.setResource(box.id, { ...got, notes: 'x' })
+  assert.equal(store.get('device', box.id).notes, 'x')
+})
+
+test('purge: an enclosure with devices in it is refused, its inside page goes with it', () => {
+  const { store, box, inner, breaker } = setup()
+  const page = store.create('schematic', { name: 'Box (inside)', enclosure_id: box.id })
+  store.remove('device', inner.id)
+  store.remove('device', box.id)
+  assert.throws(() => store.purgeDevice(box.id), /Take out or delete these devices first: Inner box/)
+  store.update('device', inner.id, { parent_id: null })
+  assert.throws(() => store.purgeDevice(inner.id), /Take out or delete these devices first: Breaker/)
+  store.update('device', breaker.id, { parent_id: null })
+  store.purgeDevice(inner.id)
+  store.purgeDevice(box.id)
+  assert.equal(store.get('device', box.id), null)
+  assert.equal(store.get('schematic', page.id), null)
+})

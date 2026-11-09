@@ -10,6 +10,7 @@ const { CHEMISTRIES, PURPOSES, LINKS, typeChemistry, typePurpose } = require('./
 const { deriveBanks } = require('./banks')
 const { CURRENTS, typeCurrent, terminalsCurrent, mixesAcAndDc } = require('./current')
 const { deriveSwitchability } = require('./switchability')
+const { wouldCycle, contentsOf, childrenOf, boundaryCables } = require('./enclosures')
 
 const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 
@@ -33,7 +34,7 @@ const TABLES = {
       'trip_rating_a', 'rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
       'meter_path', 'meter_unit', 'chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
       'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path',
-      'pos_x', 'pos_y', 'pos_z', 'zone_id', 'tags', 'status', 'notes'
+      'pos_x', 'pos_y', 'pos_z', 'zone_id', 'parent_id', 'tags', 'status', 'notes'
     ]
   },
   conduit: {
@@ -49,7 +50,7 @@ const TABLES = {
   },
   schematic: {
     table: 'schematics',
-    columns: ['id', 'name', 'status', 'notes']
+    columns: ['id', 'name', 'enclosure_id', 'status', 'notes']
   },
   plan: {
     table: 'plans',
@@ -60,8 +61,9 @@ const TABLES = {
 // What a device does with power. Consumers are the default, so devices
 // recorded before roles existed stay valid. Distribution covers switches,
 // breakers, fuses, bus bars, panels, isolators and relays; converters are
-// inverters, chargers and DC-DC units.
-const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter']
+// inverters, chargers and DC-DC units. An enclosure (plan 0024) is a housing
+// that holds other devices; cables go to what is inside, never to it.
+const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure']
 
 // Tables whose rows can belong to a zone.
 const ZONED_TABLES = ['devices', 'wire_runs', 'conduits']
@@ -452,6 +454,17 @@ const MIGRATIONS = [
         points TEXT, UNIQUE (schematic_id, zone_id))`)
       db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_zones_schematic ON schematic_zones (schematic_id)')
     }
+  },
+  {
+    version: 15,
+    description: 'plan 0024: devices + parent_id (the enclosure a device sits in), schematics + enclosure_id (the enclosure a page is the inside of, one page per enclosure)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      if (!has('devices', 'parent_id')) db.exec('ALTER TABLE devices ADD COLUMN parent_id TEXT REFERENCES devices(id)')
+      if (!has('schematics', 'enclosure_id')) db.exec('ALTER TABLE schematics ADD COLUMN enclosure_id TEXT REFERENCES devices(id)')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices (parent_id)')
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_schematics_enclosure ON schematics (enclosure_id) WHERE enclosure_id IS NOT NULL')
+    }
   }
 ]
 
@@ -584,10 +597,10 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
-    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(row)), true)))
+    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null)), true)))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null); row = this._checkGauge(row, null) }
-    if (kind === 'schematic') row.name = this._checkSchematicName(row.name)
+    if (kind === 'schematic') { row.name = this._checkSchematicName(row.name); row = this._checkEnclosureId(row, null) }
     const lists = kind === 'schematic' ? this._checkSchematicLists(row) : null
     const children = this._childrenOf(kind)
     const list = children ? this._checkChildren(kind, children, row[children.field], row) : null
@@ -777,6 +790,7 @@ class Store {
   _updateSchematic (id, patch, existing) {
     const fields = { ...patch }
     if ('name' in fields) fields.name = this._checkSchematicName(fields.name)
+    Object.assign(fields, this._checkEnclosureId(fields, existing))
     const lists = this._checkSchematicLists(fields)
     const cols = TABLES.schematic.columns.filter((c) => c !== 'id' && c in fields)
     const idsOf = (list, key) => (list || []).map((i) => i[key]).sort()
@@ -1022,7 +1036,7 @@ class Store {
     if (kind === 'schematic') return this._updateSchematic(id, patch, existing)
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkRole(patch)), false)))
+    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing)), false)))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
     if (kind === 'wireRun') {
@@ -1283,6 +1297,71 @@ class Store {
       throw new Error(`role must be one of: ${DEVICE_ROLES.join(', ')}`)
     }
     return fields
+  }
+
+  // Plan 0024: parent_id is the enclosure a device sits in. It must be a live
+  // enclosure other than the device itself, with no loop through nested
+  // enclosures. An enclosure that holds devices keeps its role.
+  _checkParent (id, fields, existing) {
+    let out = fields
+    if ('parent_id' in out) {
+      const parentId = textOrNull(out.parent_id)
+      out = { ...out, parent_id: parentId }
+      if (parentId) {
+        const parent = this.db.prepare('SELECT id, role, status FROM devices WHERE id = ?').get(parentId)
+        if (!parent) throw new Error(`device not found: ${parentId}`)
+        if (parent.role !== 'enclosure') throw new Error('a device can only be put inside an enclosure')
+        if (parent.status === REMOVED_STATUS && !(existing && existing.parent_id === parentId)) {
+          throw new Error('a device cannot be put inside a removed enclosure')
+        }
+        if (parentId === id) throw new Error('a device cannot be inside itself')
+        if (wouldCycle(this._enclosureDevices(), id, parentId)) throw new Error('an enclosure cannot be put inside something it holds')
+      }
+    }
+    if (existing && 'role' in out && existing.role === 'enclosure' && out.role !== 'enclosure' &&
+        childrenOf(this._enclosureDevices(), id).length > 0) {
+      throw new Error('an enclosure that still holds devices cannot change its role')
+    }
+    return out
+  }
+
+  // The list the pure enclosure functions read.
+  _enclosureDevices () {
+    return this.db.prepare('SELECT id, name, role, status, parent_id FROM devices').all()
+      .map((d) => ({ id: d.id, name: d.name, role: d.role, status: d.status, parentId: d.parent_id }))
+  }
+
+  // Plan 0024: enclosure_id marks a page as the inside of an enclosure. It is
+  // set when the page is created, one page per enclosure, and never changed.
+  _checkEnclosureId (fields, existing) {
+    if (!('enclosure_id' in fields)) return fields
+    const enclosureId = textOrNull(fields.enclosure_id)
+    if (existing) {
+      if ((existing.enclosure_id || null) !== enclosureId) throw new Error('the enclosure of a page cannot be changed')
+      return { ...fields, enclosure_id: enclosureId }
+    }
+    if (enclosureId) {
+      const device = this.db.prepare('SELECT role FROM devices WHERE id = ?').get(enclosureId)
+      if (!device) throw new Error(`device not found: ${enclosureId}`)
+      if (device.role !== 'enclosure') throw new Error('an inside page belongs to an enclosure')
+      if (this.db.prepare('SELECT 1 FROM schematics WHERE enclosure_id = ?').get(enclosureId)) {
+        throw new Error('this enclosure already has an inside page')
+      }
+    }
+    return { ...fields, enclosure_id: enclosureId }
+  }
+
+  // The contents of an enclosure and the cables crossing its boundary.
+  enclosureInfo (enclosureId) {
+    const devices = this._enclosureDevices()
+    const cables = this.list('wireRun').map((w) => ({
+      id: w.id, fromDeviceId: w.from_device_id, toDeviceId: w.to_device_id, status: w.status, conductors: w.conductors
+    }))
+    return {
+      contents: childrenOf(devices, enclosureId),
+      allContents: contentsOf(devices, enclosureId),
+      boundaryCables: boundaryCables(devices, cables, enclosureId)
+    }
   }
 
   // Plan 0017 fields. Paths are trimmed text or null, the meter unit is A or
@@ -1590,6 +1669,8 @@ class Store {
   // log go. A battery it monitored loses the link, logged on that battery.
   purgeDevice (id) {
     this._purgeCheck('device', id, 'device')
+    const held = this.db.prepare('SELECT name FROM devices WHERE parent_id = ? ORDER BY rowid').all(id)
+    if (held.length > 0) throw new Error(`Take out or delete these devices first: ${held.map((d) => d.name).join('; ')}`)
     const blocking = this.cablesEndingOn(id)
     if (blocking.length > 0) {
       const names = new Map(this.list('device').map((d) => [d.id, d.name]))
@@ -1597,14 +1678,17 @@ class Store {
       throw new Error(`Delete these cables first: ${blocking.map(title).join('; ')}`)
     }
     let attachments = []
+    const insidePages = this.db.prepare('SELECT id FROM schematics WHERE enclosure_id = ?').all(id)
     this.db.transaction(() => {
+      // The inside page of an enclosure goes with it.
+      for (const page of insidePages) attachments.push(...this._eraseSchematic(page.id))
       for (const battery of this.db.prepare('SELECT id FROM devices WHERE monitor_device_id = ?').all(id)) {
         this.update('device', battery.id, { monitor_device_id: null })
       }
       this.db.prepare('DELETE FROM device_terminals WHERE device_id = ?').run(id)
       this.db.prepare('DELETE FROM schematic_devices WHERE device_id = ?').run(id)
       this.db.prepare('DELETE FROM calibration_runs WHERE device_id = ? OR switch_device_id = ?').run(id, id)
-      attachments = this._purgeOwned('device', id)
+      attachments.push(...this._purgeOwned('device', id))
       this.db.prepare('DELETE FROM devices WHERE id = ?').run(id)
     })()
     this._afterWrite('device')
@@ -1626,15 +1710,16 @@ class Store {
   // Erases a removed schematic page with its devices, wires and history.
   purgeSchematic (id) {
     this._purgeCheck('schematic', id, 'schematic')
-    let attachments = []
-    this.db.transaction(() => {
-      this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
-      this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
-      this.db.prepare('DELETE FROM schematic_stubs WHERE schematic_id = ?').run(id)
-      this.db.prepare('DELETE FROM schematic_zones WHERE schematic_id = ?').run(id)
-      attachments = this._purgeOwned('schematic', id)
-      this.db.prepare('DELETE FROM schematics WHERE id = ?').run(id)
-    })()
+    return this.db.transaction(() => this._eraseSchematic(id))()
+  }
+
+  _eraseSchematic (id) {
+    this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
+    this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
+    this.db.prepare('DELETE FROM schematic_stubs WHERE schematic_id = ?').run(id)
+    this.db.prepare('DELETE FROM schematic_zones WHERE schematic_id = ?').run(id)
+    const attachments = this._purgeOwned('schematic', id)
+    this.db.prepare('DELETE FROM schematics WHERE id = ?').run(id)
     return attachments
   }
 

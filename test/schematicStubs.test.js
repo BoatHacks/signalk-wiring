@@ -63,6 +63,6 @@ test('an older database gets the stub table by migration', () => {
   store.db.exec('DROP TABLE schematic_stubs')
   store.db.pragma('user_version = 12')
   store._migrate()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 14)
+  assert.equal(store.db.pragma('user_version', { simple: true }), 15)
   assert.ok(store.db.prepare("SELECT name FROM sqlite_master WHERE name = 'schematic_stubs'").get())
 })

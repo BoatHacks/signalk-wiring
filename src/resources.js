@@ -56,6 +56,14 @@ function runToResource (run) {
   return out
 }
 
+// An enclosure lists what it holds (`contents`, direct, and `allContents`,
+// nested too) and the cables crossing its boundary (`boundaryCables`), the
+// outer ports of its box (plan 0024).
+function withEnclosure (store, resource, info) {
+  if (resource.role !== 'enclosure') return resource
+  return { ...resource, ...(info || store.enclosureInfo(resource.id)) }
+}
+
 function resourceToRow (resource) {
   const out = {}
   for (const [k, v] of Object.entries(resource)) {
@@ -140,7 +148,7 @@ function createResourceProvider (store, kind, type) {
             ? withAssignments(kind, resource, maps)
             : derived
               ? withDerived(resource, derived)
-              : accepted ? { ...resource, measured: measuredOf(accepted.get(row.id)) } : resource
+              : accepted ? withEnclosure(store, { ...resource, measured: measuredOf(accepted.get(row.id)) }) : resource
         }
         return out
       },
@@ -149,7 +157,7 @@ function createResourceProvider (store, kind, type) {
         if (!row) throw new Error(`${type} resource not found: ${id}`)
         const resource = rowToResource(row)
         if (kind === 'circuit') return withDerived(resource, store.deriveAll())
-        if (kind === 'device') return { ...resource, measured: measuredOf(store.latestAcceptedRun(id)) }
+        if (kind === 'device') return withEnclosure(store, { ...resource, measured: measuredOf(store.latestAcceptedRun(id)) })
         return kind === 'conduit' || kind === 'wireRun'
           ? withAssignments(kind, resource, store.conduitAssignmentMaps())
           : resource
@@ -167,6 +175,9 @@ function createResourceProvider (store, kind, type) {
         delete row.cable_ids
         delete row.conduit_ids
         delete row.measured
+        delete row.contents
+        delete row.all_contents
+        delete row.boundary_cables
         if (existing) {
           store.update(kind, id, row)
         } else {

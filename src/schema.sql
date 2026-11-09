@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS devices (
   pos_y REAL,
   pos_z REAL,
   zone_id TEXT REFERENCES zones(id),
+  parent_id TEXT REFERENCES devices(id),
   tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
@@ -167,10 +168,12 @@ CREATE INDEX IF NOT EXISTS idx_wire_run_conduits_conduit ON wire_run_conduits (c
 -- can sit on several pages, each with its own position. Wires are not stored:
 -- the cables between two devices on a page appear there by themselves. A
 -- schematic_wires row exists only for a cable the user bent; `points` is the
--- JSON list of {x, y} bend points.
+-- JSON list of {x, y} bend points. Plan 0024: enclosure_id marks the page as the
+-- inside of that enclosure (devices.role = 'enclosure'), one page per enclosure.
 CREATE TABLE IF NOT EXISTS schematics (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  enclosure_id TEXT REFERENCES devices(id),
   status TEXT NOT NULL DEFAULT 'active',
   notes TEXT
 );
