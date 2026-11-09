@@ -663,6 +663,7 @@ export function keyCommand (key, state) {
     if (state.drag || state.popover || !state.selection) return null
     if (state.selection.type === 'wire') return { kind: 'delete-wire', id: state.selection.id }
     if (state.selection.type === 'device') return { kind: 'remove-device', id: state.selection.id }
+    if (state.selection.type === 'zone') return { kind: 'delete-zone-shape', id: state.selection.id }
   }
   return null
 }

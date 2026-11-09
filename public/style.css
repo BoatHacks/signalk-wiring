@@ -747,6 +747,10 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-device.live-fixed .sch-device-box, .sch-device.live-locked .sch-device-box, .sch-device.live-none .sch-device-box { cursor: not-allowed; }
 
 /* Port blocks (devices whose terminals name ports) */
+.sch-zone-shape { fill: var(--link); fill-opacity: 0.07; stroke: var(--link); stroke-width: 2; pointer-events: none; }
+.sch-zone.selected .sch-zone-shape { fill-opacity: 0.12; stroke-width: 3; }
+.sch-zone-label { font-size: 13px; font-weight: 600; fill: var(--link); pointer-events: none; }
+.sch-zone-handle { fill: var(--surface); stroke: var(--link); stroke-width: 1.5; }
 .sch-port-block { fill: none; stroke: var(--border-strong); stroke-width: 1; }
 .sch-port-label { font-size: 9px; fill: var(--text-muted-strong); pointer-events: none; }
 .sch-terminal.c-signal { fill: var(--wire-signal); }

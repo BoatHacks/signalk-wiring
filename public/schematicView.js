@@ -16,6 +16,8 @@ import { useUndo } from './undoBar.js'
 import { offerCableUndo, toast } from './canvasRemoval.js'
 import { matchesRemoved, readShowRemoved, writeShowRemoved } from './zones.js'
 import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
+import * as Z from './zoneShapes.js'
+import { midpoints } from './polygon.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
@@ -107,9 +109,9 @@ export function SchematicsTab ({ renderCableForm, selectedId = null, onSelect = 
     let cancelled = false
     Promise.all([
       fetchList('wiringSchematics'), fetchList('wiringDevices'),
-      fetchList('wiringWireRuns'), fetchList('wiringCircuits'), fetchList('wiringConduits')
-    ]).then(([schematics, devices, cables, circuits, conduits]) => {
-      if (!cancelled) setData({ schematics, devices, cables, circuits, conduits })
+      fetchList('wiringWireRuns'), fetchList('wiringCircuits'), fetchList('wiringConduits'), fetchList('wiringZones')
+    ]).then(([schematics, devices, cables, circuits, conduits, zones]) => {
+      if (!cancelled) setData({ schematics, devices, cables, circuits, conduits, zones })
     }).catch((err) => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }
   }, [reloadKey])
@@ -234,9 +236,12 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const drag = useRef(null)
   const lastBendDown = useRef(null)
   const lastTap = useRef(null) // the last tap on a device, for the double tap
+  const lastCornerDown = useRef(null)
   const [pos, setPos] = useState({})
   const [bends, setBends] = useState({})
   const [stubPos, setStubPos] = useState({}) // cable id -> { x, y }: tabs the user placed
+  const [shapes, setShapes] = useState([]) // zone shapes: { zoneId, kind, x, y, width, height, points? }
+  const [shapeKind, setShapeKind] = useState('rect')
   const [vb, setVb] = useState(null)
   const [selection, setSelection] = useState(null) // { type: 'device' | 'wire', id }
   const [highlightId, setHighlightId] = useState('')
@@ -255,6 +260,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const { devices, cables, circuits, schematics } = data
   const conduits = data.conduits || []
+  const zones = data.zones || []
+  const zoneById = new Map(zones.map((z) => [z.id, z]))
+  const zoneName = (id) => (zoneById.get(id) || {}).name || ''
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const deviceName = (id) => (deviceById.get(id) || {}).name
   // Live mode (plan 0017): states and meter readings on the devices, and a
@@ -268,7 +276,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   // Layout lives in local state while it is being dragged and is written
   // when the drag ends. It is reset from the record whenever that changes.
-  const recordKey = JSON.stringify([schematic.devices, schematic.wires, schematic.stubs || []])
+  const recordKey = JSON.stringify([schematic.devices, schematic.wires, schematic.stubs || [], schematic.zoneShapes || []])
   useEffect(() => {
     const p = {}
     for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
@@ -279,6 +287,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     setPos(p)
     setBends(b)
     setStubPos(sp)
+    setShapes(schematic.zoneShapes || [])
   }, [recordKey])
 
   const pageDevices = schematic.devices
@@ -343,7 +352,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   }
 
   const selectedWireId = selection && selection.type === 'wire' ? selection.id : null
-  const view = vb || G.fitView([...boxes, ...stubs.map((s) => s.tab)])
+  const shown = shapes.filter((sh) => zoneById.has(sh.zoneId))
+  const view = vb || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
   const fitNow = () => setVb(null)
 
   // ---- Coordinates ----
@@ -367,7 +377,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const zoomAt = (factor, at) => {
     setVb((cur) => {
-      const v = cur || G.fitView([...boxes, ...stubs.map((s) => s.tab)])
+      const v = cur || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
       const nw = v.w / factor
       const nh = v.h / factor
       const cx = at ? at.x : v.x + v.w / 2
@@ -388,7 +398,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
 
   // ---- Persisting ----
-  const save = async (nextPos, nextBends, order, nextStubs = stubPos) => {
+  const save = async (nextPos, nextBends, order, nextStubs = stubPos, nextShapes = shapes) => {
     const ids = order || schematic.devices.map((d) => d.deviceId)
     try {
       await putResource('wiringSchematics', schematic.id, {
@@ -398,11 +408,32 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           .map(([wireRunId, points]) => ({ wireRunId, points })),
         stubs: Object.entries(nextStubs)
           .filter(([id]) => stubsBase.some((st) => st.cableId === id))
-          .map(([wireRunId, at]) => ({ wireRunId, x: Math.round(at.x), y: Math.round(at.y) }))
+          .map(([wireRunId, at]) => ({ wireRunId, x: Math.round(at.x), y: Math.round(at.y) })),
+        zoneShapes: nextShapes.filter((sh) => zoneById.has(sh.zoneId))
       })
       onError(null)
       await reload()
     } catch (err) { onError(err.message) }
+  }
+
+  // ---- Zone shapes ----
+  // Adds a shape for a zone at the centre of the view; a zone that already has
+  // one on this page just gets that shape selected.
+  const addShape = async (zoneId, kind) => {
+    if (!zoneId) return
+    const existing = shapes.find((sh) => sh.zoneId === zoneId)
+    if (existing) { setSelection({ type: 'zone', id: zoneId }); return }
+    const next = Z.withShape(shapes, Z.newShape(zoneId, kind, centre()))
+    setShapes(next)
+    setSelection({ type: 'zone', id: zoneId })
+    await save(pos, bends, undefined, stubPos, next)
+  }
+
+  const removeShape = async (zoneId) => {
+    const next = shapes.filter((sh) => sh.zoneId !== zoneId)
+    setShapes(next)
+    setSelection(null)
+    await save(pos, bends, undefined, stubPos, next)
   }
 
   const centre = () => ({ x: view.x + view.w / 2, y: view.y + view.h / 2 })
@@ -594,6 +625,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         setPos(p)
         setBends(b)
         setStubPos(sp)
+        setShapes(schematic.zoneShapes || [])
       } else if (cmd.kind === 'close-popover') setPopover(null)
       else if (cmd.kind === 'close-tabmenu') setTabMenu(null)
       else if (cmd.kind === 'clear-selection') setSelection(null)
@@ -601,6 +633,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         const w = wires.find((x) => x.id === cmd.id)
         if (w) deleteWire(w.cable)
       } else if (cmd.kind === 'remove-device') removeFromPage(cmd.id)
+      else if (cmd.kind === 'delete-zone-shape') removeShape(cmd.id)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -650,6 +683,40 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         return
       }
     }
+    // The handles of the selected zone shape sit on its outline, above devices.
+    const selShape = selection && selection.type === 'zone' ? shapes.find((sh) => sh.zoneId === selection.id) : null
+    if (selShape && selShape.kind === 'polygon') {
+      const pts = selShape.points
+      const ci = pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 9)
+      if (ci >= 0) {
+        const now = Date.now()
+        const last = lastCornerDown.current
+        lastCornerDown.current = { zoneId: selShape.zoneId, index: ci, t: now }
+        if (last && last.zoneId === selShape.zoneId && last.index === ci && now - last.t < DOUBLE_CLICK_MS) {
+          lastCornerDown.current = null
+          const dropped = Z.dropCorner(selShape, ci)
+          if (dropped !== selShape) {
+            const next = Z.withShape(shapes, dropped)
+            setShapes(next)
+            save(pos, bends, undefined, stubPos, next)
+          }
+          return
+        }
+        drag.current = { kind: 'corner', orig: selShape, index: ci, sx: e.clientX, sy: e.clientY, moved: false }
+        return
+      }
+      const mids = midpoints(pts)
+      const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
+      if (mi >= 0) {
+        const added = Z.addCorner(selShape, mi, { x: Math.round(mids[mi].x), y: Math.round(mids[mi].y) })
+        setShapes(Z.withShape(shapes, added.shape))
+        drag.current = { kind: 'corner', orig: added.shape, index: added.index, sx: e.clientX, sy: e.clientY, moved: true, fresh: true }
+        return
+      }
+    } else if (selShape) {
+      const h = Z.hitHandle(selShape, p.x, p.y)
+      if (h) { drag.current = { kind: 'shape-resize', orig: selShape, handle: h, sx: e.clientX, sy: e.clientY, moved: false }; return }
+    }
     const term = G.hitTerminal(boxes, p.x, p.y)
     const handle = !term && boxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
     if (term || handle) {
@@ -672,6 +739,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     }
     const wire = G.hitWire(wires, p.x, p.y)
     if (wire) { setSelection({ type: 'wire', id: wire.id }); return }
+    // A zone shape takes the click on its outline or label, or anywhere inside
+    // once it is selected (to move it); never otherwise.
+    const picked = Z.pickShape(shown, zoneName, p.x, p.y, selShape ? selShape.zoneId : null)
+    if (picked) {
+      setSelection({ type: 'zone', id: picked.zoneId })
+      drag.current = { kind: 'shape-move', orig: picked, px: p.x, py: p.y, sx: e.clientX, sy: e.clientY, moved: false }
+      return
+    }
     drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, view: { ...view }, moved: false }
   }
 
@@ -686,6 +761,16 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     } else if (d.kind === 'stub') {
       const p = toCanvas(e)
       setStubPos((cur) => ({ ...cur, [d.stub.cableId]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
+    } else if (d.kind === 'shape-move') {
+      const p = toCanvas(e)
+      setShapes((cur) => Z.withShape(cur, Z.moveShape(d.orig, Math.round(p.x - d.px), Math.round(p.y - d.py))))
+    } else if (d.kind === 'shape-resize') {
+      const p = toCanvas(e)
+      setShapes((cur) => Z.withShape(cur, Z.resizeShape(d.orig, d.handle, p.x, p.y, e.shiftKey)))
+    } else if (d.kind === 'corner') {
+      const p = toCanvas(e)
+      const points = d.orig.points.map((q, i) => (i === d.index ? { x: Math.round(p.x), y: Math.round(p.y) } : q))
+      setShapes((cur) => Z.withShape(cur, Z.withPoints(d.orig, points)))
     } else if (d.kind === 'bend') {
       const p = toCanvas(e)
       setBends((cur) => {
@@ -728,6 +813,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       save(next, bends)
     }
     if (d.kind === 'bend' && d.moved) save(pos, bends)
+    if ((d.kind === 'shape-move' || d.kind === 'shape-resize' || d.kind === 'corner') && d.moved) save(pos, bends, undefined, stubPos, shapes)
     if (d.kind === 'stub') {
       if (!d.moved) { setTabMenu({ stub: d.stub }); return }
       const at = stubPos[d.stub.cableId]
@@ -775,6 +861,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const addable = devices.filter((d) => isLive(d) && !pos[d.id]).sort((a, b) => a.name.localeCompare(b.name))
   const otherPages = (deviceId) => schematics.filter((s) => isLive(s) && s.id !== schematic.id && s.devices.some((d) => d.deviceId === deviceId))
+  const selectedShape = selection && selection.type === 'zone' ? shown.find((sh) => sh.zoneId === selection.id) : null
   const selectedDevice = selection && selection.type === 'device' ? deviceById.get(selection.id) : null
 
   const renameBox = renaming && boxById.get(renaming.id)
@@ -789,6 +876,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <select value=${addId} data-testid="add-existing" onChange=${(e) => { setAddId(e.target.value); addExisting(e.target.value) }}>
           <option value="">Add existing device…</option>
           ${addable.map((d) => html`<option value=${d.id} key=${d.id}>${d.name} (${roleLabel(d.role)})</option>`)}
+        </select>
+        <select value=${shapeKind} data-testid="shape-kind" title="Shape of a new zone" onChange=${(e) => setShapeKind(e.target.value)}>
+          ${Z.SHAPE_KINDS.map((k) => html`<option value=${k.value} key=${k.value}>${k.label}</option>`)}
+        </select>
+        <select value="" data-testid="add-zone" disabled=${zones.length === 0} title=${zones.length === 0 ? 'Create zones on the Zones tab first' : 'Draw a zone on this page'}
+          onChange=${(e) => { const id = e.target.value; e.target.value = ''; addShape(id, shapeKind) }}>
+          <option value="">Add zone…</option>
+          ${Z.addableZones(zones, shapes).map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
         </select>
         <button type="button" class=${liveOn ? 'active' : ''} data-testid="schematic-live" onClick=${() => { setLiveOn((v) => !v); onError(null) }}>${liveOn ? 'Live: on' : 'Live'}</button>
         <button type="button" data-testid="auto-arrange" onClick=${autoArrange} disabled=${busy || boxes.length === 0}>Auto-arrange</button>
@@ -838,6 +933,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             viewBox="${view.x} ${view.y} ${view.w} ${view.h}"
             onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onDblClick=${onDblClick}
             onDragOver=${(e) => e.preventDefault()} onDrop=${onDrop}>
+            <${ZoneShapes} shapes=${shown} nameOf=${zoneName} selectedId=${selection && selection.type === 'zone' ? selection.id : null} />
             ${bands.map((b) => html`<${ConduitBand} key=${b.conduitId} band=${b} />`)}
             ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName}
               selected=${!!selection && selection.type === 'wire' && selection.id === w.id}
@@ -849,6 +945,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
               target=${!!preview && preview.targetId === b.id}
               live=${liveOn ? (live.info(b.id) || { look: 'none' }) : null}
               dim=${dimming && !hl.deviceIds.has(b.id)} lit=${dimming && hl.deviceIds.has(b.id)} />`)}
+            ${selection && selection.type === 'zone' && html`<${ZoneHandles} shape=${shown.find((sh) => sh.zoneId === selection.id)} />`}
             ${preview && html`<path class="sch-preview" d=${G.pathToD([preview.a, preview.b])} />`}
           </svg>
           ${popover && html`<${CablePopover} start=${popover.start}
@@ -881,6 +978,13 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           <button type="button" class="link-btn" data-testid="delete-wire" onClick=${() => deleteWire(selectedWire.cable)}>Delete wire</button>
           <span class="meta">Drag the dots to bend the wire; double-click a dot to remove it.</span>
         </div>`}
+      ${selectedShape && html`
+        <div class="schematic-inspector" data-testid="zone-inspector">
+          <strong>${zoneName(selectedShape.zoneId)}</strong>
+          <span class="meta">Zone shape, ${(Z.SHAPE_KINDS.find((k) => k.value === selectedShape.kind) || {}).label.toLowerCase()}. Drawing only: it does not set the zone of a device.</span>
+          <button type="button" class="link-btn" data-testid="remove-zone-shape" onClick=${() => removeShape(selectedShape.zoneId)}>Remove shape</button>
+          <span class="meta">${selectedShape.kind === 'polygon' ? 'Drag a corner to move it, drag a midpoint dot to add a corner, double-click a corner to remove it.' : 'Drag the squares to resize; hold Shift for a circle or square.'}</span>
+        </div>`}
       ${selectedDevice && html`
         <div class="schematic-inspector" data-testid="inspector">
           <strong>${selectedDevice.name}</strong>
@@ -894,6 +998,43 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 }
 
 // ---- Shapes ----------------------------------------------------------------
+
+// Zone shapes on the background layer: they never take pointer events, the
+// canvas hit-tests their outline and label itself.
+function ZoneShapes ({ shapes, nameOf, selectedId }) {
+  return html`
+    <g class="sch-zones">
+      ${shapes.map((s) => {
+        const at = Z.labelAt(s)
+        const cls = `sch-zone${s.zoneId === selectedId ? ' selected' : ''}`
+        return html`
+          <g key=${s.zoneId} class=${cls} data-zone-shape=${s.zoneId} data-kind=${s.kind}>
+            ${s.kind === 'rect' && html`<rect x=${s.x} y=${s.y} width=${s.width} height=${s.height} rx="4" class="sch-zone-shape" />`}
+            ${s.kind === 'oval' && html`<ellipse cx=${s.x + s.width / 2} cy=${s.y + s.height / 2} rx=${s.width / 2} ry=${s.height / 2} class="sch-zone-shape" />`}
+            ${s.kind === 'polygon' && html`<path d=${G.pathToD(s.points) + ' Z'} class="sch-zone-shape" stroke-linejoin="round" />`}
+            <text x=${at.x} y=${at.y} class="sch-zone-label">${shorten(nameOf(s.zoneId), 28)}</text>
+          </g>`
+      })}
+    </g>
+  `
+}
+
+// The handles of the selected shape: eight squares for a rectangle or oval; a
+// dot at each corner and a smaller one at each side's midpoint for a polygon.
+function ZoneHandles ({ shape }) {
+  if (!shape) return null
+  if (shape.kind === 'polygon') {
+    return html`
+      <g class="sch-bend-handles" data-testid="zone-handles">
+        ${midpoints(shape.points).map((m, i) => html`<circle key=${'m' + i} cx=${m.x} cy=${m.y} r="5" class="sch-bend-add" data-testid="zone-mid" />`)}
+        ${shape.points.map((q, i) => html`<circle key=${'c' + i} cx=${q.x} cy=${q.y} r="6" class="sch-bend" data-testid="zone-corner" />`)}
+      </g>`
+  }
+  return html`
+    <g class="sch-zone-handles" data-testid="zone-handles">
+      ${Z.handlePositions(shape).map((h) => html`<rect key=${h.id} x=${h.x - 5} y=${h.y - 5} width="10" height="10" class="sch-zone-handle" data-handle=${h.id} />`)}
+    </g>`
+}
 
 function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
   const liveClass = live ? ` live-${live.look}${live.clickable ? ' live-clickable' : ''}` : ''

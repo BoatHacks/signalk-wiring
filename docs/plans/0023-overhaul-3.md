@@ -107,7 +107,7 @@ a device to open its page, and zones as background shapes on the schematic.
 - [x] Port marks and the legend.
 - [x] Signal colour.
 - [x] Double-click and double-tap to open a device.
-- [ ] Zone shapes (rectangle, oval, polygon): migration 14, store, resource,
+- [x] Zone shapes (rectangle, oval, polygon): migration 14, store, resource,
       canvas.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
       #14.
