@@ -439,9 +439,23 @@ const MIGRATIONS = [
         x REAL NOT NULL, y REAL NOT NULL)`)
       db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_stubs_schematic ON schematic_stubs (schematic_id)')
     }
+  },
+  {
+    version: 14,
+    description: 'plan 0023: schematic_zones, a zone drawn as a rectangle, oval or polygon on a page',
+    apply (db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS schematic_zones (
+        id TEXT PRIMARY KEY, schematic_id TEXT NOT NULL REFERENCES schematics(id),
+        position INTEGER NOT NULL, zone_id TEXT NOT NULL REFERENCES zones(id),
+        kind TEXT NOT NULL CHECK (kind IN ('rect', 'oval', 'polygon')),
+        x REAL NOT NULL, y REAL NOT NULL, width REAL NOT NULL, height REAL NOT NULL,
+        points TEXT, UNIQUE (schematic_id, zone_id))`)
+      db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_zones_schematic ON schematic_zones (schematic_id)')
+    }
   }
 ]
 
+const ZONE_SHAPE_KINDS = ['rect', 'oval', 'polygon']
 const RATING_COLUMNS = ['rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v']
 const METER_UNITS = ['A', 'W']
 const RUN_METHODS = ['delta', 'watch']
@@ -620,6 +634,9 @@ class Store {
     const stubs = one
       ? this.db.prepare('SELECT * FROM schematic_stubs WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
       : this.db.prepare('SELECT * FROM schematic_stubs ORDER BY schematic_id, position').all()
+    const zoneShapes = one
+      ? this.db.prepare('SELECT * FROM schematic_zones WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
+      : this.db.prepare('SELECT * FROM schematic_zones ORDER BY schematic_id, position').all()
     const group = (list, map) => {
       const by = new Map()
       for (const r of list) {
@@ -631,7 +648,12 @@ class Store {
     const dByS = group(devices, (r) => ({ deviceId: r.device_id, x: r.x, y: r.y }))
     const wByS = group(wires, (r) => ({ wireRunId: r.wire_run_id, points: r.points ? JSON.parse(r.points) : [] }))
     const sByS = group(stubs, (r) => ({ wireRunId: r.wire_run_id, x: r.x, y: r.y }))
-    return rows.map((row) => ({ ...row, devices: dByS.get(row.id) || [], wires: wByS.get(row.id) || [], stubs: sByS.get(row.id) || [] }))
+    const zByS = group(zoneShapes, (r) => {
+      const shape = { zoneId: r.zone_id, kind: r.kind, x: r.x, y: r.y, width: r.width, height: r.height }
+      if (r.kind === 'polygon') shape.points = r.points ? JSON.parse(r.points) : []
+      return shape
+    })
+    return rows.map((row) => ({ ...row, devices: dByS.get(row.id) || [], wires: wByS.get(row.id) || [], stubs: sByS.get(row.id) || [], zone_shapes: zByS.get(row.id) || [] }))
   }
 
   _checkSchematicName (name) {
@@ -644,7 +666,7 @@ class Store {
   // not given is null (left alone). A wire without bend points is dropped,
   // since an unbent wire needs no row.
   _checkSchematicLists (fields) {
-    const out = { devices: null, wires: null, stubs: null }
+    const out = { devices: null, wires: null, stubs: null, zone_shapes: null }
     const finite = (v, what) => {
       const n = Number(v)
       if (v === null || v === '' || v === undefined || !Number.isFinite(n)) throw new Error(`${what} must be a number`)
@@ -694,6 +716,33 @@ class Store {
         return { wireRunId, x: finite(item.x, 'x'), y: finite(item.y, 'y') }
       })
     }
+    if (fields.zone_shapes !== undefined) {
+      if (!Array.isArray(fields.zone_shapes)) throw new Error('zone shapes must be a list')
+      const seen = new Set()
+      out.zone_shapes = fields.zone_shapes.map((item) => {
+        const zoneId = item && item.zoneId
+        if (!zoneId || !this.db.prepare('SELECT 1 FROM zones WHERE id = ?').get(zoneId)) {
+          throw new Error(`zone not found: ${zoneId}`)
+        }
+        if (seen.has(zoneId)) throw new Error(`zone shape listed twice: ${zoneId}`)
+        seen.add(zoneId)
+        const kind = item.kind
+        if (!ZONE_SHAPE_KINDS.includes(kind)) throw new Error(`zone shape kind must be one of: ${ZONE_SHAPE_KINDS.join(', ')}`)
+        if (kind === 'polygon') {
+          if (!Array.isArray(item.points) || item.points.length < 3) throw new Error('a polygon needs at least three corners')
+          const points = item.points.map((p) => ({ x: finite(p && p.x, 'x'), y: finite(p && p.y, 'y') }))
+          const xs = points.map((p) => p.x)
+          const ys = points.map((p) => p.y)
+          const x = Math.min(...xs)
+          const y = Math.min(...ys)
+          return { zoneId, kind, x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y, points }
+        }
+        const width = finite(item.width, 'width')
+        const height = finite(item.height, 'height')
+        if (width <= 0 || height <= 0) throw new Error('a zone shape needs a width and a height above zero')
+        return { zoneId, kind, x: finite(item.x, 'x'), y: finite(item.y, 'y'), width, height }
+      })
+    }
     return out
   }
 
@@ -716,6 +765,13 @@ class Store {
         'INSERT INTO schematic_stubs (id, schematic_id, position, wire_run_id, x, y) VALUES (?, ?, ?, ?, ?, ?)')
       lists.stubs.forEach((st, i) => insert.run(crypto.randomUUID(), id, i, st.wireRunId, st.x, st.y))
     }
+    if (lists.zone_shapes) {
+      this.db.prepare('DELETE FROM schematic_zones WHERE schematic_id = ?').run(id)
+      const insert = this.db.prepare(
+        'INSERT INTO schematic_zones (id, schematic_id, position, zone_id, kind, x, y, width, height, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      lists.zone_shapes.forEach((z, i) => insert.run(crypto.randomUUID(), id, i, z.zoneId, z.kind, z.x, z.y, z.width, z.height,
+        z.kind === 'polygon' ? JSON.stringify(z.points) : null))
+    }
   }
 
   _updateSchematic (id, patch, existing) {
@@ -728,7 +784,8 @@ class Store {
     const layoutChanged =
       (lists.devices && !same(lists.devices, existing.devices)) ||
       (lists.wires && !same(lists.wires, existing.wires)) ||
-      (lists.stubs && !same(lists.stubs, existing.stubs))
+      (lists.stubs && !same(lists.stubs, existing.stubs)) ||
+      (lists.zone_shapes && !same(lists.zone_shapes, existing.zone_shapes))
     const diff = {}
     this.db.transaction(() => {
       if (cols.length) {
@@ -1435,6 +1492,7 @@ class Store {
     for (const table of ZONED_TABLES) {
       this.db.prepare(`UPDATE ${table} SET zone_id = NULL, zone = NULL WHERE zone_id = ?`).run(zoneId)
     }
+    this.db.prepare('DELETE FROM schematic_zones WHERE zone_id = ?').run(zoneId)
     this.db.prepare('DELETE FROM zones WHERE id = ?').run(zoneId)
     this._logChange('zone', zoneId, 'deleted', { before: zone })
   }
@@ -1454,6 +1512,10 @@ class Store {
           this.update(kind, item.id, { zone_id: intoId })
         }
       }
+      // A page keeps the shape of the target zone if it has one, else the
+      // shape of the merged zone moves over to it.
+      this.db.prepare('DELETE FROM schematic_zones WHERE zone_id = ? AND schematic_id IN (SELECT schematic_id FROM schematic_zones WHERE zone_id = ?)').run(fromId, intoId)
+      this.db.prepare('UPDATE schematic_zones SET zone_id = ? WHERE zone_id = ?').run(intoId, fromId)
       this.db.prepare('DELETE FROM zones WHERE id = ?').run(fromId)
       this._logChange('zone', fromId, 'merged', { before: from, mergedInto: into.id })
     })
@@ -1569,6 +1631,7 @@ class Store {
       this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
       this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
       this.db.prepare('DELETE FROM schematic_stubs WHERE schematic_id = ?').run(id)
+      this.db.prepare('DELETE FROM schematic_zones WHERE schematic_id = ?').run(id)
       attachments = this._purgeOwned('schematic', id)
       this.db.prepare('DELETE FROM schematics WHERE id = ?').run(id)
     })()

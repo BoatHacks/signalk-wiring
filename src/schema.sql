@@ -203,9 +203,27 @@ CREATE TABLE IF NOT EXISTS schematic_stubs (
   y REAL NOT NULL
 );
 
+-- Plan 0023: a zone drawn as a background shape on a page. One shape per zone
+-- per page. kind is rect, oval or polygon; x, y, width and height are the
+-- shape's box in page units, and a polygon also lists its corners (points, JSON).
+CREATE TABLE IF NOT EXISTS schematic_zones (
+  id TEXT PRIMARY KEY,
+  schematic_id TEXT NOT NULL REFERENCES schematics(id),
+  position INTEGER NOT NULL,
+  zone_id TEXT NOT NULL REFERENCES zones(id),
+  kind TEXT NOT NULL CHECK (kind IN ('rect', 'oval', 'polygon')),
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  width REAL NOT NULL,
+  height REAL NOT NULL,
+  points TEXT,
+  UNIQUE (schematic_id, zone_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_schematic_devices_schematic ON schematic_devices (schematic_id);
 CREATE INDEX IF NOT EXISTS idx_schematic_wires_schematic ON schematic_wires (schematic_id);
 CREATE INDEX IF NOT EXISTS idx_schematic_stubs_schematic ON schematic_stubs (schematic_id);
+CREATE INDEX IF NOT EXISTS idx_schematic_zones_schematic ON schematic_zones (schematic_id);
 
 -- Plan 0017: load calibration runs. `device_id` is the device the result is
 -- about: a consumer, or the switch for a group result, in which case
