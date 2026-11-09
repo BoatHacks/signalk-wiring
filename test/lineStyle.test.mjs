@@ -5,11 +5,11 @@ import * as S from '../public/schematic.js'
 const cable = (...types) => ({ conductors: types.map((conductor) => ({ conductor })) })
 
 test('wireLineStyle: DC solid, AC long dash, signal and earth only plain', () => {
-  assert.deepEqual(S.wireLineStyle(cable('positive', 'negative')), { current: 'dc', dasharray: null, marker: 'dc' })
-  assert.deepEqual(S.wireLineStyle({}), { current: 'dc', dasharray: null, marker: 'dc' })
-  assert.deepEqual(S.wireLineStyle(cable('line', 'neutral', 'earth')), { current: 'ac', dasharray: '10 6', marker: 'ac' })
-  assert.deepEqual(S.wireLineStyle(cable('signal')), { current: null, dasharray: null, marker: null })
-  assert.deepEqual(S.wireLineStyle(cable('earth')), { current: null, dasharray: null, marker: null })
+  assert.deepEqual(S.wireLineStyle(cable('positive', 'negative')), { current: 'dc', dasharray: null })
+  assert.deepEqual(S.wireLineStyle({}), { current: 'dc', dasharray: null })
+  assert.deepEqual(S.wireLineStyle(cable('line', 'neutral', 'earth')), { current: 'ac', dasharray: '10 6' })
+  assert.deepEqual(S.wireLineStyle(cable('signal')), { current: null, dasharray: null })
+  assert.deepEqual(S.wireLineStyle(cable('earth')), { current: null, dasharray: null })
 })
 
 test('scaledDash scales the pattern and passes null through', () => {

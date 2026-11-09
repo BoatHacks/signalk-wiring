@@ -188,7 +188,7 @@ test('a line to a tab is drawn like its cable: conductor colours, DC solid or AC
   assert.match(shape, /wireLineStyle\(stub\.cable\)/)
   assert.match(shape, /sch-wire-line sch-stub-line c-/)
   assert.match(shape, /sch-wire-pair/)
-  assert.match(shape, /WireMarker/)
+  assert.doesNotMatch(shape, /WireMarker/)
   assert.match(shape, /class="sch-tab"/)
   // no override of the colour, dash or width for the stub line in the stylesheet
   const rules = css.split('}').filter((r) => /\.sch-stub-line\s*\{/.test(r.replace(/,\s*/g, ' ')) && !/\.sch-wire-line/.test(r))

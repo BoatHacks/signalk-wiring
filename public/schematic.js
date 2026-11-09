@@ -120,6 +120,7 @@ export function deviceBox (device, pos, opts = {}) {
     w,
     h,
     ports: [],
+    current: device.current || '',
     bottomPorts: false,
     terminals: terminals.map((t, i) => {
       const side = sides[i]
@@ -191,6 +192,7 @@ function portBox (device, pos, opts) {
     w,
     h,
     bottomPorts: hasBottom,
+    current: device.current || '',
     // Port blocks in box-relative coordinates, for drawing.
     ports: placed.map((g) => ({ name: g.name, side: g.side, block: g.block, label: g.label })),
     terminals
@@ -551,14 +553,13 @@ export function conductorTypes (cable) {
 export const AC_DASH = [10, 6]
 
 // How a cable's current shows: `current` is 'ac', 'dc' or null, `dasharray` a
-// stroke-dasharray string (AC only, DC and the rest stay solid) and `marker`
-// the midpoint symbol on the schematic ('ac' tilde, 'dc' symbol, null).
+// stroke-dasharray string (AC only, DC and the rest stay solid). The
+// conductor symbols sit on the ports, not on the wires (public/portMark.js).
 export function wireLineStyle (cable) {
   const current = cableCurrent(cable)
   return {
     current,
-    dasharray: current === 'ac' ? AC_DASH.join(' ') : null,
-    marker: current
+    dasharray: current === 'ac' ? AC_DASH.join(' ') : null
   }
 }
 

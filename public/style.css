@@ -37,6 +37,8 @@
   --wire-neutral: #2f6fb5;
   --wire-earth: #4a9a3a;
   --wire-signal: #7d4fa3;
+  --on-dot: #fff;
+  --on-dot-light: #1c1c1c;
   --live-on: #2f8a2f;
   --live-off: #8a8a85;
   --live-unknown: #c9c4a8;
@@ -77,6 +79,8 @@
   --wire-neutral: #a15850;
   --wire-earth: #c06657;
   --wire-signal: #8f6a8a;
+  --on-dot: #fbdbd3;
+  --on-dot-light: #2a0f0b;
   --wire-highlight: #ffb3a6;
   --live-on: #ff5c47;
   --live-off: #4d332e;
@@ -654,6 +658,8 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-device-name { font-size: 12px; font-weight: 600; fill: var(--text); pointer-events: none; }
 .sch-device-type, .sch-terminal-label { font-size: 9px; fill: var(--text-muted-strong); pointer-events: none; }
 .sch-terminal { stroke: var(--surface); stroke-width: 1; }
+.sch-port-mark { fill: none; stroke: var(--on-dot); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.sch-port-mark.c-signal { stroke: var(--on-dot-light); }
 .sch-terminal.c-positive, .sch-terminal.c-line { fill: var(--wire-positive); }
 .sch-terminal.c-negative { fill: var(--wire-negative); }
 .sch-terminal.c-neutral { fill: var(--wire-neutral); }
@@ -673,9 +679,6 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-wire-pair.c-neutral { stroke: var(--wire-neutral); }
 .sch-wire-pair.c-earth { stroke: var(--wire-earth); }
 .sch-wire-pair.c-signal { stroke: var(--wire-signal); }
-.sch-marker-pad { fill: var(--surface); fill-opacity: 0.9; stroke: none; }
-.sch-marker-stroke { fill: none; stroke: var(--text-muted-strong); stroke-width: 1.4; stroke-linecap: round; }
-.sch-wire-marker { pointer-events: none; }
 .schematic-legend { margin: 2px 0 6px; }
 .sch-wire.selected .sch-wire-line { stroke-width: 5; }
 .sch-wire.selected .sch-wire-pair, .sch-wire.lit .sch-wire-pair { stroke-width: 2.5; }

@@ -5,6 +5,7 @@
 // written on the box and its terminals grouped inside.
 
 import { html } from './vendor/preact-standalone.module.js'
+import { portMark, MARK_PATHS, DOT_RADIUS } from './portMark.js'
 
 function shorten (text, max) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text
@@ -23,11 +24,16 @@ export function PortBlocks ({ box, originX = box.x, originY = box.y }) {
           ${p.label && html`<text x=${p.label.x} y=${p.label.y} text-anchor=${p.label.anchor} class="sch-port-label">${shorten(p.name, 16)}</text>`}
         </g>
       `)}
-      ${box.terminals.map((t) => html`
-        <circle key=${t.name} cx=${t.x - originX} cy=${t.y - originY} r="4" class="sch-terminal c-${t.conductor}" data-terminal=${t.name}>
-          <title>${t.name}${t.port ? ` (${t.port})` : ''}</title>
-        </circle>
-      `)}
+      ${box.terminals.map((t) => {
+        const mark = portMark(t.conductor, box.current)
+        return html`
+        <g key=${t.name} transform="translate(${t.x - originX} ${t.y - originY})" class="sch-terminal-dot" data-terminal=${t.name}>
+          <circle r=${DOT_RADIUS} class="sch-terminal c-${t.conductor}" data-terminal=${t.name} data-mark=${mark || undefined}>
+            <title>${t.name}${t.port ? ` (${t.port})` : ''}</title>
+          </circle>
+          ${mark && html`<path d=${MARK_PATHS[mark]} class="sch-port-mark c-${t.conductor}" />`}
+        </g>`
+      })}
     </g>
   `
 }

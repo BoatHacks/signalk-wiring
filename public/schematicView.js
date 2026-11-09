@@ -781,7 +781,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${bands.map((b) => html`<option value=${'conduit:' + b.conduitId} key=${'conduit:' + b.conduitId}>${(conduitInfo.get(b.conduitId) || {}).name || b.label} (conduit)</option>`)}
         </select>
       </div>
-      <div class="meta schematic-legend" data-testid="schematic-legend">Solid lines are DC, dashed lines are AC. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
+      <div class="meta schematic-legend" data-testid="schematic-legend">Solid lines are DC, dashed lines are AC. The symbol on a port shows its conductor: = DC, ~ AC, a two-way arrow signal, the earth symbol earth or protective ground. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
       ${overlapping && html`<div class="meta schematic-notice" data-testid="overlap-notice">Some devices overlap. <button type="button" class="link-btn" data-testid="tidy" onClick=${tidyAll}>Tidy</button></div>`}
       ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
       ${notice && html`<div class="meta schematic-notice" data-testid="notice">${notice}</div>`}
@@ -899,21 +899,6 @@ function cableLine (cable, deviceName) {
   return parts.join(', ')
 }
 
-// The standard marker: a tilde for AC, the DC symbol (a solid line over a
-// dashed one, IEC 60617) for DC, on a small pad so it stays readable.
-function WireMarker ({ kind, at }) {
-  return html`
-    <g class="sch-wire-marker" transform="translate(${at.x} ${at.y})" data-marker=${kind}>
-      <rect x="-9" y="-7" width="18" height="14" rx="3" class="sch-marker-pad" />
-      ${kind === 'ac'
-        ? html`<path d="M-5 0 Q-2.5 -5 0 0 T5 0" class="sch-marker-stroke" />`
-        : html`
-          <line x1="-5" y1="-2" x2="5" y2="-2" class="sch-marker-stroke" />
-          <line x1="-5" y1="2" x2="5" y2="2" class="sch-marker-stroke" stroke-dasharray="2 1.5" />`}
-    </g>
-  `
-}
-
 function WireShape ({ wire, deviceName, selected, dim, lit }) {
   const types = G.conductorTypes(wire.cable)
   const style = G.wireLineStyle(wire.cable)
@@ -924,7 +909,6 @@ function WireShape ({ wire, deviceName, selected, dim, lit }) {
     <g class=${cls} data-wire=${wire.id} data-current=${style.current || ''}>
       <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.cable, deviceName)}</title></path>
       ${paired && html`<path d=${paired} class="sch-wire-pair c-${types[1]}" stroke-dasharray=${style.dasharray || undefined} />`}
-      ${style.marker && html`<${WireMarker} kind=${style.marker} at=${G.pathMidpoint(wire.path)} />`}
     </g>
   `
 }
@@ -947,7 +931,7 @@ function ConduitBand ({ band }) {
 }
 
 // The line to a tab is drawn like the wire it stands for (conductor colours,
-// a second conductor line, DC solid or AC dashed, the same marker); the tab
+// a second conductor line, DC solid or AC dashed); the tab
 // stays the off-page marker.
 function StubShape ({ stub }) {
   const types = G.conductorTypes(stub.cable)
@@ -957,7 +941,6 @@ function StubShape ({ stub }) {
     <g class="sch-stub" data-stub=${stub.cableId} data-current=${style.current || ''}>
       <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line c-' + types[0]} stroke-dasharray=${style.dasharray || undefined} />
       ${paired && html`<path d=${paired} class=${'sch-wire-pair c-' + types[1]} stroke-dasharray=${style.dasharray || undefined} />`}
-      ${style.marker && stub.path.length > 1 && html`<${WireMarker} kind=${style.marker} at=${G.pathMidpoint(stub.path)} />`}
       <rect x=${stub.tab.x} y=${stub.tab.y} width=${stub.tab.w} height=${stub.tab.h} rx="3" class="sch-tab" />
       <text x=${stub.tab.x + stub.tab.w / 2} y=${stub.tab.y + 14} text-anchor="middle" class="sch-tab-label">${shorten(stub.label, 20)}</text>
     </g>
