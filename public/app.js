@@ -2,6 +2,7 @@ import { html, render, useState, useEffect } from './vendor/preact-standalone.mo
 import { newId } from './ids.js'
 import { PathCombobox } from './signalkPaths.js'
 import { ROLES, roleLabel } from './roles.js'
+import { insideOptions, insideText, matchesInside, NOT_INSIDE, pathOf, childrenOf } from './enclosures.js'
 import {
   NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches, matchesSearch, matchesRemoved,
   readShowRemoved, writeShowRemoved
@@ -397,7 +398,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
       // Emptied free-form fields are sent as null so clearing them on an edit
       // takes effect (a missing key keeps the stored value).
       const freeForm = f.type === 'text' || f.type === 'number' || f.type === 'textarea' || f.type === 'signalkPath' ||
-        f.type === 'date' || f.type === 'devicePick'
+        f.type === 'date' || f.type === 'devicePick' || f.type === 'enclosurePick'
       if ((f.clearable || (freeForm && !f.required)) && (raw === '' || raw == null)) { payload[f.key] = null; continue }
       if (raw === '' || raw == null) continue
       payload[f.key] = f.type === 'number' ? Number(raw) : raw
@@ -446,6 +447,13 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
                 .filter((d) => d.status !== 'removed' && d.id !== (context && context.deviceId))
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((d) => html`<option value=${d.id} key=${d.id}>${d.name} (${roleLabel(d.role)})</option>`)}
+            </select>
+          `}
+          ${f.type === 'enclosurePick' && html`
+            <select value=${values[f.key] || ''} onChange=${(e) => setField(f.key, e.target.value)} data-testid="inside-picker">
+              <option value="">Not inside anything</option>
+              ${insideOptions((context && context.devices) || [], context && context.deviceId)
+                .map((d) => html`<option value=${d.id} key=${d.id}>${d.name}${d.status === 'removed' ? ' (removed)' : ''}</option>`)}
             </select>
           `}
           ${f.type === 'date' && html`
@@ -730,13 +738,19 @@ const DEVICE_FIELDS = [
     options: ROLES.map((r) => ({ value: r.value, label: r.label })),
     defaultValue: 'consumer',
     noBlank: true,
-    hint: 'Consumer uses power. Source supplies it (solar, shore power, generator, hydro, wind, alternator). Storage is batteries. Distribution is switches, breakers, bus bars and panels. Converter is inverters, chargers and DC-DC. Put the specific kind in Type.'
+    hint: 'Consumer uses power. Source supplies it (solar, shore power, generator, hydro, wind, alternator). Storage is batteries. Distribution is switches, breakers, bus bars and panels. Converter is inverters, chargers and DC-DC. Enclosure is a breaker box, panel or cabinet that holds other devices. Put the specific kind in Type.'
   },
   {
     key: 'type',
     label: 'Type',
     type: 'deviceType',
     hint: 'The kind of device, for example Solar panel or Bilge pump. Pick one, or choose Add type for anything not listed.'
+  },
+  {
+    key: 'parentId',
+    label: 'Inside',
+    type: 'enclosurePick',
+    hint: 'The breaker box, panel or cabinet this device sits in. A device inside an enclosure is not placed on the floorplan, and its cables show on the enclosure\'s inside schematic. Leave it empty for a device that stands on its own.'
   },
   {
     key: 'zoneId',
@@ -757,9 +771,10 @@ const DEVICE_FIELDS = [
     options: [{ value: 'ac', label: 'AC' }, { value: 'dc', label: 'DC' }],
     blankLabel: 'Either',
     clearable: true,
+    showWhen: (values, ctx) => deviceFieldVisible('current', values, ctx),
     hint: 'Whether this device is AC or DC. Cables drawn to it get the matching cable type, and a warning appears when the two ends disagree. Starts from the type (a battery is DC, a shore power inlet AC). Leave it on Either for converters and for devices whose terminals say it already.'
   },
-  { key: 'ratedPowerW', label: 'Rated power (W)', type: 'number' },
+  { key: 'ratedPowerW', label: 'Rated power (W)', type: 'number', showWhen: (values, ctx) => deviceFieldVisible('ratedPowerW', values, ctx) },
   {
     key: 'tripRatingA',
     label: 'Trip rating (A)',
@@ -1102,7 +1117,8 @@ function DevicePicker ({ label, hint, value, onChange, devices, onCreated, defau
 
   const known = new Map([...created, ...devices].map((d) => [d.id, d]))
   const options = [...known.values()]
-    .filter((d) => d.status !== 'removed' && (!only || only(d) || d.id === value))
+    // Cables go to what is inside an enclosure, never to the enclosure.
+    .filter((d) => d.status !== 'removed' && (d.role !== 'enclosure' || d.id === value) && (!only || only(d) || d.id === value))
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const create = async () => {
@@ -1142,7 +1158,7 @@ function DevicePicker ({ label, hint, value, onChange, devices, onCreated, defau
             onInput=${(e) => setName(e.target.value)}
             onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); create() } }} />
           <select value=${role} onChange=${(e) => setRole(e.target.value)}>
-            ${ROLES.map((r) => html`<option value=${r.value} key=${r.value}>${r.label}</option>`)}
+            ${ROLES.filter((r) => r.value !== 'enclosure').map((r) => html`<option value=${r.value} key=${r.value}>${r.label}</option>`)}
           </select>
           <button type="button" onClick=${create}>Create device</button>
         </div>
@@ -1952,9 +1968,28 @@ function DevicesList ({ onSelect }) {
   const [query, setQuery] = useState('')
   const [showRemoved, setShowRemoved] = useShowRemoved('devices')
   const removedCount = items.filter((d) => d.status === 'removed').length
+  const enclosures = items.filter((d) => d.role === 'enclosure' && d.status !== 'removed')
+  const names = new Map(items.map((d) => [d.id, d.name]))
   const visible = items.filter((d) =>
     matchesFilter(d, filter) && (!filter.role || (d.role || 'consumer') === filter.role) &&
-    matchesRemoved(d, showRemoved) && matchesSearch(d, query))
+    matchesInside(items, d, filter.inside) &&
+    matchesRemoved(d, showRemoved) && matchesSearch(d, query, [insideText(items, d.id)]))
+  // Bulk "Inside": tick several devices and put them in one enclosure (or take them out).
+  const [picking, setPicking] = useState(false)
+  const [ticked, setTicked] = useState(new Set())
+  const [target, setTarget] = useState('')
+  const [bulkMessage, setBulkMessage] = useState(null)
+  const tick = (id) => setTicked((set) => { const next = new Set(set); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  const applyInside = async (parentId) => {
+    setBulkMessage(null)
+    const failed = []
+    for (const id of ticked) {
+      try { await putResource('wiringDevices', id, { parentId }) } catch (err) { failed.push(`${names.get(id) || id}: ${err.message}`) }
+    }
+    setReloadKey((k) => k + 1)
+    setTicked(new Set(failed.length ? [...ticked].filter((id) => failed.some((f) => f.startsWith((names.get(id) || id) + ':'))) : []))
+    setBulkMessage(failed.length ? failed.join('; ') : `${ticked.size} ${ticked.size === 1 ? 'device' : 'devices'} updated.`)
+  }
 
   const createDevice = async (payload) => {
     await putResource('wiringDevices', newId(), formPayloadToDevice(payload))
@@ -1984,22 +2019,47 @@ function DevicesList ({ onSelect }) {
       `}
       ${items.length > 0 && html`
         <${ZoneTagFilter} items=${items} filter=${filter} onChange=${setFilter} withRole=${true}>
+          ${enclosures.length > 0 && html`
+            <label class="form-field compact"><span>Inside</span>
+              <select value=${filter.inside || ''} onChange=${(e) => setFilter({ ...filter, inside: e.target.value || null })} data-testid="inside-filter">
+                <option value="">Anywhere</option>
+                <option value=${NOT_INSIDE}>Not in an enclosure</option>
+                ${enclosures.map((d) => html`<option value=${d.id} key=${d.id}>${d.name}</option>`)}
+              </select>
+            </label>
+          `}
+          <button type="button" class=${picking ? 'active' : ''} data-testid="bulk-inside-toggle"
+            onClick=${() => { setPicking((v) => !v); setTicked(new Set()); setBulkMessage(null) }}>${picking ? 'Done selecting' : 'Select devices'}</button>
           <${ListControls} query=${query} onQuery=${setQuery} showRemoved=${showRemoved} onShowRemoved=${setShowRemoved}
             removedCount=${removedCount} label="Name, type, zone, tag" />
         <//>
+      `}
+      ${picking && html`
+        <div class="bulk-bar" data-testid="bulk-bar">
+          <span>${ticked.size} selected</span>
+          <select value=${target} onChange=${(e) => setTarget(e.target.value)} data-testid="bulk-target" aria-label="Enclosure">
+            <option value="">Choose an enclosure</option>
+            ${enclosures.map((d) => html`<option value=${d.id} key=${d.id}>${d.name}</option>`)}
+          </select>
+          <button type="button" disabled=${ticked.size === 0 || !target} data-testid="bulk-put-inside" onClick=${() => applyInside(target)}>Put inside</button>
+          <button type="button" disabled=${ticked.size === 0} data-testid="bulk-take-out" onClick=${() => applyInside(null)}>Take out</button>
+          ${bulkMessage && html`<span class="meta" data-testid="bulk-message">${bulkMessage}</span>`}
+        </div>
       `}
       ${items.length > 0 && visible.length === 0 && html`<div class="empty-state">No devices match.</div>`}
       ${visible.map((device) => html`
         <div
           key=${device.id}
           class="list-item ${device.status === 'removed' ? 'removed' : ''}"
-          onClick=${() => onSelect(device.id)}
+          onClick=${() => (picking ? tick(device.id) : onSelect(device.id))}
         >
           <div class="list-item-main">
+            ${picking && html`<input type="checkbox" class="checkbox-input" checked=${ticked.has(device.id)} data-testid="bulk-check"
+              aria-label=${'Select ' + device.name} onClick=${(e) => e.stopPropagation()} onChange=${() => tick(device.id)} />`}
             ${deviceIconUrl(device) && html`<img class="device-icon" src=${deviceIconUrl(device)} alt="" />`}
             <div>
             <div>${device.name}</div>
-            <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
+            <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}${insideText(items, device.id) ? ` – in ${insideText(items, device.id)}` : ''}${device.role === 'enclosure' ? ` – holds ${(device.contents || []).length}` : ''}</div>
             </div>
           </div>
           <${StatusBadge} status=${device.status} />
@@ -2077,6 +2137,36 @@ function BatteryDetails ({ device, deviceNames }) {
   `
 }
 
+// The enclosures a device is in, innermost first, as device records.
+function pathChain (devices, deviceId) {
+  const byId = new Map(devices.map((d) => [d.id, d]))
+  return pathOf(devices, deviceId).reverse().map((id) => byId.get(id)).filter(Boolean)
+}
+
+// What an enclosure holds: the direct contents as links, each with what is inside it in turn.
+function EnclosureContents ({ device, devices }) {
+  const names = new Map(devices.map((d) => [d.id, d.name]))
+  const byId = new Map(devices.map((d) => [d.id, d]))
+  const rows = []
+  const walk = (id, depth) => {
+    for (const childId of childrenOf(devices, id)) {
+      rows.push({ id: childId, depth })
+      walk(childId, depth + 1)
+    }
+  }
+  walk(device.id, 0)
+  return html`
+    <div class="meta enclosure-contents" data-testid="enclosure-contents">
+      ${rows.length === 0 ? 'Holds nothing yet. Put devices inside it with the Inside field on their page, or select several on the Devices tab.' : `Holds ${rows.length} ${rows.length === 1 ? 'device' : 'devices'}:`}
+      ${rows.length > 0 && html`
+        <ul>${rows.map((r) => html`
+          <li key=${r.id} style=${{ marginLeft: (r.depth * 1.2) + 'em' }}><${DeviceLink} id=${r.id} names=${names} />${byId.get(r.id) && byId.get(r.id).role === 'enclosure' ? ' (enclosure)' : ''}</li>
+        `)}</ul>
+      `}
+    </div>
+  `
+}
+
 function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
   const undo = useUndo()
   const [device, setDevice] = useState(null)
@@ -2086,7 +2176,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
   const [showHistory, setShowHistory] = useState(false)
   const [calibrating, setCalibrating] = useState(false)
   const { items: circuits } = useResourceList('wiringCircuits')
-  const { items: allDevices } = useResourceList('wiringDevices')
+  const { items: allDevices } = useResourceList('wiringDevices', reloadKey)
   const deviceNames = new Map(allDevices.map((d) => [d.id, d.name]))
 
   useEffect(() => {
@@ -2165,6 +2255,10 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
             ${device.name} <${StatusBadge} status=${device.status} />
           </h2>
           <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
+          ${insideText(allDevices, deviceId) && html`
+            <div class="meta" data-testid="device-inside">In ${pathChain(allDevices, deviceId).map((d, i) => html`${i > 0 ? ', ' : ''}<${DeviceLink} id=${d.id} names=${deviceNames} key=${d.id} />`)}</div>
+          `}
+          ${device.role === 'enclosure' && html`<${EnclosureContents} device=${device} devices=${allDevices} />`}
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
           ${device.tripRatingA && html`<div class="meta">Trip rating: ${device.tripRatingA} A</div>`}
           ${ratedLine(device) && html`<div class="meta" data-testid="rated-line">${ratedLine(device)}</div>`}

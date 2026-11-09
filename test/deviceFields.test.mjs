@@ -84,3 +84,11 @@ test('ratedLine writes the AC and DC ratings as one line', () => {
   assert.equal(ratedLine({ ratedDcA: null, ratedAcA: null }), null)
   assert.equal(ratedLine({}), null)
 })
+
+test('an enclosure has no terminals, rated power or current field', () => {
+  assert.equal(deviceFieldVisible('terminals', { role: 'enclosure', terminals: [{ name: 'x' }] }), false)
+  assert.equal(deviceFieldVisible('ratedPowerW', { role: 'enclosure' }), false)
+  assert.equal(deviceFieldVisible('current', { role: 'enclosure' }), false)
+  assert.equal(deviceFieldVisible('ratedPowerW', { role: 'consumer' }), true)
+  assert.equal(deviceFieldVisible('current', { role: 'distribution' }), true)
+})

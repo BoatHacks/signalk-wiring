@@ -18,7 +18,8 @@ export const TYPE_SUGGESTIONS = {
   ],
   converter: [
     'Inverter', 'Battery charger', 'Inverter/charger', 'DC-DC converter', 'MPPT charger', 'Isolation transformer'
-  ]
+  ],
+  enclosure: ['Breaker box', 'AC panel', 'DC panel', 'Fuse box', 'Cabinet']
 }
 
 // The options for a role's Type dropdown: the role's suggestions, then any

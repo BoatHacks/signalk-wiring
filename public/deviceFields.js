@@ -10,6 +10,8 @@ export function deviceFieldVisible (key, values, context = {}) {
   const role = values.role || 'consumer'
   switch (key) {
     case 'tripRatingA': return role === 'distribution'
+    // Only an enclosure's contents carry power, so the power fields do not apply to it.
+    case 'ratedPowerW': case 'current': return role !== 'enclosure'
     // Ratings are printed on switches, breakers, fuses, bus bars and panels.
     case 'ratedAcA': case 'ratedAcV': case 'ratedDcA': case 'ratedDcV': return role === 'distribution'
     case 'nominalVoltage': return role === 'storage' || role === 'source'
@@ -20,6 +22,8 @@ export function deviceFieldVisible (key, values, context = {}) {
     // several posts and fuse blocks, so consumers and sources show the editor
     // only when they already have some.
     case 'terminals':
+      // An enclosure has none: cables land on what is inside it.
+      if (role === 'enclosure') return false
       return !['consumer', 'source'].includes(role) || (Array.isArray(values.terminals) && values.terminals.length > 0)
     default: return true
   }

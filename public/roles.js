@@ -4,7 +4,8 @@ export const ROLES = [
   { value: 'source', label: 'Source', hint: 'Produces or supplies power: solar, shore power, generator, hydro, wind, alternator.' },
   { value: 'storage', label: 'Storage', hint: 'Stores power: batteries and battery banks.' },
   { value: 'distribution', label: 'Distribution', hint: 'Passes power on: switches, breakers, fuses, bus bars, panels, isolators, relays.' },
-  { value: 'converter', label: 'Converter', hint: 'Changes power: inverters, chargers, DC-DC converters.' }
+  { value: 'converter', label: 'Converter', hint: 'Changes power: inverters, chargers, DC-DC converters.' },
+  { value: 'enclosure', label: 'Enclosure', hint: 'Holds other devices: a breaker box, a distribution panel, a cabinet. Cables go to what is inside it.' }
 ]
 
 export function roleLabel (role) {

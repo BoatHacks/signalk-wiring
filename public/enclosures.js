@@ -87,3 +87,31 @@ export function boundaryCables (devices, cables, enclosureId) {
 }
 
 
+
+// The Inside picker of a device: the live enclosures it may go in, which are
+// not the device itself or anything inside it. The enclosure it is in now is
+// kept in the list even when removed, so the form shows it.
+export function insideOptions (devices, deviceId) {
+  const current = (devices.find((d) => d.id === deviceId) || {}).parentId
+  return devices
+    .filter((d) => d.role === 'enclosure' && (d.id === current || (d.status !== 'removed' && !wouldCycle(devices, deviceId || '', d.id))))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// "Box, Cabinet": the enclosures a device sits in, innermost first, as names.
+export function insideText (devices, deviceId) {
+  const byId = new Map(devices.map((d) => [d.id, d]))
+  return pathOf(devices, deviceId).reverse().map((id) => (byId.get(id) || {}).name).filter(Boolean).join(', ')
+}
+
+// The Devices tab filter: '' all, NOT_INSIDE the ones in no enclosure, or an
+// enclosure id for everything inside it, at any depth.
+export const NOT_INSIDE = '__not_inside__'
+export function matchesInside (devices, device, inside) {
+  if (!inside) return true
+  if (inside === NOT_INSIDE) return !device.parentId
+  return contentsOf(devices, inside).includes(device.id)
+}
+
+// Devices that cannot be placed on the floorplan because an enclosure holds them.
+export const isInside = (device) => Boolean(device && device.parentId)

@@ -116,7 +116,7 @@ the floorplan. On a schematic, such an enclosure acts as a link to its own
 
 - [x] Migration 15, the store fields and validation, `src/enclosures.js`, with
       tests.
-- [ ] Device form, page and list: role, the Inside picker, contents, filter,
+- [x] Device form, page and list: role, the Inside picker, contents, filter,
       bulk Inside.
 - [ ] Floorplan: skip contents when placing, the enclosure marker and popover.
 - [ ] Schematic: the enclosure box with derived ports, the inside page, the
