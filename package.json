@@ -1,6 +1,6 @@
 {
   "name": "signalk-wiring",
-  "version": "0.6.8",
+  "version": "0.7.0",
   "description": "SignalK plugin for documenting a boat's physical electrical wiring: circuits, wire runs, and devices.",
   "main": "index.js",
   "files": [
@@ -25,13 +25,8 @@
     "url": "git+https://github.com/BoatHacks/signalk-wiring.git"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
-  "dependencies": {
-    "better-sqlite3": "^13.0.3"
-  },
-  "devDependencies": {},
-  "allowScripts": {
-    "better-sqlite3@13.0.3": true
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

@@ -3,7 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
-const Database = require('better-sqlite3')
+const { Database } = require('./db')
 const { deriveCircuits } = require('./circuits')
 const { isCriticalType } = require('./safety')
 const { CHEMISTRIES, PURPOSES, LINKS, typeChemistry, typePurpose } = require('./batteries')

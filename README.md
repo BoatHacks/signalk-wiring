@@ -126,7 +126,7 @@ npm install signalk-wiring
 
 then restart `signalk-server` — plugin updates don't hot-reload.
 
-Requires **Node.js ≥ 22** (see [Why Node ≥ 22](#why-node--22) below).
+Requires **Node.js ≥ 22.13** (see [Why Node ≥ 22.13](#why-node--2213) below).
 
 ## Access & security
 
@@ -146,15 +146,13 @@ full reasoning. **Switching and calibration** need a read-write login: the
 plugin sends the switch command, so it can refuse a never-remote device, ask
 for confirmation and log each action.
 
-## Why Node ≥ 22
+## Why Node ≥ 22.13
 
-This plugin uses `better-sqlite3` for local storage, pinned to `^13.x`
-specifically. Earlier majors (11.x, 12.x) can abort the *entire*
-`signalk-server` process with a native crash on Node ≥ 24.19, due to a
-GC-finalization race in how they interact with Node's cleanup hooks —
-only 13.x's N-API rewrite avoids it. 13.x itself requires Node ≥ 22.
-See [docs/plans/0001](docs/plans/0001-scaffold-and-core-data-model.md)
-for how this was found and fixed.
+The plugin stores its data with Node's built-in `node:sqlite`, so there is
+no native module to build or install, and nothing that can fail to compile on
+a boat's Pi. `node:sqlite` is available without a flag from Node 22.13. Until
+0.6.8 the plugin used `better-sqlite3`; the data file is the same SQLite file,
+so nothing needs migrating.
 
 ## Documentation
 

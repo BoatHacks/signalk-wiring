@@ -28,7 +28,7 @@ this plugin's own code — see §2.4).
  |  reads: anonymous, writes: admin-gated                           |
  |        |                                    |                    |
  |        v                                    v                    |
- |                 SQLite (better-sqlite3), data dir                 |
+ |                 SQLite (node:sqlite), data dir                    |
  +----------------------------------------------------------------+
 ```
 
@@ -141,7 +141,7 @@ webapp's static assets are *not* served from here — see §2.4.
 
 ### 2.3 Storage layer (`src/store.js`)
 
-Wraps `better-sqlite3`. Owns all reads/writes to `circuits`, `wire_runs`, `wire_run_conductors`,
+Wraps `node:sqlite` through `src/db.js`. Owns all reads/writes to `circuits`, `wire_runs`, `wire_run_conductors`,
 `devices`, `device_terminals`, `conduits`, `wire_run_conduits`,
 `calibration_runs`,
 `attachments`, and `change_log`
@@ -580,7 +580,7 @@ its live, drawn conduits in order.
 |---|---|---|
 | Runtime | Node.js (matches `signalk-server` host) | required by SignalK plugin model |
 | Language | JavaScript (or TS compiled to `dist/`, per `signalk-plugin` skill scaffold) | plugin scaffold default |
-| Storage | `better-sqlite3` (^13.x — not 11.x or 12.x) | single-file embedded DB, synchronous API (fits the mostly-synchronous SignalK plugin lifecycle), no external DB server to run on a boat's Pi. Must stay on 13.x specifically: 11.x has no `engines` constraint at all, and 12.x (despite declaring Node 20–26 support) still uses `node::ObjectWrap` and can abort with a native V8 assertion on Node ≥24.19 due to a GC-finalization/environment-teardown race — only 13.x's N-API rewrite avoids it. Both crashed the live `signalk-server` container in testing; see `docs/plans/0001-scaffold-and-core-data-model.md`. |
+| Storage | `node:sqlite` (built into Node ≥ 22.13) | single-file embedded DB, synchronous API (fits the mostly-synchronous SignalK plugin lifecycle), no external DB server to run on a boat's Pi, and no native module to install or crash. `src/db.js` adds `pragma()`, nestable `transaction()` and plain-object rows on top of `DatabaseSync`. Until 0.6.8 the plugin used `better-sqlite3` 13.x; the two read the same file format. |
 | Attachment files | filesystem, under the plugin's SignalK data dir | binary blobs don't belong in SQLite rows at this scale; simpler backup story (it's just files) |
 | Webapp | Preact + `htm`, vendored under `public/vendor/`, no build step | real component structure for a real CRUD/search/attachment/diagram/changelog surface, without a build pipeline. Vendored (not CDN) because the plugin must work with no internet connectivity — see §2.4 |
 | Diagram rendering | `dagre` (layout only, vendored) + hand-rolled SVG rendering | circuits are small, mostly-linear/tree-shaped graphs — a full force-directed layout lib is overkill; computing positions with `dagre` and rendering SVG ourselves keeps the bundle light and gives full control over styling (color by gauge, dim/strike removed records, etc.) |
@@ -642,7 +642,7 @@ its live, drawn conduits in order.
   says what the flags do and a critical device with an unusual type can be
   missed; nothing starts as never remote.
 - No user input is ever interpolated into SQL — all queries go through
-  `better-sqlite3`'s parameterized statement API.
+  the parameterized statement API of `node:sqlite`.
 
 ## 7. File Structure
 

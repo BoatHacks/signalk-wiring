@@ -38,7 +38,7 @@ go-ahead.
 The host has Node 20.19.2, which is below the required 22. On the host,
 `npm test` runs 31 tests and the three SQLite files
 (`store`, `routes`, `resources`) crash with SIGSEGV because
-better-sqlite3 13.x needs Node 22 or newer and is not built there. This is
+`node:sqlite` needs Node 22.13 or newer and is not available there. This is
 an environment problem, not a test failure.
 
 The full suite (55 tests, all passing at the last run) runs in the

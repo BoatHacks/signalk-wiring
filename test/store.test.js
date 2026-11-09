@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const Database = require('better-sqlite3')
+const { Database } = require('../src/db')
 const { Store } = require('../src/store')
 
 function freshStore () {

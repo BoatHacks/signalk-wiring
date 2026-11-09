@@ -4,7 +4,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const Database = require('better-sqlite3')
+const { Database } = require('../src/db')
 const { Store } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 const { typeCurrent, mixesAcAndDc, terminalsCurrent, AC_TYPES, DC_TYPES } = require('../src/current')

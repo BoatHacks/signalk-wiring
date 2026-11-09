@@ -166,7 +166,7 @@ test('migration 11 adds the columns to a database that predates them', () => {
   const s = new Store(file)
   s.create('device', { name: 'Old', type: 'AGM battery', role: 'storage' })
   s.close()
-  const Database = require('better-sqlite3')
+  const { Database } = require('../src/db')
   const raw = new Database(file)
   for (const c of ['chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
     'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path']) {

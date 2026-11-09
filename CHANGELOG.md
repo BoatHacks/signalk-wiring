@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-09
+
+### Changed
+
+- The plugin now uses Node's built-in `node:sqlite` instead of `better-sqlite3`
+  (issue #16): no native module to install or build, no install scripts, and no
+  runtime dependencies at all. Node 22.13 or newer is required (the first
+  version where `node:sqlite` needs no flag). The database file is the same
+  SQLite file, so existing data opens unchanged.
+
 ## [0.6.8] - 2026-11-09
 
 ### Changed
