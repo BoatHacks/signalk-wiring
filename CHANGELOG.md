@@ -5,6 +5,26 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-11-09
+
+### Added
+
+- Auto-arrange has two stages: after the first click the button reads "Arrange
+  everything", and a second click with nothing edited in between also clears
+  hand-placed wire bends and tabs. The full arrange can be undone.
+- Double-click or double-tap a hand-routed wire to remove its bend points and
+  let the router route it again (undoable).
+
+### Changed
+
+- Wires in the same conduit, or between the same two devices, are routed
+  together along one path in parallel lanes, splitting near their ports.
+- Dragging the midpoint handle of a wire moves only the horizontal or vertical
+  segment it sits on. A segment left shorter than one line width is merged into
+  its neighbours.
+- The view no longer rescales under the pointer while a bend or segment is
+  dragged.
+
 ## [0.6.6] - 2026-11-09
 
 ### Added

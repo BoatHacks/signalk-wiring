@@ -95,7 +95,7 @@ back to the router.
 - [x] Two-stage Auto-arrange.
 - [x] Midpoint handles move the segment, with short-jog merging.
 - [x] Double-click a hand-routed wire to auto-route it.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
       #14.
 
 ## Files to Create/Modify

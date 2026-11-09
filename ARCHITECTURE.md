@@ -753,3 +753,5 @@ Plan 0022 tightened the router to hard rules (16 unit lane pitch, 18 unit outwar
 Plan 0023 added the `schematic_zones` table (migration 14) for zone shapes (rectangle, oval, polygon with a corner list), drawn on a background layer the router never sees, and moved the AC and DC marks from the wires to the port dots (`public/portMark.js`).
 
 Plan 0024 added `devices.parent_id` and `schematics.enclosure_id` (migration 15) and `src/enclosures.js` (contents, path and boundary cables, mirrored in `public/enclosures.js`). Circuit derivation is untouched: cables end on the contained devices.
+
+Plan 0025 added router bundling (`bundleGroups`, parallel lanes beside one reference path per bundle, at most six bundles per page), the two-stage `arrangeStage` helper, `moveSegment` and `mergeShortJogs` for orthogonal segment dragging, and double-click re-routing of hand-routed wires.
