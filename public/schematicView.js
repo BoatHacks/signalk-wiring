@@ -1,4 +1,4 @@
-import { html, useState, useEffect, useRef, useMemo } from './vendor/preact-standalone.module.js'
+import { html, useState, useEffect, useRef } from './vendor/preact-standalone.module.js'
 import { formatGauge } from './gauge.js'
 import dagre from './vendor/dagre.esm.js'
 import { newId } from './ids.js'
@@ -24,6 +24,7 @@ import { ensureInsidePage } from './insidePage.js'
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
 const MOVE_SLOP_PX = 3
+const ROUTE_INTERVAL_MS = 66 // live routing while dragging: at most about 15 routes per second (plan 0026)
 const DOUBLE_CLICK_MS = 400
 
 // Small local copies of the app.js helpers; importing app.js from here would
@@ -315,26 +316,57 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const onPage = liveCables.filter((c) => boxById.has(c.fromDeviceId) && boxById.has(c.toDeviceId))
   const lanes = G.assignLanes(onPage.map((c) => ({ id: c.id, a: c.fromDeviceId, b: c.toDeviceId })))
   const stubsBase = G.offPageStubs({ boxes: boxById, cables: liveCables, deviceName }).map((st) => ({ ...st, cable: liveCables.find((c) => c.id === st.cableId), ...(stubPos[st.cableId] ? { pos: stubPos[st.cableId] } : {}) }))
-  // Routing runs when the page's layout, wires or conduits change, not on
-  // every pointer move: while a device or a bend point is being dragged the
-  // old cheap routes are drawn and the full routing follows the drop.
-  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'bend' || drag.current.kind === 'seg' || drag.current.kind === 'stub')
-  const routeKey = dragging ? 'drag' : JSON.stringify([
+  // The wires are routed by the real router all the time, also while a
+  // device or a tab is dragged (plan 0026). The dragged item follows the
+  // pointer at once; the routing catches up through a throttle (one route at
+  // a time, latest positions win). The last finished route stays drawn until
+  // a newer one is ready. The drop uses the same call with the final
+  // positions, so the last drag step and the drop are the same picture.
+  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'stub')
+  const cheapDragging = !!drag.current && drag.current.moved && (drag.current.kind === 'bend' || drag.current.kind === 'seg')
+  const routeKey = JSON.stringify([
     boxes.map((b) => [b.id, b.x, b.y, b.w, b.h]), onPage.map((c) => [c.id, c.fromDeviceId, c.toDeviceId, c.conductors, c.conduitIds]),
     bends, stubsBase.map((x) => [x.cableId, x.pos || null])
   ])
-  const routed = useMemo(() => {
-    if (dragging) return null
-    return G.routeSchematicPage({
-      boxes,
-      wires: onPage.map((c) => {
-        const t = G.endTerminals(c)
-        return { id: c.id, fromId: c.fromDeviceId, toId: c.toDeviceId, fromTerminal: t.from, toTerminal: t.to, points: bends[c.id] || [], conduitIds: c.conduitIds || [], lane: lanes[c.id] || 0 }
-      }),
-      stubs: stubsBase,
-      legacy: G.wirePath
-    })
-  }, [routeKey])
+  const routeInputs = () => ({
+    boxes,
+    wires: onPage.map((c) => {
+      const t = G.endTerminals(c)
+      return { id: c.id, fromId: c.fromDeviceId, toId: c.toDeviceId, fromTerminal: t.from, toTerminal: t.to, points: bends[c.id] || [], conduitIds: c.conduitIds || [], lane: lanes[c.id] || 0 }
+    }),
+    stubs: stubsBase,
+    legacy: G.wirePath
+  })
+  const settledRoute = useRef(null) // { key, result }: the last route made outside a drag
+  const liveRoute = useRef(null) // { key, result }: the last route made by the throttle
+  const [, setRouteTick] = useState(0)
+  const throttle = useRef(null)
+  if (!throttle.current) {
+    throttle.current = G.createRouteThrottle(({ key, inputs }) => {
+      if (!mounted.current) return
+      liveRoute.current = { key, result: G.routeSchematicPage(inputs) }
+      setRouteTick((n) => n + 1)
+    }, ROUTE_INTERVAL_MS)
+  }
+  useEffect(() => () => throttle.current.cancel(), [])
+  let routed = null
+  let routeStale = false // the drawn route is for older positions than the ones on screen
+  if (!cheapDragging) {
+    const known = [liveRoute.current, settledRoute.current].find((r) => r && r.key === routeKey)
+    if (known) routed = known.result
+    else if (dragging) { routeStale = true; routed = (liveRoute.current || settledRoute.current || {}).result || null }
+    else {
+      routed = G.routeSchematicPage(routeInputs())
+      settledRoute.current = { key: routeKey, result: routed }
+    }
+  }
+  // ask for the route of the current positions while dragging
+  const dragKey = dragging ? routeKey : null
+  useEffect(() => {
+    if (dragKey === null) { throttle.current.cancel(); return }
+    const known = [liveRoute.current, settledRoute.current].find((r) => r && r.key === dragKey)
+    if (!known) throttle.current.request({ key: dragKey, inputs: routeInputs() })
+  }, [dragKey])
   const wires = onPage.map((c) => {
     const t = G.endTerminals(c)
     const r = routed && routed.wires.get(c.id)
@@ -350,7 +382,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
   const stubs = stubsBase.map((st) => {
     const r = routed && routed.stubs.get(st.cableId)
-    if (r) return { ...st, path: r.path, tab: r.tab, bridges: r.bridges || [] }
+    // a tab being dragged follows the pointer at once, whatever the last route says
+    const followed = routeStale && drag.current.kind === 'stub' && drag.current.stub.cableId === st.cableId && st.pos
+    if (r && !followed) return { ...st, path: r.path, tab: r.tab, bridges: r.bridges || [] }
     return st.pos ? { ...st, ...G.stubAt(st, st.pos) } : st
   })
   const conduitInfo = new Map(conduits.filter(isLive).map((c) => [c.id, c]))

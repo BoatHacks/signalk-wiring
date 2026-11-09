@@ -716,6 +716,42 @@ export function circuitHighlight (circuit) {
 export { autoLayout, resolveOverlaps, findOverlaps, freeTabSpot, arrangeStage, ARRANGE_LABEL, ARRANGE_ALL_LABEL, rankGap, GAP_MIN, GAP_MAX, OVERLAP_MARGIN } from './schematicLayout.js'
 export { routePage, routeSchematicPage, stubAt, conduitBands, pathToDWithBridges, USE_NEW_ROUTER } from './wireRouter.js'
 
+// Live routing while dragging (plan 0026). request(args) asks for a route with
+// the latest arguments: at most one route runs at a time, two route starts are
+// at least minIntervalMs apart, and a request that arrives meanwhile replaces
+// the one waiting (latest wins) and runs as a trailing call. routeFn may
+// return a promise; the next run waits for it. cancel() drops a waiting
+// request (a route already running is not interrupted).
+export function createRouteThrottle (routeFn, minIntervalMs = 66, now = Date.now, schedule = setTimeout, unschedule = clearTimeout) {
+  let pending = null // { args } while a request waits
+  let running = false
+  let timer = null
+  let lastStart = -Infinity
+  const pump = () => {
+    if (running || !pending) return
+    const wait = lastStart + minIntervalMs - now()
+    if (wait > 0) {
+      if (timer === null) timer = schedule(() => { timer = null; pump() }, wait)
+      return
+    }
+    const { args } = pending
+    pending = null
+    running = true
+    lastStart = now()
+    const done = () => { running = false; pump() }
+    let out
+    try { out = routeFn(args) } catch (err) { running = false; throw err }
+    if (out && typeof out.then === 'function') out.then(done, done)
+    else done()
+  }
+  return {
+    request (args) { pending = { args }; pump() },
+    cancel () { pending = null; if (timer !== null) { unschedule(timer); timer = null } },
+    get busy () { return running || pending !== null }
+  }
+}
+
+
 // A viewBox that frames every box with a margin, or a default when empty.
 export function fitView (boxes, margin = 40) {
   if (boxes.length === 0) return { x: 0, y: 0, w: 800, h: 500 }
