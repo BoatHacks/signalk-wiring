@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-09
+
+### Changed
+
+- The line to an off-page "to" tab is drawn like its cable: conductor colours,
+  the AC or DC line style and the normal width.
+- Wires no longer cross just before a port (the MultiPlus DC in wires enter in
+  port order), conduit bands end clear of ports, and their labels sit where no
+  line passes. Lines to tabs keep a wider gap to other wires.
+- Routing no longer depends on timing: the same page always routes the same way.
+
 ## [0.6.1] - 2026-11-08
 
 ### Changed
