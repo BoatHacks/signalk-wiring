@@ -2059,7 +2059,7 @@ function DevicesList ({ onSelect }) {
             ${deviceIconUrl(device) && html`<img class="device-icon" src=${deviceIconUrl(device)} alt="" />`}
             <div>
             <div>${device.name}</div>
-            <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}${insideText(items, device.id) ? ` – in ${insideText(items, device.id)}` : ''}${device.role === 'enclosure' ? ` – holds ${(device.contents || []).length}` : ''}</div>
+            <div class="meta">${roleLabel(device.role)} | ${device.type || 'no type recorded'}${device.zone ? ` | ${device.zone}` : ''}${(device.tags || []).length ? ` | ${device.tags.join(', ')}` : ''}${insideText(items, device.id) ? ` | in ${insideText(items, device.id)}` : ''}${device.role === 'enclosure' ? ` | holds ${(device.contents || []).length}` : ''}</div>
             </div>
           </div>
           <${StatusBadge} status=${device.status} />
