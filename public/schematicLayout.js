@@ -138,3 +138,24 @@ export function freeTabSpot (at, boxes, otherTabs = [], margin = 32) {
   const moved = resolveOverlaps([...fixed, tab], [], margin, ['__tab__'])
   return moved.__tab__ ? { x: moved.__tab__.x, y: moved.__tab__.y } : { x: at.x, y: at.y }
 }
+
+// ---- Auto-arrange in two stages (plan 0025) ----
+
+export const ARRANGE_LABEL = 'Auto-arrange'
+export const ARRANGE_ALL_LABEL = 'Arrange everything'
+
+// The two-stage button. state: { armed }. event: 'click' or 'edit' (a drag,
+// an add, a delete, an undo, leaving the page). The first click arranges the
+// page as before and arms the second; a second click with no edit in between
+// is the full arrange, which also clears the page's bend points and the tabs
+// the user placed (`clear`). Any edit disarms. Returns the next state, the
+// button label and what this click does.
+export function arrangeStage (state, event) {
+  const armed = !!(state && state.armed)
+  if (event === 'click') {
+    return armed
+      ? { armed: false, label: ARRANGE_LABEL, full: true, clear: { bends: true, tabs: true } }
+      : { armed: true, label: ARRANGE_ALL_LABEL, full: false, clear: { bends: false, tabs: false } }
+  }
+  return { armed: false, label: ARRANGE_LABEL, full: false, clear: { bends: false, tabs: false } }
+}

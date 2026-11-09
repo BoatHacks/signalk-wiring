@@ -55,3 +55,23 @@ test('autoLayout: longer cables give wider rank gaps, no overlaps', () => {
   const boxes = devices.map((d) => ({ id: d.id, x: pos[d.id].x, y: pos[d.id].y, w: 150, h: 46 }))
   assert.deepEqual(L.findOverlaps(boxes), [])
 })
+
+// ---- Plan 0025: two-stage Auto-arrange ----
+
+test('arrangeStage: the first click arranges and arms, the second is the full arrange and clears bends and tabs', () => {
+  const first = L.arrangeStage({ armed: false }, 'click')
+  assert.deepEqual(first, { armed: true, label: 'Arrange everything', full: false, clear: { bends: false, tabs: false } })
+  const second = L.arrangeStage(first, 'click')
+  assert.equal(second.full, true)
+  assert.deepEqual(second.clear, { bends: true, tabs: true })
+  assert.equal(second.armed, false)
+  assert.equal(second.label, 'Auto-arrange')
+  assert.equal(L.arrangeStage(undefined, 'click').full, false)
+})
+
+test('arrangeStage: any edit puts the label back and the next click is stage one again', () => {
+  const armed = L.arrangeStage({ armed: false }, 'click')
+  const edited = L.arrangeStage(armed, 'edit')
+  assert.deepEqual(edited, { armed: false, label: 'Auto-arrange', full: false, clear: { bends: false, tabs: false } })
+  assert.equal(L.arrangeStage(edited, 'click').full, false)
+})

@@ -253,6 +253,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const [tabMenu, setTabMenu] = useState(null)
   const [addId, setAddId] = useState('')
   const [busy, setBusy] = useState(false)
+  const [armed, setArmed] = useState(false) // Auto-arrange has run and nothing was edited since
+  const armedPending = useRef(null) // the edit key at the click, until the saved layout has come back
+  const armedKey = useRef(null)
   const [preview, setPreview] = useState(null) // a wire being dragged: { a: {x,y}, b: {x,y}, targetId }
   const [popover, setPopover] = useState(null) // { start, at }
   const [moreForm, setMoreForm] = useState(null) // { cable?, prefill? }
@@ -452,14 +455,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   // Moves the given devices (default: all) to the nearest free spot, at least
   // the overlap margin from every other device and every off-page tab.
-  const tidied = (layout, movable = null) => {
+  const tidied = (layout, movable = null, keepTabs = true) => {
     const bx = []
     for (const id of Object.keys(layout)) {
       const d = drawnById.get(id) || deviceById.get(id)
       if (d) bx.push(G.deviceBox(d, layout[id]))
     }
     // tabs the user placed stay where they are; the others are placed after the devices
-    const tabs = stubs.filter((st) => st.pos).map((st) => ({ ...st.tab, deviceId: st.deviceId }))
+    const tabs = !keepTabs ? [] : stubs.filter((st) => st.pos).map((st) => ({ ...st.tab, deviceId: st.deviceId }))
     const moved = G.resolveOverlaps(bx, tabs, G.OVERLAP_MARGIN, movable)
     return Object.keys(moved).length ? { ...layout, ...moved } : layout
   }
@@ -522,14 +525,46 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     })
   }
 
+  // Two stages (plan 0025): the first click arranges as before, the second
+  // one, with nothing edited in between, also clears the bend points and the
+  // tabs the user placed. The full arrange can be undone.
   const autoArrange = async () => {
+    const step = G.arrangeStage({ armed }, 'click')
+    armedPending.current = null
     setBusy(true)
-    const layout = tidied(G.autoLayout(dagre, pageDevices, onPage))
+    const before = { devices: schematic.devices, wires: schematic.wires, stubs: schematic.stubs || [] }
+    const layout = tidied(G.autoLayout(dagre, pageDevices, onPage), null, !step.clear.tabs)
     setPos(layout)
-    await save(layout, bends)
+    if (step.full) {
+      setBends({})
+      setStubPos({})
+      await save(layout, {}, undefined, {})
+      undo.offer({
+        message: 'Everything on this page arranged.',
+        onUndo: () => patchStored(() => ({ devices: before.devices, wires: before.wires, stubs: before.stubs }))
+      })
+    } else await save(layout, bends)
+    if (step.armed) {
+      armedPending.current = editKeyRef.current
+      // when the layout did not change, no new data comes back: settle after a moment
+      setTimeout(() => { if (armedPending.current !== null) { armedKey.current = editKeyRef.current; armedPending.current = null } }, 1500)
+    } else armedKey.current = null
+    setArmed(step.armed)
     setBusy(false)
     fitNow()
   }
+  // Any change to the page, its devices or its cables disarms the second stage.
+  const editKey = JSON.stringify([schematic.id, recordKey, devices.map((d) => [d.id, d.status]), cables.map((c) => [c.id, c.status])])
+  const editKeyRef = useRef(editKey)
+  editKeyRef.current = editKey
+  useEffect(() => {
+    if (busy) return
+    if (armedPending.current !== null) {
+      if (editKey !== armedPending.current) { armedKey.current = editKey; armedPending.current = null }
+      return
+    }
+    if (armedKey.current !== null && armedKey.current !== editKey) { armedKey.current = null; setArmed(false) }
+  }, [busy, editKey])
 
   // ---- Drawing wires ----
   // Where a dragged wire would land: a terminal, else any other device box.
@@ -929,7 +964,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${Z.addableZones(zones, shapes).map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
         </select>
         <button type="button" class=${liveOn ? 'active' : ''} data-testid="schematic-live" onClick=${() => { setLiveOn((v) => !v); onError(null) }}>${liveOn ? 'Live: on' : 'Live'}</button>
-        <button type="button" data-testid="auto-arrange" onClick=${autoArrange} disabled=${busy || boxes.length === 0}>Auto-arrange</button>
+        <button type="button" data-testid="auto-arrange" onClick=${autoArrange} disabled=${busy || boxes.length === 0}>${armed ? G.ARRANGE_ALL_LABEL : G.ARRANGE_LABEL}</button>
         <button type="button" onClick=${() => zoomAt(ZOOM_STEP)}>＋</button>
         <button type="button" onClick=${() => zoomAt(1 / ZOOM_STEP)}>－</button>
         <button type="button" onClick=${fitNow}>Fit</button>
