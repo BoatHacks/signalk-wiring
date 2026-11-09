@@ -57,7 +57,7 @@ router's result all the time.
 
 - [x] The throttle helper and live routing for device and tab drags, with
       tests.
-- [ ] Live routing for wire handle and segment drags, Escape handling.
+- [x] Live routing for wire handle and segment drags, Escape handling.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the box in issue
       #14.
 

@@ -322,8 +322,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   // a time, latest positions win). The last finished route stays drawn until
   // a newer one is ready. The drop uses the same call with the final
   // positions, so the last drag step and the drop are the same picture.
-  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'stub')
-  const cheapDragging = !!drag.current && drag.current.moved && (drag.current.kind === 'bend' || drag.current.kind === 'seg')
+  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'stub' || drag.current.kind === 'bend' || drag.current.kind === 'seg')
   const routeKey = JSON.stringify([
     boxes.map((b) => [b.id, b.x, b.y, b.w, b.h]), onPage.map((c) => [c.id, c.fromDeviceId, c.toDeviceId, c.conductors, c.conduitIds]),
     bends, stubsBase.map((x) => [x.cableId, x.pos || null])
@@ -351,7 +350,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   useEffect(() => () => throttle.current.cancel(), [])
   let routed = null
   let routeStale = false // the drawn route is for older positions than the ones on screen
-  if (!cheapDragging) {
+  {
     const known = [liveRoute.current, settledRoute.current].find((r) => r && r.key === routeKey)
     if (known) routed = known.result
     else if (dragging) { routeStale = true; routed = (liveRoute.current || settledRoute.current || {}).result || null }
@@ -367,6 +366,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const known = [liveRoute.current, settledRoute.current].find((r) => r && r.key === dragKey)
     if (!known) throttle.current.request({ key: dragKey, inputs: routeInputs() })
   }, [dragKey])
+  // a wire whose handle is dragged is hand-routed: until its route has caught up it is drawn from its own points
+  const handleWire = routeStale && drag.current && (drag.current.kind === 'bend' || drag.current.kind === 'seg') ? drag.current.wireId : null
   const wires = onPage.map((c) => {
     const t = G.endTerminals(c)
     const r = routed && routed.wires.get(c.id)
@@ -375,7 +376,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       cable: c,
       bridges: r ? r.bridges : [],
       path: r
-        ? r.points
+        ? (handleWire === c.id && r.points.length > 1 ? [r.points[0], ...(bends[c.id] || []), r.points[r.points.length - 1]] : r.points)
         : G.wirePath({ fromBox: boxById.get(c.fromDeviceId), toBox: boxById.get(c.toDeviceId), fromTerminal: t.from, toTerminal: t.to, lane: lanes[c.id] || 0, points: bends[c.id] || [] }),
       stored: c.source || c
     }

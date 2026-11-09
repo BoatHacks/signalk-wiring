@@ -93,10 +93,13 @@ test('throttle: cancel drops the waiting request', () => {
   assert.equal(th.busy, false)
 })
 
-test('the drag code does not draw cheap routes for device and tab drags', () => {
+test('the drag code does not draw cheap routes for device, tab, bend or stretch drags', () => {
   const src = readFileSync(new URL('../public/schematicView.js', import.meta.url), 'utf8')
   assert.match(src, /createRouteThrottle/)
   // the old rule that skipped routing while a device or tab was dragged is gone
   assert.doesNotMatch(src, /if \(dragging\) return null/)
   assert.doesNotMatch(src, /routeKey = dragging \?/)
+  assert.doesNotMatch(src, /cheapDragging/)
+  // the dragging flag covers all four drag kinds
+  assert.match(src, /kind === 'move' \|\| drag\.current\.kind === 'stub' \|\| drag\.current\.kind === 'bend' \|\| drag\.current\.kind === 'seg'/)
 })
