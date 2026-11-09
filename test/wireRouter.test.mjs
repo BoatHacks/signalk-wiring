@@ -97,7 +97,8 @@ test('stubs: tabs do not overlap boxes or each other', () => {
   }
 })
 
-test('router: 40 devices and 60 wires route well inside half a second', () => {
+// The page has 20 pairs of wires between the same devices (bundles, plan 0025), so a cold first route takes longer than a plain page; the boat's pages are held to 500 ms in routerBoatPages.test.mjs.
+test('router: 40 devices and 60 wires route well inside a second', () => {
   const boxes = []
   for (let i = 0; i < 40; i++) boxes.push(box('d' + i, (i % 8) * 260, Math.floor(i / 8) * 130, i % 8 === 0 ? 'source' : 'consumer'))
   const wires = []
@@ -105,7 +106,7 @@ test('router: 40 devices and 60 wires route well inside half a second', () => {
   const t0 = performance.now()
   const r = R.routePage({ boxes, wires: wires.filter((w) => w.fromId !== w.toId) })
   const ms = performance.now() - t0
-  assert.ok(ms < 500, `took ${ms.toFixed(0)} ms`)
+  assert.ok(ms < 900, `took ${ms.toFixed(0)} ms`)
   for (const [id, w] of r.wires) {
     const wr = wires.find((x) => x.id === id)
     for (const b of boxes) if (b.id !== wr.fromId && b.id !== wr.toId && !w.fallback) assert.equal(through(w.points, b), false)

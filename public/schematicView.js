@@ -240,6 +240,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const drag = useRef(null)
   const lastBendDown = useRef(null)
   const lastTap = useRef(null) // the last tap on a device, for the double tap
+  const lastWireTap = useRef(null) // the last tap on a wire
+  const autoRoutedAt = useRef(0)
   const lastCornerDown = useRef(null)
   const [pos, setPos] = useState({})
   const [bends, setBends] = useState({})
@@ -368,7 +370,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const selectedWireId = selection && selection.type === 'wire' ? selection.id : null
   const shown = shapes.filter((sh) => zoneById.has(sh.zoneId))
-  const view = vb || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
+  // while a bend point or a stretch is dragged, the viewBox stays as it was: the cheap routes drawn meanwhile must not rescale the page under the pointer
+  const view = (drag.current && drag.current.frozen) || vb || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
   const fitNow = () => setVb(null)
 
   // ---- Coordinates ----
@@ -645,6 +648,23 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     await save(pos, next)
   }
 
+  // Double-click or double-tap on a hand-routed wire gives it back to the
+  // router (plan 0025): its bend points go, and Undo puts them back. A wire
+  // without bend points ignores it.
+  const autoRoute = async (id) => {
+    const saved = bends[id]
+    if (!saved || saved.length === 0 || Date.now() - autoRoutedAt.current < 700) return
+    autoRoutedAt.current = Date.now()
+    const next = { ...bends }
+    delete next[id]
+    setBends(next)
+    await save(pos, next)
+    undo.offer({
+      message: 'Wire routed automatically.',
+      onUndo: () => patchStored((st) => ({ wires: G.withWireBends(st.wires || [], id, saved) }))
+    })
+  }
+
   // ---- Keyboard ----
   // Attached for as long as the editor is mounted, so it is gone when another
   // tab is shown. Re-attached every render to see the latest state.
@@ -718,21 +738,21 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           lastBendDown.current = null
           return
         }
-        drag.current = { kind: 'bend', wireId: sel.id, index: bi, sx: e.clientX, sy: e.clientY, moved: false }
+        drag.current = { kind: 'bend', frozen: { ...view }, wireId: sel.id, index: bi, sx: e.clientX, sy: e.clientY, moved: false }
         return
       }
       const mids = midHandles(sel.path)
       const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
       if (mi >= 0 && (sel.path[mi].x === sel.path[mi + 1].x || sel.path[mi].y === sel.path[mi + 1].y)) {
         // the handle of a horizontal or vertical segment moves that segment, perpendicular to itself
-        drag.current = { kind: 'seg', wireId: sel.id, index: mi, path: sel.path, mid: mids[mi], sx: e.clientX, sy: e.clientY, moved: false }
+        drag.current = { kind: 'seg', frozen: { ...view }, wireId: sel.id, index: mi, path: sel.path, mid: mids[mi], sx: e.clientX, sy: e.clientY, moved: false }
         return
       }
       if (mi >= 0) {
         const index = G.insertBendIndex(sel.path, cur, mids[mi].x, mids[mi].y)
         const next = { ...bends, [sel.id]: [...cur.slice(0, index), { x: Math.round(mids[mi].x), y: Math.round(mids[mi].y) }, ...cur.slice(index)] }
         setBends(next)
-        drag.current = { kind: 'bend', wireId: sel.id, index, sx: e.clientX, sy: e.clientY, moved: true, fresh: true }
+        drag.current = { kind: 'bend', frozen: { ...view }, wireId: sel.id, index, sx: e.clientX, sy: e.clientY, moved: true, fresh: true }
         return
       }
     }
@@ -791,7 +811,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       return
     }
     const wire = G.hitWire(wires, p.x, p.y)
-    if (wire) { setSelection({ type: 'wire', id: wire.id }); return }
+    if (wire) {
+      const tap = { id: wire.id, t: Date.now(), x: e.clientX, y: e.clientY }
+      const twice = G.isDoubleTap(lastWireTap.current, tap)
+      lastWireTap.current = twice ? null : tap
+      setSelection({ type: 'wire', id: wire.id })
+      if (twice) autoRoute(wire.id)
+      return
+    }
     // A zone shape takes the click on its outline or label, or anywhere inside
     // once it is selected (to move it); never otherwise.
     const picked = Z.pickShape(shown, zoneName, p.x, p.y, selShape ? selShape.zoneId : null)
@@ -873,7 +900,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const p = toCanvas(e)
     if (G.hitTerminal(wireBoxes, p.x, p.y)) return
     const device = G.hitDevice(boxes, p.x, p.y)
-    if (device) openBox(device.id)
+    if (device) { openBox(device.id); return }
+    const wire = G.hitWire(wires, p.x, p.y)
+    if (wire) autoRoute(wire.id)
   }
 
   const onPointerUp = (e) => {
@@ -1067,7 +1096,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.stored })}>Edit cable</button>
           ${(bends[selectedWire.id] || []).length > 0 && html`<button type="button" class="link-btn" onClick=${() => straighten(selectedWire.id)}>Straighten</button>`}
           <button type="button" class="link-btn" data-testid="delete-wire" onClick=${() => deleteWire(selectedWire.stored)}>Delete wire</button>
-          <span class="meta">Drag the small dot on a stretch to move that stretch; drag a corner dot to bend the wire; double-click a corner dot to remove it.</span>
+          <span class="meta">Drag the small dot on a stretch to move that stretch; drag a corner dot to bend the wire; double-click a corner dot to remove it, or the wire itself to route it again.</span>
         </div>`}
       ${selectedShape && html`
         <div class="schematic-inspector" data-testid="zone-inspector">
