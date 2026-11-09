@@ -14,7 +14,8 @@ export const MARGIN = 12 // wires keep this far from a box (port blocks stick ou
 export const BEND_COST = 24
 export const CROSS_COST = 30
 export const NEAR_COST = 0.5
-export const CONDUIT_FACTOR = 0.25
+export const MAX_BUNDLES = 6 // bundles with lanes on one page, the biggest first (each adds grid lines)
+export const BUNDLE_FACTOR = 0.1 // cost of a stretch along the lane of the bundle's reference path
 export const HEURISTIC_WEIGHT = 1.6 // greedy A*: a little off the shortest, much faster
 export const BRIDGE_R = 4
 export const ROUND_BUDGET = 500000 // no new rip-up round after this many search steps (not time: same result on every machine)
@@ -30,6 +31,7 @@ export const ANCHOR_SPACING = PITCH
 export const STUB_PITCH = 24
 export const PORT_CLEAR = 90
 export const PORT_CROSS_COST = 150
+export const BUNDLE_CROSS_COST = 60 // a wire crossing a wire of its own bundle
 
 const DIRS = [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }]
 const dirOf = (n) => DIRS.findIndex((d) => d.x === n.x && d.y === n.y)
@@ -196,9 +198,9 @@ function computeAnchors (wires, boxById, stubs) {
 
 // ---- The grid ---------------------------------------------------------------
 
-function buildGrid (obstacles, exits, bbox) {
-  const extraX = []
-  const extraY = []
+function buildGrid (obstacles, exits, bbox, extraLines = null) {
+  const extraX = extraLines ? [...extraLines.xs] : []
+  const extraY = extraLines ? [...extraLines.ys] : []
   for (const b of obstacles) {
     const r = inflate(b, MARGIN)
     extraX.push(r.x0, r.x1)
@@ -267,15 +269,10 @@ function makeSearch (grid) {
   const close = [new Uint8Array(N), new Uint8Array(N)]
   const occ = new Uint8Array(N) // node on an end, a bend or close to one
   const pass = new Uint8Array(N) // 1: a horizontal line passes straight, 2: a vertical one
-  const edgeConduits = new Map()
+  const owner = new Map() // node -> bundle of the line that passes it
+  const lanes = new Map() // edge key -> bundle id: the lanes beside a bundle's reference path
 
-  const conduitShare = (key, ids) => {
-    const list = edgeConduits.get(key)
-    if (!list || !ids || ids.length === 0) return false
-    return ids.some((c) => list.includes(c))
-  }
-
-  function search (si, sj, sdir, gi, gj, gdirIn, conduitIds, level) {
+  function search (si, sj, sdir, gi, gj, gdirIn, bundle, level) {
     run++
     const heap = new Heap()
     const start = (sj * nx + si) * 4 + sdir
@@ -332,6 +329,7 @@ function makeSearch (grid) {
               // not close to a port: neither of this line's own ends, nor of the crossed line
               // (a heavy cost rather than a ban: tight pages may have no other way)
               if (zone[nn] || sd[s] + len + STUB < PORT_CLEAR || Math.abs(xs[gi] - xs[ni]) + Math.abs(ys[gj] - ys[nj]) + STUB < PORT_CLEAR) portPenalty = PORT_CROSS_COST
+              if (bundle && owner.get(nn) === bundle) portPenalty += BUNDLE_CROSS_COST
               crossing = true
             }
           }
@@ -340,8 +338,7 @@ function makeSearch (grid) {
           else if (close[o][ekey]) cost = len * 1.5
           if (occ[nn] && !isEnd) cost += 40
         }
-        const used = edgeConduits.size ? conduitShare((horizontal ? 0 : N) + ekey, conduitIds) : false
-        if (used) cost = len * CONDUIT_FACTOR
+        if (bundle && lanes.size && lanes.get((horizontal ? 0 : N) + ekey) === bundle) cost = len * BUNDLE_FACTOR
         cost += portPenalty
         if (near[nn]) cost += len * NEAR_COST
         if (pass[nn] && (horizontal ? pass[nn] & 2 : pass[nn] & 1)) cost += CROSS_COST
@@ -393,9 +390,31 @@ function makeSearch (grid) {
     }
   }
 
+  // Marks the edges on the lanes beside a bundle's reference path (up to n - 1
+  // lanes each side, at the pitch), so the bundle's other wires run along it.
+  function markLanes (points, bundle, n) {
+    for (let k = 1; k < points.length; k++) {
+      const a = points[k - 1]
+      const b = points[k]
+      if (a.x !== b.x && a.y !== b.y) continue
+      const horizontal = a.y === b.y
+      const A = horizontal ? xs : ys
+      const B = horizontal ? ys : xs
+      const c0 = horizontal ? a.y : a.x
+      const lo = horizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y)
+      const hi = horizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y)
+      for (let m = -(n - 1); m <= n - 1; m++) {
+        const cb = lower(B, c0 + m * PITCH)
+        if (cb >= B.length || Math.abs(B[cb] - (c0 + m * PITCH)) > 0.01) continue
+        for (let ia = lower(A, lo); ia < A.length - 1 && A[ia] < hi - 0.01; ia++) lanes.set((horizontal ? 0 : N) + (horizontal ? cb * nx + ia : ia * nx + cb), bundle)
+      }
+    }
+  }
+
   // Records an orthogonal polyline (anchor to anchor) so later wires see it.
-  function commit (points, conduitIds, full = false, pitch = PITCH) {
+  function commit (points, lane, full = false, pitch = PITCH) {
     if (full) markZone(points)
+    if (lane && lane.ref) markLanes(points, lane.bundle, lane.n)
     for (let k = 1; k < points.length; k++) {
       const a = points[k - 1]
       const b = points[k]
@@ -416,11 +435,10 @@ function makeSearch (grid) {
           const n = nodeAt(ia, ca)
           if (A[ia] - lo < BRIDGE_R + 3 || hi - A[ia] < BRIDGE_R + 3) occ[n] = 1
           else if (pass[n] & (horizontal ? 1 : 2)) occ[n] = 1
-          else pass[n] |= horizontal ? 1 : 2
+          else { pass[n] |= horizontal ? 1 : 2; if (lane) owner.set(n, lane.bundle) }
         }
       }
       // edges on this line and on lines closer than the pitch
-      const markList = []
       for (let ib = Math.max(0, lower(B, c0 - pitch) - 1); ib < B.length && B[ib] < c0 + pitch; ib++) {
         const dist = Math.abs(B[ib] - c0)
         if (dist >= pitch) continue
@@ -432,19 +450,6 @@ function makeSearch (grid) {
           else close[o][n] = 1
         }
       }
-      if (conduitIds && conduitIds.length) {
-        for (let ib = Math.max(0, lower(B, c0 - 2 * PITCH) - 1); ib < B.length && B[ib] < c0 + 2 * PITCH; ib++) {
-          const dist = Math.abs(B[ib] - c0)
-          if (dist < PITCH - 0.01 && dist > 0.01) continue
-          for (let ia = Math.max(0, lower(A, lo) - 1); ia < A.length - 1 && A[ia] < hi; ia++) {
-            if (A[ia + 1] <= lo) continue
-            const key = (horizontal ? 0 : N) + nodeAt(ia, ib)
-            if (!edgeConduits.has(key)) edgeConduits.set(key, [])
-            edgeConduits.get(key).push(...conduitIds)
-          }
-        }
-      }
-      markList.length = 0
     }
   }
   return { search, commit, grid, work: () => work }
@@ -579,6 +584,25 @@ function placeTabs (stubs, anchors, boxes, segs, wires, wireAnchors) {
   return out
 }
 
+// ---- Bundles ----------------------------------------------------------------
+
+// Groups of wires that are routed together (plan 0025): the wires of one
+// conduit (a wire in several conduits joins the one it lists first), else the
+// wires between the same two devices. At least two wires, none hand-routed.
+// Returns [{ key, kind: 'conduit' | 'devices', ids }], in a stable order.
+export function bundleGroups (wires) {
+  const groups = new Map()
+  for (const w of [...wires].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    if (w.points && w.points.length > 0) continue
+    if (w.fromId === w.toId) continue
+    const conduit = (w.conduitIds || [])[0]
+    const key = conduit ? 'c:' + conduit : 'd:' + [w.fromId, w.toId].sort().join('|')
+    if (!groups.has(key)) groups.set(key, { key, kind: conduit ? 'conduit' : 'devices', ids: [] })
+    groups.get(key).ids.push(w.id)
+  }
+  return [...groups.values()].filter((g) => g.ids.length > 1)
+}
+
 // ---- The entry point --------------------------------------------------------
 
 // boxes: deviceBox results. wires: [{ id, fromId, toId, fromTerminal, toTerminal,
@@ -605,7 +629,7 @@ export function routePage ({ boxes, wires, stubs = [] }) {
   for (const s of [...stubs].sort((a, b) => (a.cableId < b.cableId ? -1 : 1))) {
     const t = tabs.get(s.cableId)
     const from = anchors.stubs.get(s.cableId)
-    items.push(prepare({ id: 's:' + s.cableId, from, to: attachOf(t.tab, from), conduitIds: [], stub: true }))
+    items.push(prepare({ id: 's:' + s.cableId, from, to: attachOf(t.tab, from), stub: true }))
   }
   for (const w of order) {
     const a = anchors.wires.get(w.id)
@@ -613,15 +637,53 @@ export function routePage ({ boxes, wires, stubs = [] }) {
       routes.set(w.id, { points: [a.from, ...w.points, a.to].map((q) => ({ x: q.x, y: q.y })), fixed: true })
       continue
     }
-    items.push(prepare({ id: w.id, from: a.from, to: a.to, conduitIds: w.conduitIds || [], self: w.fromId === w.toId }))
+    items.push(prepare({ id: w.id, from: a.from, to: a.to, self: w.fromId === w.toId }))
   }
+  // wires that belong together: one reference path per bundle, the others run in lanes beside it
+  const bundleOf = new Map()
+  for (const g of bundleGroups(wires.filter((w) => !(w.points && w.points.length > 0)))) for (const id of g.ids) bundleOf.set(id, g)
+  for (const it of items) { const g = bundleOf.get(it.id); if (g) { it.bundle = g.key; it.bundleN = g.ids.length } }
   items.sort((a, b) => (b.stub ? 1 : 0) - (a.stub ? 1 : 0) || (a.len - b.len) || (a.id < b.id ? -1 : 1))
   if (boxes.length > 0) {
     const obstacles = [...boxes, ...[...tabs.values()].map((t) => t.tab)]
     const exits = items.flatMap((it) => [it.ea, it.eb])
-    const grid = buildGrid(obstacles, exits, pageBox(obstacles, exits))
+    const bbox = pageBox(obstacles, exits)
+    let grid = buildGrid(obstacles, exits, bbox)
     const fixed = [...routes.values()].filter((r) => r.fixed).map((r) => ({ points: r.points }))
-    for (const [id, r] of routeAll(grid, items, fixed, [], 4)) routes.set(id, r)
+    let preset = null
+    const refs = new Map() // bundle key -> the member that is routed first
+    for (const it of items) if (it.bundle && !it.self && (!refs.has(it.bundle) || (it.bundle[0] === 'c' ? it.len > refs.get(it.bundle).len : it.len < refs.get(it.bundle).len))) refs.set(it.bundle, it)
+    // the lanes add grid lines, so a page with very many bundles bundles only the biggest
+    if (refs.size > MAX_BUNDLES) {
+      const keep = new Set([...refs.keys()].sort((p, q) => refs.get(q).bundleN - refs.get(p).bundleN || (p < q ? -1 : 1)).slice(0, MAX_BUNDLES))
+      for (const it of items) if (it.bundle && !keep.has(it.bundle)) it.bundle = null
+      for (const k of [...refs.keys()]) if (!keep.has(k)) refs.delete(k)
+    }
+    if (refs.size > 0) {
+      // route the line to each tab and each reference path first, then put grid
+      // lines on the lanes beside the references for the rest of the bundle
+      const refIds = new Set([...refs.values()].map((it) => it.id))
+      for (const it of items) if (refIds.has(it.id)) it.ref = true
+      const first = routeAll(grid, items, fixed, [], 1, null, items.filter((it) => it.stub || refIds.has(it.id)))
+      // a page that cannot take them all under the strict rules is routed without bundles
+      if ([...first.values()].some((r) => r.level !== 0 || r.fallback)) { for (const it of items) it.bundle = null; refs.clear() } else preset = first
+      const xs = []
+      const ys = []
+      for (const [id, r] of preset || []) {
+        const it = items.find((q) => q.id === id)
+        const n = refIds.has(id) ? it.bundleN : 1
+        for (const q of r.points) { xs.push(q.x); ys.push(q.y) }
+        if (n > 1) {
+          for (let k = 1; k < r.points.length; k++) {
+            const p0 = r.points[k - 1]
+            const p1 = r.points[k]
+            for (let m = 1; m < n; m++) for (const d of [m * PITCH, -m * PITCH]) { if (p0.x === p1.x) xs.push(p0.x + d); else ys.push(p0.y + d) }
+          }
+        }
+      }
+      if (preset) grid = buildGrid(obstacles, exits, bbox, { xs, ys })
+    }
+    for (const [id, r] of routeAll(grid, items, fixed, [], 4, preset)) routes.set(id, r)
   }
   for (const r of routes.values()) r.points = r.fixed ? r.points : simplify(r.points)
   const paths = new Map()
@@ -653,27 +715,35 @@ function pageBox (obstacles, exits) {
 // Routes every item on the grid, shortest first. A wire that finds no way
 // under the strict rules goes to the front of the next round; after a few
 // rounds the rest are routed with the rules relaxed, one level at a time.
-function routeAll (grid, items, committed, legs, rounds = 4) {
+function routeAll (grid, items, committed, legs, rounds = 4, preset = null, only = null) {
   const pre = new Map(items.map((it) => [it.id, {
     si: grid.ix(it.ea.x), sj: grid.iy(it.ea.y), sdir: dirOf(sideNormal(it.from.side)),
     gi: grid.ix(it.eb.x), gj: grid.iy(it.eb.y), gdir: dirOf({ x: -sideNormal(it.to.side).x, y: -sideNormal(it.to.side).y })
   }]))
-  let queue = items
+  const isPreset = (it) => !!(preset && preset.has(it.id))
+  const laneOf = (it) => (it.bundle && !it.stub ? { bundle: it.bundle, n: it.bundleN, ref: it.ref } : null)
+  let queue = (only || items).filter((it) => !isPreset(it))
   let result = null
   let spent = 0
   for (let round = 0; round < rounds; round++) {
     const s = makeSearch(grid)
-    for (const f of committed) s.commit(f.points, f.conduitIds, true)
+    for (const f of committed) s.commit(f.points, null, true)
     for (const l of legs) s.commit(l.points)
     for (const it of items) { s.commit([it.from, it.ea], undefined, false, it.stub ? STUB_PITCH : PITCH); s.commit([it.to, it.eb]) }
     const res = new Map()
     const failed = []
+    for (const it of items) {
+      if (!isPreset(it)) continue
+      const r = preset.get(it.id)
+      s.commit(r.points, laneOf(it), true, it.stub ? STUB_PITCH : PITCH)
+      res.set(it.id, r)
+    }
     for (const it of queue) {
       const p = pre.get(it.id)
-      const nodes = it.self ? null : s.search(p.si, p.sj, p.sdir, p.gi, p.gj, p.gdir, it.conduitIds, 0)
+      const nodes = it.self ? null : s.search(p.si, p.sj, p.sdir, p.gi, p.gj, p.gdir, it.bundle, 0)
       if (!nodes) { failed.push(it); continue }
       const pts = simplify([it.from, ...nodes, it.to])
-      s.commit(pts, it.conduitIds, true, it.stub ? STUB_PITCH : PITCH)
+      s.commit(pts, laneOf(it), true, it.stub ? STUB_PITCH : PITCH)
       res.set(it.id, { points: pts, level: 0 })
     }
     result = { s, res, failed }
@@ -686,13 +756,13 @@ function routeAll (grid, items, committed, legs, rounds = 4) {
     const p = pre.get(it.id)
     let nodes = null
     let level = 1
-    for (; level <= 2 && !nodes; level++) nodes = it.self ? null : s.search(p.si, p.sj, p.sdir, p.gi, p.gj, p.gdir, it.conduitIds, level)
+    for (; level <= 2 && !nodes; level++) nodes = it.self ? null : s.search(p.si, p.sj, p.sdir, p.gi, p.gj, p.gdir, it.bundle, level)
     if (!nodes) {
       res.set(it.id, { points: [it.from, it.ea, it.eb, it.to].map((q) => ({ x: q.x, y: q.y })), fallback: true, level: 3 })
       continue
     }
     const pts = simplify([it.from, ...nodes, it.to])
-    s.commit(pts, it.conduitIds, true, it.stub ? STUB_PITCH : PITCH)
+    s.commit(pts, laneOf(it), true, it.stub ? STUB_PITCH : PITCH)
     res.set(it.id, { points: pts, level: level - 1 })
   }
   return res

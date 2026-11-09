@@ -91,7 +91,7 @@ back to the router.
 
 ## Implementation Steps
 
-- [ ] Bundling in the router, with tests.
+- [x] Bundling in the router, with tests.
 - [ ] Two-stage Auto-arrange.
 - [ ] Midpoint handles move the segment, with short-jog merging.
 - [ ] Double-click a hand-routed wire to auto-route it.

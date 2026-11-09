@@ -203,3 +203,70 @@ test('a line to a tab is drawn like its cable: conductor colours, DC solid or AC
     assert.equal(st.dasharray, st.current === 'ac' ? '10 6' : null)
   }
 })
+
+// ---- Plan 0025: bundles ----
+
+// Share of the wires' length that runs within 40 units beside a parallel stretch of another wire of the bundle.
+function bundleShare (ids, result) {
+  let shared = 0
+  let total = 0
+  for (const id of ids) {
+    const p = result.wires.get(id).points
+    const others = ids.filter((o) => o !== id).map((o) => result.wires.get(o).points)
+    for (let k = 1; k < p.length; k++) {
+      const a = p[k - 1]
+      const b = p[k]
+      const h = a.y === b.y
+      const lo = h ? Math.min(a.x, b.x) : Math.min(a.y, b.y)
+      const hi = h ? Math.max(a.x, b.x) : Math.max(a.y, b.y)
+      total += hi - lo
+      let best = 0
+      for (const q of others) {
+        for (let m = 1; m < q.length; m++) {
+          const c = q[m - 1]
+          const d = q[m]
+          if ((c.y === d.y) !== h || Math.abs((h ? c.y : c.x) - (h ? a.y : a.x)) > 40) continue
+          const l2 = h ? Math.min(c.x, d.x) : Math.min(c.y, d.y)
+          const h2 = h ? Math.max(c.x, d.x) : Math.max(c.y, d.y)
+          best = Math.max(best, Math.min(hi, h2) - Math.max(lo, l2))
+        }
+      }
+      shared += best
+    }
+  }
+  return shared / total
+}
+
+test('bundles: wires of one conduit, else wires between the same two devices; at least two; hand-routed and self wires are left out', () => {
+  const w = (id, from, to, conduitIds = [], points = []) => ({ id, fromId: from, toId: to, conduitIds, points })
+  const g = R.bundleGroups([
+    w('a', 'x', 'y', ['k1']), w('b', 'p', 'q', ['k1', 'k2']), w('c', 'y', 'x'), w('d', 'x', 'y'), w('e', 'm', 'n'), w('f', 'm', 'm'), w('g', 'm', 'm'),
+    w('h', 'x', 'y', ['k1'], [{ x: 1, y: 1 }]), w('i', 'r', 's', ['k3'])
+  ])
+  assert.deepEqual(g.map((x) => [x.key, x.kind, x.ids]), [['c:k1', 'conduit', ['a', 'b']], ['d:x|y', 'devices', ['c', 'd']]])
+})
+
+test('boat pages: wires of a bundle share one path for most of their length, and the rules still hold', () => {
+  const { input, result } = routeBoatPage('48V System')
+  const groups = R.bundleGroups(input.wires)
+  assert.ok(groups.length >= 5)
+  for (const g of groups) {
+    const share = bundleShare(g.ids, result)
+    const least = g.kind === 'devices' ? 0.7 : 0.4
+    assert.ok(share >= least, `${g.key}: ${(share * 100).toFixed(0)}% beside each other`)
+    for (const id of g.ids) assert.equal(result.wires.get(id).level, 0)
+  }
+  // the cables between the same two devices run together
+  const pairs = groups.filter((g) => g.kind === 'devices')
+  assert.ok(pairs.length >= 2)
+  const problems = checkPage(linesOf(input, result))
+  assert.deepEqual(problems, [])
+})
+
+test('boat pages route in well under half a second', () => {
+  for (const name of pageNames) {
+    routeBoatPage(name)
+    const { ms } = routeBoatPage(name)
+    assert.ok(ms < 500, `${name}: ${ms.toFixed(0)} ms`)
+  }
+})
