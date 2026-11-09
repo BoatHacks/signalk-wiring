@@ -93,7 +93,7 @@ back to the router.
 
 - [x] Bundling in the router, with tests.
 - [x] Two-stage Auto-arrange.
-- [ ] Midpoint handles move the segment, with short-jog merging.
+- [x] Midpoint handles move the segment, with short-jog merging.
 - [ ] Double-click a hand-routed wire to auto-route it.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
       #14.

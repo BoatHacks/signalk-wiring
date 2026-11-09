@@ -526,6 +526,93 @@ export function insertBendIndex (path, bends, x, y) {
   return Math.min(bends.length, Math.max(0, bestI - 1))
 }
 
+// ---- Moving a segment (plan 0025) ---------------------------------------------
+
+export const MIN_JOG = 3 // a jog shorter than one line width is dropped
+
+const dropRepeats = (points) => {
+  const out = []
+  for (const p of points) {
+    const last = out[out.length - 1]
+    if (!last || last.x !== p.x || last.y !== p.y) out.push({ x: p.x, y: p.y })
+  }
+  for (let i = 1; i < out.length - 1;) {
+    const a = out[i - 1]
+    const b = out[i]
+    const c = out[i + 1]
+    if ((a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y)) out.splice(i, 1)
+    else i++
+  }
+  return out
+}
+
+// Drops every segment shorter than `minLen` that sits between two parallel
+// segments and joins those two into one line. The two end segments keep their
+// line (the leg at the port); otherwise the earlier line wins. Cascades.
+// `points` is the whole path with both anchors; returns a new list.
+export function mergeShortJogs (points, minLen = MIN_JOG) {
+  let pts = dropRepeats(points)
+  for (let guard = 0; guard < 200; guard++) {
+    let changed = false
+    for (let k = 1; k <= pts.length - 3; k++) {
+      const a = pts[k]
+      const b = pts[k + 1]
+      const vert = a.x === b.x
+      if (!vert && a.y !== b.y) continue
+      if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) >= minLen) continue
+      const p0 = pts[k - 1]
+      const p3 = pts[k + 2]
+      if (vert ? !(p0.y === a.y && p3.y === b.y) : !(p0.x === a.x && p3.x === b.x)) continue
+      const firstFixed = k - 1 === 0
+      const lastFixed = k + 1 === pts.length - 2
+      if (firstFixed && lastFixed) continue
+      const keepEarlier = firstFixed || !lastFixed
+      const f = vert ? 'y' : 'x'
+      if (keepEarlier) pts = [...pts.slice(0, k), { ...p3, [f]: a[f] }, ...pts.slice(k + 3)]
+      else pts = [...pts.slice(0, k - 1), { ...p0, [f]: b[f] }, ...pts.slice(k + 2)]
+      pts = dropRepeats(pts)
+      changed = true
+      break
+    }
+    if (!changed) break
+  }
+  return pts
+}
+
+// Moves segment `index` (between points[index] and points[index + 1]) of an
+// orthogonal path by `delta`, perpendicular to itself: a horizontal segment
+// moves up or down, a vertical one left or right, and its neighbours stretch.
+// The first and last segments keep their leg out of the port: the port end
+// stays and a jog is made after `leg` units. A segment that is not horizontal
+// or vertical, or too short for its legs, is left alone. Jogs shorter than
+// one line width are merged away. `points` is the whole path with both anchors.
+export function moveSegment (points, index, delta, leg = STUB) {
+  const pts = points.map((p) => ({ x: p.x, y: p.y }))
+  const n = pts.length
+  if (index < 0 || index > n - 2) return pts
+  const a = pts[index]
+  const b = pts[index + 1]
+  const horiz = a.y === b.y
+  if (horiz === (a.x === b.x)) return pts
+  const d = horiz ? { x: 0, y: delta } : { x: delta, y: 0 }
+  const shift = (p) => ({ x: p.x + d.x, y: p.y + d.y })
+  const first = index === 0
+  const last = index === n - 2
+  const len = Math.abs(b.x - a.x) + Math.abs(b.y - a.y)
+  const dir = { x: Math.sign(b.x - a.x), y: Math.sign(b.y - a.y) }
+  let out
+  if (!first && !last) out = [...pts.slice(0, index), shift(a), shift(b), ...pts.slice(index + 2)]
+  else {
+    if (len <= (first ? leg : 0) + (last ? leg : 0)) return pts
+    const e1 = { x: a.x + dir.x * leg, y: a.y + dir.y * leg }
+    const e2 = { x: b.x - dir.x * leg, y: b.y - dir.y * leg }
+    const pre = first ? [a, e1, shift(e1)] : [shift(a)]
+    const post = last ? [shift(e2), e2, b] : [shift(b)]
+    out = [...pts.slice(0, index), ...pre, ...post, ...pts.slice(index + 2)]
+  }
+  return mergeShortJogs(out)
+}
+
 // ---- Defaults ---------------------------------------------------------------
 
 const SUPPLY_RANK = { source: 0, storage: 1, converter: 2, distribution: 3, consumer: 4 }

@@ -316,7 +316,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   // Routing runs when the page's layout, wires or conduits change, not on
   // every pointer move: while a device or a bend point is being dragged the
   // old cheap routes are drawn and the full routing follows the drop.
-  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'bend' || drag.current.kind === 'stub')
+  const dragging = !!drag.current && drag.current.moved && (drag.current.kind === 'move' || drag.current.kind === 'bend' || drag.current.kind === 'seg' || drag.current.kind === 'stub')
   const routeKey = dragging ? 'drag' : JSON.stringify([
     boxes.map((b) => [b.id, b.x, b.y, b.w, b.h]), onPage.map((c) => [c.id, c.fromDeviceId, c.toDeviceId, c.conductors, c.conduitIds]),
     bends, stubsBase.map((x) => [x.cableId, x.pos || null])
@@ -723,6 +723,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       }
       const mids = midHandles(sel.path)
       const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
+      if (mi >= 0 && (sel.path[mi].x === sel.path[mi + 1].x || sel.path[mi].y === sel.path[mi + 1].y)) {
+        // the handle of a horizontal or vertical segment moves that segment, perpendicular to itself
+        drag.current = { kind: 'seg', wireId: sel.id, index: mi, path: sel.path, mid: mids[mi], sx: e.clientX, sy: e.clientY, moved: false }
+        return
+      }
       if (mi >= 0) {
         const index = G.insertBendIndex(sel.path, cur, mids[mi].x, mids[mi].y)
         const next = { ...bends, [sel.id]: [...cur.slice(0, index), { x: Math.round(mids[mi].x), y: Math.round(mids[mi].y) }, ...cur.slice(index)] }
@@ -819,6 +824,13 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       const p = toCanvas(e)
       const points = d.orig.points.map((q, i) => (i === d.index ? { x: Math.round(p.x), y: Math.round(p.y) } : q))
       setShapes((cur) => Z.withShape(cur, Z.withPoints(d.orig, points)))
+    } else if (d.kind === 'seg') {
+      const p = toCanvas(e)
+      const a = d.path[d.index]
+      const horiz = a.y === d.path[d.index + 1].y
+      const moved = G.moveSegment(d.path, d.index, Math.round(horiz ? p.y - d.mid.y : p.x - d.mid.x))
+      d.result = moved.slice(1, -1)
+      setBends((cur) => ({ ...cur, [d.wireId]: d.result }))
     } else if (d.kind === 'bend') {
       const p = toCanvas(e)
       setBends((cur) => {
@@ -875,6 +887,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       save(next, bends)
     }
     if (d.kind === 'bend' && d.moved) save(pos, bends)
+    if (d.kind === 'seg' && d.moved && d.result) save(pos, { ...bends, [d.wireId]: d.result })
     if ((d.kind === 'shape-move' || d.kind === 'shape-resize' || d.kind === 'corner') && d.moved) save(pos, bends, undefined, stubPos, shapes)
     if (d.kind === 'stub') {
       if (!d.moved) { setTabMenu({ stub: d.stub }); return }
@@ -1054,7 +1067,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.stored })}>Edit cable</button>
           ${(bends[selectedWire.id] || []).length > 0 && html`<button type="button" class="link-btn" onClick=${() => straighten(selectedWire.id)}>Straighten</button>`}
           <button type="button" class="link-btn" data-testid="delete-wire" onClick=${() => deleteWire(selectedWire.stored)}>Delete wire</button>
-          <span class="meta">Drag the dots to bend the wire; double-click a dot to remove it.</span>
+          <span class="meta">Drag the small dot on a stretch to move that stretch; drag a corner dot to bend the wire; double-click a corner dot to remove it.</span>
         </div>`}
       ${selectedShape && html`
         <div class="schematic-inspector" data-testid="zone-inspector">
