@@ -233,6 +233,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const svgRef = useRef(null)
   const drag = useRef(null)
   const lastBendDown = useRef(null)
+  const lastTap = useRef(null) // the last tap on a device, for the double tap
   const [pos, setPos] = useState({})
   const [bends, setBends] = useState({})
   const [stubPos, setStubPos] = useState({}) // cable id -> { x, y }: tabs the user placed
@@ -658,6 +659,13 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     }
     const device = G.hitDevice(boxes, p.x, p.y)
     if (device) {
+      // The second tap of a double tap opens the device and starts no drag.
+      if (G.isDoubleTap(lastTap.current, { id: device.id, t: Date.now(), x: e.clientX, y: e.clientY })) {
+        lastTap.current = null
+        drag.current = null
+        openDevice(device.id)
+        return
+      }
       setSelection({ type: 'device', id: device.id })
       drag.current = { kind: 'move', id: device.id, dx: p.x - device.x, dy: p.y - device.y, sx: e.clientX, sy: e.clientY, moved: false }
       return
@@ -698,10 +706,22 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     }
   }
 
+  const openDevice = (id) => { window.location.hash = G.deviceHash(id) }
+
+  // A mouse double-click, for clicks slower than the double tap window.
+  const onDblClick = (e) => {
+    if (liveOn) return
+    const p = toCanvas(e)
+    if (G.hitTerminal(boxes, p.x, p.y)) return
+    const device = G.hitDevice(boxes, p.x, p.y)
+    if (device) openDevice(device.id)
+  }
+
   const onPointerUp = (e) => {
     const d = drag.current
     drag.current = null
     if (!d) return
+    if (d.kind === 'move' && !d.moved) lastTap.current = { id: d.id, t: Date.now(), x: e.clientX, y: e.clientY }
     if (d.kind === 'move' && d.moved) {
       const next = tidied(pos, [d.id])
       if (next !== pos) setPos(next)
@@ -781,7 +801,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${bands.map((b) => html`<option value=${'conduit:' + b.conduitId} key=${'conduit:' + b.conduitId}>${(conduitInfo.get(b.conduitId) || {}).name || b.label} (conduit)</option>`)}
         </select>
       </div>
-      <div class="meta schematic-legend" data-testid="schematic-legend">Solid lines are DC, dashed lines are AC. The symbol on a port shows its conductor: = DC, ~ AC, a two-way arrow signal, the earth symbol earth or protective ground. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
+      <div class="meta schematic-legend" data-testid="schematic-legend">Double-click (or double-tap) a device to open it. Solid lines are DC, dashed lines are AC. The symbol on a port shows its conductor: = DC, ~ AC, a two-way arrow signal, the earth symbol earth or protective ground. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
       ${overlapping && html`<div class="meta schematic-notice" data-testid="overlap-notice">Some devices overlap. <button type="button" class="link-btn" data-testid="tidy" onClick=${tidyAll}>Tidy</button></div>`}
       ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
       ${notice && html`<div class="meta schematic-notice" data-testid="notice">${notice}</div>`}
@@ -816,7 +836,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <div class="schematic-canvas-wrap">
           <svg ref=${svgRef} class="schematic-canvas" data-testid="schematic-canvas"
             viewBox="${view.x} ${view.y} ${view.w} ${view.h}"
-            onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp}
+            onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onDblClick=${onDblClick}
             onDragOver=${(e) => e.preventDefault()} onDrop=${onDrop}>
             ${bands.map((b) => html`<${ConduitBand} key=${b.conduitId} band=${b} />`)}
             ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName}

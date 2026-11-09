@@ -9,7 +9,7 @@ import {
   escapeStep, deleteStep
 } from './floorplan.js'
 import { hashForState } from './router.js'
-import { isTypingTarget, wireLineStyle, scaledDash } from './schematic.js'
+import { isTypingTarget, wireLineStyle, scaledDash, isDoubleTap, deviceHash } from './schematic.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo } from './canvasRemoval.js'
 import { cableName } from './conduits.js'
@@ -216,6 +216,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const [flip, setFlip] = useState(false)
   const [ghost, setGhost] = useState(null) // a marker being dragged: { kind, key, px }
   const drag = useRef(null)
+  const lastTap = useRef(null) // the last tap on a device marker, for the double tap
 
   const imageUrl = `${ROUTES_BASE}/plans/${plan.id}/image`
   const cal = plan.calibration
@@ -326,6 +327,9 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         if (d.target.kind === 'device') actions.moveDevice(d.target.key, plan.view, a, b)
         else actions.moveWaypoint(d.target.key, plan.view, a, b)
       } else if (d.target.kind === 'device') {
+        const tap = { id: d.target.key, t: Date.now(), x: e.clientX, y: e.clientY }
+        if (ctx.tool === 'select' && isDoubleTap(lastTap.current, tap)) { lastTap.current = null; window.location.hash = deviceHash(d.target.key); return }
+        lastTap.current = tap
         actions.selectDevice(d.target.key)
       } else {
         actions.selectWaypoint(d.target.key)

@@ -338,3 +338,15 @@ test('deviceBox with ports: a DC-DC converter has DC in on the left and DC out o
   assert.deepEqual(b.terminals.map((x) => x.side), ['left', 'left', 'right', 'right'])
   assert.equal(b.bottomPorts, false)
 })
+
+test('isDoubleTap: same device, within 350 ms and 20 px', async () => {
+  const S = await import('../public/schematic.js')
+  const a = { id: 'd1', t: 1000, x: 100, y: 100 }
+  assert.equal(S.isDoubleTap(a, { id: 'd1', t: 1300, x: 110, y: 110 }), true)
+  assert.equal(S.isDoubleTap(a, { id: 'd1', t: 1351, x: 100, y: 100 }), false)
+  assert.equal(S.isDoubleTap(a, { id: 'd1', t: 1100, x: 100, y: 121 }), false)
+  assert.equal(S.isDoubleTap(a, { id: 'd2', t: 1100, x: 100, y: 100 }), false)
+  assert.equal(S.isDoubleTap(null, a), false)
+  assert.equal(S.isDoubleTap(a, { id: 'd1', t: 900, x: 100, y: 100 }), false)
+  assert.equal(S.deviceHash('abc'), '#/devices/abc')
+})

@@ -1,4 +1,5 @@
 import { cableCurrent } from './current.js'
+import { hashForState } from './router.js'
 // Pure geometry for the schematic canvas (plan 0016): device boxes and their
 // terminal anchors, right-angle wire routing with lane offsets, wires through
 // bend points, off-page stubs, hit testing, default conductors and the
@@ -437,6 +438,23 @@ export function offPageStubs ({ boxes, cables, deviceName }) {
   }
   return out
 }
+
+// ---- Opening a device ----
+
+export const DOUBLE_TAP_MS = 350
+export const DOUBLE_TAP_PX = 20
+
+// True when `cur` is the second tap of a double tap after `prev`: the same
+// target, within ms and px. Taps are { id, t, x, y } (t in ms, x and y in
+// screen pixels).
+export function isDoubleTap (prev, cur, ms = DOUBLE_TAP_MS, px = DOUBLE_TAP_PX) {
+  if (!prev || !cur || prev.id !== cur.id) return false
+  const dt = cur.t - prev.t
+  return dt >= 0 && dt <= ms && Math.hypot(cur.x - prev.x, cur.y - prev.y) <= px
+}
+
+// The address of a device's detail page.
+export const deviceHash = (id) => hashForState({ tab: 'devices', id })
 
 // ---- Hit testing ------------------------------------------------------------
 
