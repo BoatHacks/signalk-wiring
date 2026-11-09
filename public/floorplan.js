@@ -150,9 +150,9 @@ export function resolveRouteStart (wireRun, _circuit, devicesById) {
   for (let at = fromDevice; at && at.parentId && !seen.has(at.id); ) {
     seen.add(at.id)
     at = devicesById.get(at.parentId)
-    if (isPlaced(at)) return positionOf(at)
+    if (at && !at.parentId && isPlaced(at)) return positionOf(at)
   }
-  if (isPlaced(fromDevice)) return positionOf(fromDevice)
+  if (isPlaced(fromDevice) && !fromDevice.parentId) return positionOf(fromDevice)
   return null
 }
 
