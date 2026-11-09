@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-11-09
+
+### Changed
+
+- While a device, an off-page tab or a wire handle is dragged, all wires are
+  routed live with the real router (at most about 15 updates per second), so
+  the picture during the drag is the same as after the drop. Escape cancels a
+  drag and restores the positions and the last route.
+
 ## [0.6.7] - 2026-11-09
 
 ### Added

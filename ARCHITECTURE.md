@@ -755,3 +755,5 @@ Plan 0023 added the `schematic_zones` table (migration 14) for zone shapes (rect
 Plan 0024 added `devices.parent_id` and `schematics.enclosure_id` (migration 15) and `src/enclosures.js` (contents, path and boundary cables, mirrored in `public/enclosures.js`). Circuit derivation is untouched: cables end on the contained devices.
 
 Plan 0025 added router bundling (`bundleGroups`, parallel lanes beside one reference path per bundle, at most six bundles per page), the two-stage `arrangeStage` helper, `moveSegment` and `mergeShortJogs` for orthogonal segment dragging, and double-click re-routing of hand-routed wires.
+
+Plan 0026 replaced the cheap drag routes with live routing through `createRouteThrottle` (one route at a time, 66 ms apart, latest request wins); the drop uses the same routing call.
