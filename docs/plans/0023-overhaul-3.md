@@ -109,7 +109,7 @@ a device to open its page, and zones as background shapes on the schematic.
 - [x] Double-click and double-tap to open a device.
 - [x] Zone shapes (rectangle, oval, polygon): migration 14, store, resource,
       canvas.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
       #14.
 
 ## Files to Create/Modify

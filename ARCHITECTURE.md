@@ -447,7 +447,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are thirteen migrations (the third to thirteenth are described below): plan 0008's field
+every subsequent restart. There are fourteen migrations (the third to fourteenth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -749,3 +749,5 @@ No external services or network dependencies at runtime.
 `public/wireRouter.js` routes every wire on a grid around all device boxes, with bridges at crossings, stub lanes and shared stretches for wires in one conduit; `USE_NEW_ROUTER = false` restores the old elbow routes. `public/schematicLayout.js` holds `autoLayout` (rank gaps scaled by the median cable length, `clamp(60+60*sqrt(L), 80, 420)`) and `resolveOverlaps` (24 unit margin). Conduit bands are drawn from the shared stretches.
 
 Plan 0022 tightened the router to hard rules (16 unit lane pitch, 18 unit outward legs, no shared stretches, bridges only) and added the `schematic_stubs` table (migration 13) for dragged off-page tabs.
+
+Plan 0023 added the `schematic_zones` table (migration 14) for zone shapes (rectangle, oval, polygon with a corner list), drawn on a background layer the router never sees, and moved the AC and DC marks from the wires to the port dots (`public/portMark.js`).

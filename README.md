@@ -7,6 +7,8 @@ to someone else doesn't depend on the current owner being present.
 
 ## Features
 
+- **Zone shapes on schematics**: draw zones as rectangles, ovals or polygons
+  behind a schematic page to show which devices sit where.
 - **Schematic routing**: wires are routed around device boxes with bridges at
   crossings, devices never overlap, spacing follows cable length, and conduit
   bands show wires that run together.

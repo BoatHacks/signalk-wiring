@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-11-09
+
+### Added
+
+- Zones can be drawn on a schematic page as rectangles, ovals (circle and
+  square with Shift) or polygons, on a background layer. A polygon starts as a
+  triangle and has draggable corners and midpoints (database migration 14).
+  Shapes are visual only; a device keeps its own zone.
+- Double-click or double-tap a device on the schematic (or the floorplan with
+  the Select tool) to open its page.
+
+### Changed
+
+- The AC and DC marks along wires are gone. The conductor dot on a port is
+  bigger and carries the symbol: "=" for DC, "~" for AC, a two-way arrow for
+  signal and the earth symbol for earth.
+- The default signal colour is orange by day and amber at night, clearly apart
+  from AC neutral blue.
+
 ## [0.6.2] - 2026-11-09
 
 ### Changed
