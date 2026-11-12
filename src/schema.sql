@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS devices (
   type TEXT,
   role TEXT NOT NULL DEFAULT 'consumer',
   icon_attachment_id TEXT,
+  schematic_box_color TEXT,
+  schematic_icon_color TEXT,
   zone TEXT,
   rated_power_w REAL,
   signalk_path TEXT,

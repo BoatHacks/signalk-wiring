@@ -34,6 +34,7 @@ const TABLES = {
       'trip_rating_a', 'rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
       'meter_path', 'meter_unit', 'chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
       'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path',
+      'schematic_box_color', 'schematic_icon_color',
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'parent_id', 'tags', 'status', 'notes'
     ]
   },
@@ -473,6 +474,15 @@ const MIGRATIONS = [
       const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
       if (!has('schematic_devices', 'hand_placed')) db.exec('ALTER TABLE schematic_devices ADD COLUMN hand_placed INTEGER NOT NULL DEFAULT 0')
     }
+  },
+  {
+    version: 17,
+    description: 'plan 0030: devices + schematic_box_color and schematic_icon_color (hex text, null means the theme color)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      if (!has('devices', 'schematic_box_color')) db.exec('ALTER TABLE devices ADD COLUMN schematic_box_color TEXT')
+      if (!has('devices', 'schematic_icon_color')) db.exec('ALTER TABLE devices ADD COLUMN schematic_icon_color TEXT')
+    }
   }
 ]
 
@@ -606,7 +616,7 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
-    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null)), true)))
+    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true)))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null); row = this._checkGauge(row, null) }
     if (kind === 'schematic') { row.name = this._checkSchematicName(row.name); row = this._checkEnclosureId(row, null) }
@@ -1059,7 +1069,7 @@ class Store {
     }
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing)), false)))
+    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing))), false)))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
     if (kind === 'wireRun') {
@@ -1356,6 +1366,26 @@ class Store {
       throw new Error('icon must be a JPEG, PNG or WebP image attached to this device')
     }
     return fields
+  }
+
+  // Plan 0030: a device color is empty (the theme color), `#rrggbb` or `#rgb`
+  // (expanded); it is stored lower case.
+  _checkColors (fields) {
+    let out = fields
+    for (const key of ['schematic_box_color', 'schematic_icon_color']) {
+      if (!(key in fields)) continue
+      const v = fields[key]
+      if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) {
+        out = { ...out, [key]: null }
+        continue
+      }
+      const m = typeof v === 'string' ? /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(v.trim()) : null
+      if (!m) throw new Error(`${key === 'schematic_box_color' ? 'box color' : 'icon color'} must be a hex color like #1a2b3c, or empty for the theme color`)
+      let hex = m[1].toLowerCase()
+      if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('')
+      out = { ...out, [key]: '#' + hex }
+    }
+    return out
   }
 
   // An absent role stays absent (the column default applies); a cleared one
