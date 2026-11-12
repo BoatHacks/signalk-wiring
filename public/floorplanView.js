@@ -22,6 +22,7 @@ import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { visibleLabels, labelWidth, labelSide } from './floorLabels.js'
+import { clusterMarkers, clusterRadius } from './floorCluster.js'
 import { placementBlock, isInside, childrenOf, contentsOf } from './enclosures.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -220,6 +221,18 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const drag = useRef(null)
   const lastTap = useRef(null) // the last tap on a device marker, for the double tap
   const [hoverId, setHoverId] = useState(null) // the device marker under the pointer
+  const [openCluster, setOpenCluster] = useState(null) // the cluster whose device list is open: { id, ids, px }
+  const [viewPx, setViewPx] = useState({ width: 900, height: 400 }) // the canvas on screen, for clusters
+  const ready = !!size
+  useEffect(() => {
+    const measure = () => {
+      const r = svgRef.current && svgRef.current.getBoundingClientRect()
+      if (r && r.width > 0 && r.height > 0) setViewPx((v) => (v.width === r.width && v.height === r.height ? v : { width: r.width, height: r.height }))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [ready])
 
   const imageUrl = `${ROUTES_BASE}/plans/${plan.id}/image`
   const cal = plan.calibration
@@ -286,7 +299,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
   }
 
-  const onPointerDown = (e) => startDrag(e, null)
+  const onPointerDown = (e) => { setOpenCluster(null); startDrag(e, null) }
 
   // A marker takes the press itself so dragging it moves the marker, not the view.
   const onMarkerDown = (e, target) => {
@@ -461,6 +474,34 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
   }
 
+  // Placed markers, and which of them collapse into numbered clusters. The
+  // distance is measured on screen, so zooming in splits a cluster. Only the
+  // Select tool clusters: the other tools need to reach every device.
+  const deviceMarks = []
+  if (cal) {
+    for (const device of data.devices) {
+      // A device inside an enclosure is shown by the enclosure's marker.
+      if (device.status === 'removed' || isInside(device)) continue
+      const px = pxFor('device', device.id, devicePosition(device))
+      if (!px) continue
+      const lit = ctx.deviceId === device.id || (members && members.deviceIds.has(device.id)) ||
+        (ctx.run && (ctx.run.fromDeviceId === device.id || ctx.run.toDeviceId === device.id)) ||
+        (ctx.connect && (ctx.connect.fromId === device.id || ctx.connect.toId === device.id))
+      deviceMarks.push({ device, px, lit: !!lit })
+    }
+  }
+  const pxPerUnit = Math.min(viewPx.width / box.width, viewPx.height / box.height)
+  const clusterSet = ctx.tool === 'select' && !calibrating
+    ? clusterMarkers(
+      deviceMarks.map(({ device, px, lit }) => ({
+        id: device.id, x: px[0] * pxPerUnit, y: px[1] * pxPerUnit,
+        pinned: lit || (ghost && ghost.kind === 'device' && ghost.key === device.id)
+      })),
+      clusterRadius(unit * 2.6 * pxPerUnit)
+    )
+    : { clusters: [], singles: [] }
+  const clustered = new Set(clusterSet.clusters.flatMap((c) => c.ids))
+
   return html`
     <div class="floorplan">
       <h3>${plan.name} <span class="meta">(${plan.view === 'top' ? 'top-down' : 'side'})</span></h3>
@@ -531,13 +572,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
             onPointerDown=${(e) => onMarkerDown(e, { kind: 'waypoint', key: w.index })} />
         `)}
 
-        ${cal && data.devices.map((device) => {
-          // A device inside an enclosure is shown by the enclosure's marker.
-          if (device.status === 'removed' || isInside(device)) return null
-          const px = pxFor('device', device.id, devicePosition(device))
-          if (!px) return null
-          const lit = ctx.deviceId === device.id || (members && members.deviceIds.has(device.id)) ||
-            (ctx.connect && (ctx.connect.fromId === device.id || ctx.connect.toId === device.id))
+        ${deviceMarks.map(({ device, px, lit }) => {
+          if (clustered.has(device.id)) return null
           const liveState = ctx.live ? ctx.live.info(device.id) : null
           return html`
             <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''} ${liveState ? 'live-' + liveState.look + (liveState.clickable ? ' live-clickable' : '') : ctx.live ? 'live-none' : ''}"
@@ -570,6 +606,20 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           `
         })}
 
+        ${clusterSet.clusters.map((c) => {
+          const cx = c.x / pxPerUnit
+          const cy = c.y / pxPerUnit
+          return html`
+            <g key=${c.id} class="device-marker cluster-marker ${openCluster && openCluster.id === c.id ? 'open' : ''}" data-testid="cluster-marker"
+              onPointerDown=${(e) => e.stopPropagation()}
+              onClick=${() => setOpenCluster(openCluster && openCluster.id === c.id ? null : { id: c.id, ids: c.ids, px: [cx, cy] })}>
+              <rect class="cluster-box" x=${cx - unit * 1.5} y=${cy - unit * 1.5} width=${unit * 3} height=${unit * 3} rx=${unit * 1.5} />
+              <text class="cluster-count" data-testid="cluster-count" x=${cx} y=${cy + unit * 0.7} font-size=${unit * 2} text-anchor="middle">${c.ids.length}</text>
+              <title>${c.ids.length} devices, click to list them</title>
+            </g>
+          `
+        })}
+
         ${continuations.map((m) => {
           const end = [m.at[0] + m.dir[0] * unit * 5, m.at[1] + m.dir[1] * unit * 5]
           const head = arrowHeadPoints(m.at, end, unit * 1.6).map((p) => p.join(',')).join(' ')
@@ -596,6 +646,18 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           <circle key=${'c' + i} cx=${x} cy=${y} r=${unit} class="calibration-point" />
         `)}
       </svg>
+      ${openCluster && html`
+        <div class="cluster-list" data-testid="cluster-list"
+          style=${{ left: ((openCluster.px[0] - box.x) / box.width * 100) + '%', top: ((openCluster.px[1] - box.y) / box.height * 100) + '%' }}>
+          <strong>${openCluster.ids.length} devices here</strong>
+          <ul>
+            ${openCluster.ids.map((id) => html`
+              <li key=${id}><a href=${hashForState({ tab: 'devices', id })} data-testid="cluster-device-link">${(data.devicesById.get(id) || {}).name || id}</a></li>
+            `)}
+          </ul>
+          <button onClick=${() => setOpenCluster(null)}>Close</button>
+        </div>
+      `}
       ${cal && !calibrating && (() => {
         const arrows = cornerArrows(cal, 18)
         const poly = (a) => a.head.map((p) => p.join(',')).join(' ')

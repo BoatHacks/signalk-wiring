@@ -567,6 +567,26 @@ main:has(.floorplan-pair) { max-width: none; }
 .device-marker .enclosure-box { fill: var(--surface); fill-opacity: 0.9; stroke: var(--marker-distribution); stroke-width: 0.9; cursor: grab; }
 .device-marker .enclosure-count { stroke: none; font-weight: 600; }
 .device-marker.highlighted .enclosure-box { stroke: var(--link); }
+/* Plan 0027: markers that overlap collapse into a round marker with a count. */
+.device-marker .cluster-box { fill: var(--surface); fill-opacity: 0.95; stroke: var(--marker-distribution); stroke-width: 0.9; cursor: pointer; }
+.device-marker.cluster-marker.open .cluster-box { stroke: var(--link); }
+.device-marker .cluster-count { stroke: none; font-weight: 600; pointer-events: none; }
+.cluster-list {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, 12px);
+  max-width: min(260px, 80%);
+  max-height: 60%;
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  font-size: 13px;
+}
+.cluster-list ul { margin: 6px 0; padding-left: 18px; }
 
 .filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
 .filter-bar .form-field { min-width: 180px; }
