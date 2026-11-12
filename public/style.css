@@ -542,7 +542,7 @@ label.inline {
 }
 
 .device-marker circle { fill: var(--marker-consumer); fill-opacity: 0.6; stroke: var(--marker-stroke); stroke-width: 0.4; cursor: grab; }
-.device-marker text { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 0.6; pointer-events: none; }
+.device-marker text { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-linejoin: round; pointer-events: none; }
 
 .conduit-line { stroke: var(--text-muted); stroke-opacity: 0.25; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .conduit-line.active { stroke: var(--danger); stroke-opacity: 0.35; }

@@ -21,6 +21,7 @@ import { CablePopover } from './cablePopover.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
+import { visibleLabels, labelWidth, labelSide } from './floorLabels.js'
 import { placementBlock, isInside, childrenOf, contentsOf } from './enclosures.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
@@ -218,6 +219,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const [ghost, setGhost] = useState(null) // a marker being dragged: { kind, key, px }
   const drag = useRef(null)
   const lastTap = useRef(null) // the last tap on a device marker, for the double tap
+  const [hoverId, setHoverId] = useState(null) // the device marker under the pointer
 
   const imageUrl = `${ROUTES_BASE}/plans/${plan.id}/image`
   const cal = plan.calibration
@@ -385,6 +387,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   }
 
   const members = ctx.members
+  const labelIds = visibleLabels(data.devices, { hoverId, selectedId: ctx.deviceId, members, run: ctx.run })
   const runLines = []
   const waypointMarkers = []
   // Where a route leaves this plan, a stub with a link to the plan it continues on.
@@ -539,6 +542,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           return html`
             <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''} ${liveState ? 'live-' + liveState.look + (liveState.clickable ? ' live-clickable' : '') : ctx.live ? 'live-none' : ''}"
               data-live=${liveState ? liveState.look : undefined}
+              onPointerEnter=${() => setHoverId(device.id)} onPointerLeave=${() => setHoverId((h) => (h === device.id ? null : h))}
               onPointerDown=${(e) => onMarkerDown(e, { kind: 'device', key: device.id })}>
               ${liveState && html`<title>${liveState.title}</title>`}
               ${device.role === 'enclosure'
@@ -553,7 +557,13 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
                   width=${unit * 2.2} height=${unit * 2.2} preserveAspectRatio="xMidYMid slice"
                   clip-path="circle(50%)" style="pointer-events: none" />
               `}
-              <text x=${px[0] + unit * 1.8} y=${px[1] + unit * 0.6} font-size=${unit * 1.9}>${device.name}</text>
+              ${labelIds.has(device.id) && (() => {
+                // 75 percent of the former size, with a halo of a fifth of the font size
+                const fontSize = unit * 1.43
+                const left = labelSide(px, labelWidth(device.name, fontSize), unit * 1.8, box) === 'left'
+                return html`<text class="device-label" data-testid="device-label" x=${px[0] + (left ? -unit * 1.8 : unit * 1.8)} y=${px[1] + unit * 0.5}
+                  text-anchor=${left ? 'end' : 'start'} font-size=${fontSize} stroke-width=${fontSize / 5}>${device.name}</text>`
+              })()}
               ${liveState && liveState.look === 'locked' && html`<${LiveLock} x=${px[0]} y=${px[1]} size=${unit * 1.9} />`}
               ${liveState && html`<${LiveReading} x=${px[0]} y=${px[1] + unit * 3.2} size=${unit * 1.5} text=${liveState.reading} />`}
             </g>
@@ -856,6 +866,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
 
   const ctx = {
     tool, deviceId, runId, conduitId, members, waypointIndex,
+    run: run && run.status !== 'removed' ? run : null,
     connect: connecting ? connect : null,
     live: tool === 'live' ? live : null,
     connectPoints,
