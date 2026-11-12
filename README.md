@@ -19,6 +19,10 @@ to someone else doesn't depend on the current owner being present.
   tabs, bend points and zone shapes to a faint 16 unit grid; hold Alt while
   dragging to flip it. Devices you place by hand stay put when you click
   Auto-arrange once; click it again to arrange everything.
+- **Device colors**: give a device a schematic box color (hex text or a color
+  picker, empty for the theme color). Its schematic box gets that outline and
+  a light tint as fill, enclosures included, and the red night theme dims it.
+  An icon color can be stored too; it is used once icons are drawn in the boxes.
 - **Cables between devices, circuits worked out for you**: you record
   cables from the supply side to the load side of devices (battery, fuse,
   switch, lamp) and the circuits follow. A circuit is what one fuse or

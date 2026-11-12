@@ -448,7 +448,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are sixteen migrations (the third to sixteenth are described below): plan 0008's field
+every subsequent restart. There are seventeen migrations (the third to seventeenth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -784,3 +784,5 @@ theme), one per device type, a fallback per role and a generic one. The pure
 type (then the model text, then the role); `detailed` is always null until the
 detailed set is drawn. `simpleIconSvg(key, size)` gives inline markup. Nothing in
 the app displays these icons yet; a device's attached image stays the only icon.
+
+Plan 0030 added `devices.schematic_box_color` and `devices.schematic_icon_color` (migration 17, TEXT, nullable, guarded with a `table_info` check, so safe to run twice; old rows read null). `Store._checkColors` validates on create and update: empty or null clears, `#rrggbb` or `#rgb` is accepted (expanded, lower case), anything else throws a message; changes are logged like any field. The device resource serves them as `schematicBoxColor` and `schematicIconColor`. The device form has a `color` field type (`ColorField` in `app.js`: hex text, native picker kept in sync, Clear, inline message; `colorFieldState` in `deviceFields.js` decides validity and an invalid value blocks the save). `public/colorTone.js` is pure: `parseHex`, `normalizeHex`, `boxFill` (18 percent mix into a surface), `nightTone` (luminance mapped to a dim red, capped at `NIGHT_MAX_RED`) and `boxColors`. `DeviceShape` in `schematicView.js` sets the four results as inline custom properties on the box group and adds `has-color`; `style.css` picks the day or night pair (`--c-stroke`, `--c-fill`) at the same specificity as the role outline and before the selected, highlighted and live rules, so those still win. The icon color is not drawn.

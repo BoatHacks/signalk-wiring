@@ -7,6 +7,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Device colors (plan 0030). A device has a schematic box color and a schematic icon color (new columns `devices.schematic_box_color` and `schematic_icon_color`, migration 17), edited in the device form with a hex field, a color picker and a Clear button, and shown with swatches on the device page. A colored device box on the schematic gets that outline and a light tint fill, enclosure boxes included, and the red night theme dims it. The icon color is stored only; nothing draws it yet.
 - A built-in library of simple 24 by 24 line icons, one per device type with role fallbacks and a generic one, and a pure `iconFor(device)` that picks the icon from type and model text. It is not displayed anywhere yet.
 
 ## [0.7.2] - 2026-11-12

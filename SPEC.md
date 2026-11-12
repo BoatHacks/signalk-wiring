@@ -231,7 +231,19 @@ them.
 - **Device**
   - `id`, `name`, `type` (free text, e.g. "bilge pump", "solar"), `iconAttachmentId`
     (optional: one of the device's own JPEG, PNG or WebP attachments, used as
-    its icon), `role`
+    its icon), `schematicBoxColor` and `schematicIconColor` (optional hex colors,
+    stored lower case as `#rrggbb`; a `#rgb` short form is expanded, empty or
+    null clears, anything else is rejected with a message; empty means the
+    theme color; CSV import and export do not carry them). The box color is
+    drawn on the schematic: the box outline is the color and its fill a light
+    tint (18 percent of the color in the theme surface), on every device box
+    and on enclosure boxes; the role colored outline applies only when no color
+    is set, and the text keeps the theme color. In the red night theme both are
+    dimmed to a red of the same relative brightness, capped so they never
+    glare. Selected, highlighted, dimmed and live states keep working. The
+    icon color is stored and shown on the device page only; nothing draws it
+    until icons are drawn in the boxes. Floorplan markers keep role colors.
+    `role`
     (consumer | source | storage | distribution | converter | enclosure; consumer by
     default, so devices recorded before roles existed stay valid), `current`
     (ac | dc, or unset for either: whether the device works on AC or DC, used

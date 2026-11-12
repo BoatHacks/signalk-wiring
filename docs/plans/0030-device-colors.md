@@ -71,10 +71,10 @@ drawn in the schematic boxes (issue #23).
 
 ## Implementation Steps
 
-- [ ] Migration 17, store validation, resource fields, with tests.
-- [ ] Device form and page fields.
-- [ ] Schematic box fill and outline, night tone, with tests.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
+- [x] Migration 17, store validation, resource fields, with tests.
+- [x] Device form and page fields.
+- [x] Schematic box fill and outline, night tone, with tests.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG.
 
 ## Files to Create/Modify
 
