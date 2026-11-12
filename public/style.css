@@ -867,3 +867,12 @@ main:has(.schematic-editor) { max-width: none; }
 .bundle-list .link-button { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; text-align: left; }
 .bundle-list ul { list-style: none; padding-left: 0; }
 .bundle-list li { margin: 4px 0; }
+
+/* Device colors (plan 0030): hex text, native picker and Clear, plus the swatch on the device page. */
+.color-field { display: flex; flex-direction: column; gap: 4px; }
+.color-field-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.form-field input.color-text { width: 9em; font-family: ui-monospace, monospace; }
+.form-field input.color-text[aria-invalid="true"] { border-color: var(--danger); }
+.form-field input.color-picker { width: 44px; height: 36px; padding: 2px; cursor: pointer; }
+.field-error { font-size: 12px; color: var(--danger); }
+.color-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border-strong); vertical-align: -2px; }

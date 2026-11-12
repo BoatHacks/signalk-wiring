@@ -36,7 +36,7 @@ import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
-import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine } from './deviceFields.js'
+import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import {
   CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
@@ -352,6 +352,31 @@ function TerminalsEditor ({ value, role, type, onChange }) {
   `
 }
 
+// A hex color with a native picker kept in sync, and a Clear button. The text
+// is the source of truth; empty means the theme color (plan 0030).
+function ColorField ({ value, onChange, testId }) {
+  const state = colorFieldState(value)
+  return html`
+    <div class="color-field">
+      <div class="color-field-row">
+        <input type="text" class="color-text" value=${value} placeholder="Theme color" maxlength="7" spellcheck="false"
+          aria-invalid=${state.valid ? 'false' : 'true'} data-testid=${testId + '-text'}
+          onInput=${(e) => onChange(e.target.value)} />
+        <input type="color" class="color-picker" value=${state.picker} aria-label="Pick a color" data-testid=${testId + '-picker'}
+          onInput=${(e) => onChange(e.target.value)} />
+        <button type="button" data-testid=${testId + '-clear'} disabled=${String(value || '') === ''}
+          onClick=${() => onChange('')}>Clear</button>
+      </div>
+      ${state.message && html`<small class="field-error" role="alert" data-testid=${testId + '-error'}>${state.message}</small>`}
+    </div>
+  `
+}
+
+// A color swatch with its hex value, for the device page.
+function ColorSwatch ({ label, color }) {
+  return html`<div class="meta" data-testid="color-line">${label}: <span class="color-swatch" style=${'background:' + color}></span> <code>${color}</code></div>`
+}
+
 // A generic labeled-field form: circuits, wire runs, and devices are all
 // "a handful of inputs, Save/Cancel, an error banner on failure" with
 // different field lists, so this covers all three rather than
@@ -395,6 +420,12 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
       // Zone and tags are always sent, so clearing them on an edit takes effect.
       if (f.type === 'zone' || f.type === 'deviceType' || f.type === 'conduitKind') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
       if (f.type === 'tags') { payload[f.key] = parseTags(raw); continue }
+      if (f.type === 'color') {
+        const state = colorFieldState(raw)
+        if (!state.valid) { setError(`${f.label}: ${state.message}`); setSaving(false); return }
+        payload[f.key] = state.value
+        continue
+      }
       // Emptied free-form fields are sent as null so clearing them on an edit
       // takes effect (a missing key keeps the stored value).
       const freeForm = f.type === 'text' || f.type === 'number' || f.type === 'textarea' || f.type === 'signalkPath' ||
@@ -471,6 +502,9 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
           ${f.type === 'tags' && html`
             <input type="text" value=${values[f.key]} placeholder="e.g. audio: main, audio: cockpit"
               onInput=${(e) => setField(f.key, e.target.value)} />
+          `}
+          ${f.type === 'color' && html`
+            <${ColorField} value=${values[f.key]} testId=${'color-' + f.key} onChange=${(v) => setField(f.key, v)} />
           `}
           ${f.type === 'signalkPath' && html`
             <${PathCombobox}
@@ -945,6 +979,20 @@ const DEVICE_FIELDS = [
     options: [{ value: 'A', label: 'Amps (A)' }, { value: 'W', label: 'Watts (W)' }],
     clearable: true,
     hint: 'Watts are better. With amps the plugin multiplies by the circuit voltage and assumes a power factor of 1, and marks the result as an estimate. Blank counts as amps.'
+  },
+  {
+    key: 'schematicBoxColor',
+    label: 'Schematic box color',
+    type: 'color',
+    group: 'Colors',
+    hint: 'A hex color such as #2a7fff, or pick one. The box gets this outline and a light tint of it as fill on the schematic. Empty uses the theme color.'
+  },
+  {
+    key: 'schematicIconColor',
+    label: 'Schematic icon color',
+    type: 'color',
+    group: 'Colors',
+    hint: 'Kept for when icons are drawn in the schematic boxes; nothing uses it yet. Empty uses the theme color.'
   },
   { key: 'posX', label: 'Position x (m, from the transom toward the bow)', type: 'number', step: '0.01' },
   { key: 'posY', label: 'Position y (m, athwartships)', type: 'number', step: '0.01' },
@@ -2308,6 +2356,8 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
           ${device.measured && device.measured.group && html`
             <div class="meta">${describeGroup(device.measured, (id) => (deviceNames.get(id) || id))}</div>
           `}
+          ${device.schematicBoxColor && html`<${ColorSwatch} label="Schematic box color" color=${device.schematicBoxColor} />`}
+          ${device.schematicIconColor && html`<${ColorSwatch} label="Schematic icon color" color=${device.schematicIconColor} />`}
           ${device.notes && html`<p>${device.notes}</p>`}
           <div class="row-actions">
             <button onClick=${() => setEditing(true)}>Edit</button>
