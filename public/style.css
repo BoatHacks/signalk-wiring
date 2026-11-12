@@ -845,3 +845,16 @@ main:has(.schematic-editor) { max-width: none; }
 }
 .show-roles { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
 .floorplan-canvas .faded { opacity: 0.2; }
+
+/* Plan 0027: routes along the same stretch, drawn once with a count. */
+.bundle { cursor: pointer; }
+.bundle-line { stroke: var(--text-muted); stroke-opacity: 0.6; stroke-linecap: round; }
+.bundle.conduit .bundle-line { stroke-opacity: 0.35; }
+.bundle.chosen .bundle-line { stroke: var(--accent); stroke-opacity: 0.9; }
+.bundle-count-bg { fill: var(--surface); stroke: var(--text-muted); stroke-width: 0.4; }
+.bundle.chosen .bundle-count-bg { stroke: var(--accent); }
+.bundle-count { fill: var(--text); font-weight: 600; pointer-events: none; }
+.conduit-line.chosen { stroke: var(--accent); stroke-opacity: 0.5; }
+.bundle-list .link-button { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; text-align: left; }
+.bundle-list ul { list-style: none; padding-left: 0; }
+.bundle-list li { margin: 4px 0; }

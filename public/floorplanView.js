@@ -25,6 +25,7 @@ import { visibleLabels, labelWidth, labelSide } from './floorLabels.js'
 import {
   loadLayers, saveLayers, toggleLayer, toggleRole, roleShown, rolesPresent, layersChanged, focusSet, LAYER_SWITCHES
 } from './floorLayers.js'
+import { bundleRoutes, uncoveredPieces, bundleWidth } from './floorBundles.js'
 import { clusterMarkers, clusterRadius } from './floorCluster.js'
 import { placementBlock, isInside, childrenOf, contentsOf } from './enclosures.js'
 
@@ -224,6 +225,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const drag = useRef(null)
   const lastTap = useRef(null) // the last tap on a device marker, for the double tap
   const [hoverId, setHoverId] = useState(null) // the device marker under the pointer
+  const [openBundle, setOpenBundle] = useState(null) // the selected bundle: { kind, key, ids, px }
   const [openCluster, setOpenCluster] = useState(null) // the cluster whose device list is open: { id, ids, px }
   const [viewPx, setViewPx] = useState({ width: 900, height: 400 }) // the canvas on screen, for clusters
   const ready = !!size
@@ -302,7 +304,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
   }
 
-  const onPointerDown = (e) => { setOpenCluster(null); startDrag(e, null) }
+  const onPointerDown = (e) => { setOpenCluster(null); setOpenBundle(null); startDrag(e, null) }
 
   // A marker takes the press itself so dragging it moves the marker, not the view.
   const onMarkerDown = (e, target) => {
@@ -432,7 +434,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         return ownRoute && key >= 0 && isActive ? pxFor('waypoint', key, p) : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)
       })
       for (const seg of layers.cables ? visibleSegments(pxs) : []) {
-        runLines.push({ id: run.id, dash: wireLineStyle(run).dasharray, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' ') })
+        runLines.push({ id: run.id, dash: wireLineStyle(run).dasharray, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' '), pts: seg })
       }
       addContinuations(run.id, points)
       if (isActive && ownRoute) {
@@ -467,7 +469,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         ? pxFor('waypoint', i, p)
         : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)))
       for (const seg of layers.conduits ? visibleSegments(pxs) : []) {
-        conduitLines.push({ id: conduit.id, active: isActive, points: seg.map((p) => p.join(',')).join(' ') })
+        conduitLines.push({ id: conduit.id, active: isActive, points: seg.map((p) => p.join(',')).join(' '), pts: seg })
       }
       addContinuations(conduit.id, points)
       if (isActive) {
@@ -477,6 +479,25 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         })
       }
     }
+  }
+
+  const bundleMark = (b, kind) => {
+    const chosen = !!openBundle && openBundle.key === b.key
+    const isFaded = focus && !b.ids.some((id) => (kind === 'run' ? focus.runIds : focus.conduitIds).has(id))
+    const width = kind === 'run' ? bundleWidth(unit, b.count, 0.7, 0.3, 2.2) : bundleWidth(unit, b.count, 1.9, 0.4, 3.6)
+    const pick = () => {
+      setOpenCluster(null)
+      setOpenBundle(chosen ? null : { kind, key: b.key, ids: b.ids, px: b.mid })
+    }
+    return html`
+      <g key=${b.key} class="bundle ${kind} ${chosen ? 'chosen' : ''} ${isFaded ? 'faded' : ''}" data-testid="bundle"
+        onPointerDown=${(e) => e.stopPropagation()} onClick=${pick}>
+        <line class="bundle-line" x1=${b.a[0]} y1=${b.a[1]} x2=${b.b[0]} y2=${b.b[1]} stroke-width=${width} />
+        <circle class="bundle-count-bg" cx=${b.mid[0]} cy=${b.mid[1]} r=${unit * 1.1} />
+        <text class="bundle-count" data-testid="bundle-count" x=${b.mid[0]} y=${b.mid[1] + unit * 0.55} font-size=${unit * 1.5} text-anchor="middle">${b.count}</text>
+        <title>${b.count} ${kind === 'run' ? 'cables' : 'conduits'} run here, click to list them</title>
+      </g>
+    `
   }
 
   // Placed markers, and which of them collapse into numbered clusters. The
@@ -509,6 +530,25 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     )
     : { clusters: [], singles: [] }
   const clustered = new Set(clusterSet.clusters.flatMap((c) => c.ids))
+
+  // Routes along the same segment, drawn once as a thicker line with a count.
+  // The route being edited stays as it is, so its points can be reached.
+  const BUNDLE_TOLERANCE_PX = 3
+  const bundleInput = (lines) => lines.map((l) => ({ id: l.id, points: l.active ? [] : l.pts.map((p) => [p[0] * pxPerUnit, p[1] * pxPerUnit]) }))
+  const bundled = (lines) => {
+    const out = bundleRoutes(bundleInput(lines), BUNDLE_TOLERANCE_PX)
+    return {
+      covered: out.covered,
+      bundles: out.bundles.map((b) => ({ ...b, a: b.a.map((v) => v / pxPerUnit), b: b.b.map((v) => v / pxPerUnit), mid: b.mid.map((v) => v / pxPerUnit) }))
+    }
+  }
+  const runBundles = bundled(runLines)
+  const conduitBundles = bundled(conduitLines)
+  const namesById = new Map(data.devices.map((d) => [d.id, d.name]))
+  const bundleMembers = (kind, ids) => ids.map((id) => (kind === 'run'
+    ? { id, name: cableName(data.wireRuns.find((r) => r.id === id) || { id }, namesById) }
+    : { id, name: (data.conduitsById.get(id) || {}).name || id }))
+  const bundleChosen = (kind, id) => !!openBundle && openBundle.kind === kind && openBundle.ids.includes(id)
 
   return html`
     <div class="floorplan">
@@ -580,17 +620,19 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         onPointerUp=${onPointerUp} onPointerCancel=${() => { drag.current = null; setGhost(null) }}>
         <image href=${imageUrl} x=${size.x} y=${size.y} width=${size.width} height=${size.height} />
 
-        ${conduitLines.map((l, i) => html`
-          <polyline key=${'k' + l.id + ':' + i} points=${l.points} fill="none"
-            class="conduit-line ${l.active ? 'active' : ''} ${focus && !focus.conduitIds.has(l.id) ? 'faded' : ''}" stroke-width=${unit * (l.active ? 2 : 1.6)} />
-        `)}
+        ${conduitLines.map((l, i) => uncoveredPieces(i, l.pts, conduitBundles.covered).map((piece, n) => html`
+          <polyline key=${'k' + l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
+            class="conduit-line ${l.active ? 'active' : ''} ${bundleChosen('conduit', l.id) ? 'chosen' : ''} ${focus && !focus.conduitIds.has(l.id) ? 'faded' : ''}" stroke-width=${unit * (l.active ? 2 : 1.6)} />
+        `))}
+        ${conduitBundles.bundles.map((b) => bundleMark(b, 'conduit'))}
 
-        ${runLines.map((l, i) => html`
-          <polyline key=${l.id + ':' + i} points=${l.points} fill="none"
-            class="run-line ${l.active ? 'active' : ''} ${l.highlighted ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
+        ${runLines.map((l, i) => uncoveredPieces(i, l.pts, runBundles.covered).map((piece, n) => html`
+          <polyline key=${l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
+            class="run-line ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
             stroke-width=${unit * (l.active ? 0.9 : 0.5)}
             stroke-dasharray=${scaledDash(l.dash, unit * (l.active ? 0.9 : 0.5) / 3) || undefined} />
-        `)}
+        `))}
+        ${runBundles.bundles.map((b) => bundleMark(b, 'run'))}
 
         ${connectLines.map((points, i) => html`
           <polyline key=${'cn' + i} points=${points} fill="none" class="run-line active connecting" stroke-width=${unit * 0.9} />
@@ -642,7 +684,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           return html`
             <g key=${c.id} class="device-marker cluster-marker ${openCluster && openCluster.id === c.id ? 'open' : ''} ${focus ? 'faded' : ''}" data-testid="cluster-marker"
               onPointerDown=${(e) => e.stopPropagation()}
-              onClick=${() => setOpenCluster(openCluster && openCluster.id === c.id ? null : { id: c.id, ids: c.ids, px: [cx, cy] })}>
+              onClick=${() => { setOpenBundle(null); setOpenCluster(openCluster && openCluster.id === c.id ? null : { id: c.id, ids: c.ids, px: [cx, cy] }) }}>
               <rect class="cluster-box" x=${cx - unit * 1.5} y=${cy - unit * 1.5} width=${unit * 3} height=${unit * 3} rx=${unit * 1.5} />
               <text class="cluster-count" data-testid="cluster-count" x=${cx} y=${cy + unit * 0.7} font-size=${unit * 2} text-anchor="middle">${c.ids.length}</text>
               <title>${c.ids.length} devices, click to list them</title>
@@ -686,6 +728,18 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
             `)}
           </ul>
           <button onClick=${() => setOpenCluster(null)}>Close</button>
+        </div>
+      `}
+      ${openBundle && html`
+        <div class="cluster-list bundle-list" data-testid="bundle-list"
+          style=${{ left: ((openBundle.px[0] - box.x) / box.width * 100) + '%', top: ((openBundle.px[1] - box.y) / box.height * 100) + '%' }}>
+          <strong>${openBundle.ids.length} ${openBundle.kind === 'run' ? 'cables' : 'conduits'} along this stretch</strong>
+          <ul>
+            ${bundleMembers(openBundle.kind, openBundle.ids).map((m) => html`
+              <li key=${m.id}><button class="link-button" data-testid="bundle-member" onClick=${() => { openBundle.kind === 'run' ? actions.selectRun(m.id) : actions.selectConduit(m.id); setOpenBundle(null) }}>${m.name}</button></li>
+            `)}
+          </ul>
+          <button onClick=${() => setOpenBundle(null)}>Close</button>
         </div>
       `}
       ${cal && !calibrating && (() => {
@@ -925,6 +979,8 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
       setConnect((s) => connectAddWaypoint(s, waypointFromClick(previous, view, a, b)))
     },
     selectWaypoint: (index) => { setWaypointIndex(index); if (tool !== 'place') setDeviceId(null) },
+    selectRun: (id) => { setRunId(id); setConduitId(null); setWaypointIndex(null) },
+    selectConduit: (id) => { setConduitId(id); setRunId(null); setWaypointIndex(null) },
     clearSelection: () => { setDeviceId(null); setWaypointIndex(null) }
   }
 
