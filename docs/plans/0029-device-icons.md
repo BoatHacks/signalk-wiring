@@ -90,7 +90,8 @@ roadmap item (issue #23).
 - [x] Simple icons for all device types, `iconFor`, tests.
 - [ ] Detailed icons for the Victron units. Deferred by the user, not dropped.
 - [ ] Detailed icons for the other boat devices. Deferred by the user, not dropped.
-- [ ] Device page and list display, the review gallery. Deferred by the user, not dropped.
+- [x] Device page and list display for the simple set (plan 0032). The review gallery
+      and the detailed icons stay deferred by the user, not dropped.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #23
       with the port tagging convention.
 

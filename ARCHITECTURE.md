@@ -678,8 +678,9 @@ signalk-wiring/
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
     deviceTypes.js             # popular device types per role, dropdown options
-    deviceIcons.js             # icon url, which images can be icons
-    builtinIcons.js            # built-in simple icon library and iconFor(device); not displayed yet (plan 0029)
+    deviceIcons.js             # icon url, which images can be icons, iconChoice (own image, built-in, none)
+    deviceIcon.js              # DeviceIcon, DeviceLabel, DeviceIconSvg: the shared icon components (plan 0032)
+    builtinIcons.js            # built-in simple icon library and iconFor(device); drawn since plan 0032
     conduits.js                # conduit kinds, cable names, list helpers
     theme.js                   # light and red night theme, optional auto switching
     roles.js                   # device roles: labels and hints
@@ -782,8 +783,20 @@ markup strings (`SIMPLE_ICONS`, `currentColor` strokes, so they follow the
 theme), one per device type, a fallback per role and a generic one. The pure
 `iconFor(device)` returns `{ simple, detailed }`: the simple key comes from the
 type (then the model text, then the role); `detailed` is always null until the
-detailed set is drawn. `simpleIconSvg(key, size)` gives inline markup. Nothing in
-the app displays these icons yet; a device's attached image stays the only icon.
+detailed set is drawn. `simpleIconSvg(key, size)` gives inline markup.
+
+Plan 0032 draws them. `iconChoice(device, bare)` in `deviceIcons.js` is the pure
+rule: the device's own attached image wins, else the built-in icon from
+`iconFor`, else (no device) a bare `{ type, role }` for pickers and the palette,
+else nothing. `public/deviceIcon.js` holds the components on top of it:
+`DeviceIcon` (inline SVG in a `.dev-icon` span, `currentColor`, muted or text
+tone, or an `img` for an attached image with its own `imageSize`), `DeviceLabel`
+(icon then name, with a small negative block margin so a text line does not
+grow) and `DeviceIconSvg` for circuit diagram nodes (`iconSpace` says how much
+width a node reserves). `DeviceLink` in `app.js` takes an optional device map and
+renders a `DeviceLabel`, so tables name a device the same way everywhere.
+`test/deviceIconPlaces.test.mjs` scans that each place uses the shared
+component. The Load Summary table names no devices, so it has none.
 
 Plan 0030 added `devices.schematic_box_color` and `devices.schematic_icon_color` (migration 17, TEXT, nullable, guarded with a `table_info` check, so safe to run twice; old rows read null). `Store._checkColors` validates on create and update: empty or null clears, `#rrggbb` or `#rgb` is accepted (expanded, lower case), anything else throws a message; changes are logged like any field. The device resource serves them as `schematicBoxColor` and `schematicIconColor`. The device form has a `color` field type (`ColorField` in `app.js`: hex text, native picker kept in sync, Clear, inline message; `colorFieldState` in `deviceFields.js` decides validity and an invalid value blocks the save). `public/colorTone.js` is pure: `parseHex`, `normalizeHex`, `boxFill` (18 percent mix into a surface), `nightTone` (luminance mapped to a dim red, capped at `NIGHT_MAX_RED`) and `boxColors`. `DeviceShape` in `schematicView.js` sets the four results as inline custom properties on the box group and adds `has-color`; `style.css` picks the day or night pair (`--c-stroke`, `--c-fill`) at the same specificity as the role outline and before the selected, highlighted and live rules, so those still win. The icon color is not drawn.
 

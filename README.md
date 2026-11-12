@@ -121,8 +121,11 @@ to someone else doesn't depend on the current owner being present.
   "continues on <plan>" as a link to the next one, clicking the To device
   ends a route drawn for a wire run, and a wire run can be deleted from the
   route panel (with Undo).
-- **Device icons**: mark one of a device's images as its icon, shown in
-  device lists, on circuit diagrams and on floorplan markers.
+- **Device icons**: every device name is preceded by an icon, a built-in line
+  icon picked from the device type (lists, cable and circuit tables, circuit
+  diagrams, the schematic palette, pickers and the device page title). Mark
+  one of a device's images as its icon and that image is shown instead, also on
+  floorplan markers.
 - **Photo/file attachments** per cable, device or conduit (JPEG/PNG/WebP/HEIC/
   PDF, 15MB cap), with a "Take photo" button for phone cameras. Devices and
   cables can be duplicated.

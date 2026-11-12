@@ -478,6 +478,17 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   then shown in device lists, on the circuit diagram and on floorplan
   markers. Deleting the icon image clears the icon. A "Take photo" button
   next to "Add file" opens the phone camera.
+- Device icons (plan 0032). Everywhere a device is named, its icon comes
+  first: a built-in simple line icon chosen from its type (then its model
+  text, then its role, then a generic one), or the device's own attached icon
+  image when it has one (the image always wins). Shown at 18 px in the Devices
+  list, the circuits list and the circuit page, and the cables tables (before
+  both From and To); 20 px on the schematic New device palette buttons, in the
+  circuit diagram nodes, and beside the type and device pickers (showing the
+  chosen entry); 28 px before the device page title. Icons are decorative and
+  follow the text color of the day and night themes. The Load Summary table
+  names circuits only, so it shows no device icons. Detailed icons and icons
+  inside schematic boxes are deferred.
 - An auto-generated circuit diagram (devices joined by cables, negative
   returns dotted) rendered from the derived circuit, per circuit.
 - A change log view per record, showing prior edits.

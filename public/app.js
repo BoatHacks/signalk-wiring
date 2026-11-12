@@ -2329,7 +2329,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
       ${device && !editing && html`
         <div class="card">
           <h2>
-            <${DeviceLabel} device=${device} size=${28} imageSize=${44} tone="text" />
+            <${DeviceLabel} device=${device} size=${28} imageSize=${44} tone="text" />${' '}
             <${StatusBadge} status=${device.status} />
           </h2>
           <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
