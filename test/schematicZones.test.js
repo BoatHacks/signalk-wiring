@@ -119,7 +119,7 @@ test('migration 14: a version 13 database gains the table, twice over', () => {
   raw.close()
   for (let i = 0; i < 2; i++) {
     const store = new Store(file)
-    assert.equal(store.db.pragma('user_version', { simple: true }), 15)
+    assert.equal(store.db.pragma('user_version', { simple: true }), 16)
     const zone = store.ensureZone('Z')
     const page = store.create('schematic', { name: 'P', zone_shapes: [rect(zone.id)] })
     assert.equal(store.get('schematic', page.id).zone_shapes.length, 1)

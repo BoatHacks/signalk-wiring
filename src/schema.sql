@@ -184,7 +184,9 @@ CREATE TABLE IF NOT EXISTS schematic_devices (
   position INTEGER NOT NULL,
   device_id TEXT NOT NULL REFERENCES devices(id),
   x REAL NOT NULL,
-  y REAL NOT NULL
+  y REAL NOT NULL,
+  -- Plan 0028: 1 when the user dragged or dropped the device on this page.
+  hand_placed INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS schematic_wires (

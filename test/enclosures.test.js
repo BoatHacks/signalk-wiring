@@ -76,7 +76,7 @@ test('migration 15: a version 14 database gains the columns, twice over', () => 
   raw.close()
   for (let i = 0; i < 2; i++) {
     const store = new Store(file)
-    assert.equal(store.db.pragma('user_version', { simple: true }), 15)
+    assert.equal(store.db.pragma('user_version', { simple: true }), 16)
     const box = store.create('device', { name: 'Box', role: 'enclosure' })
     const lamp = store.create('device', { name: 'Lamp', parent_id: box.id })
     assert.equal(store.get('device', lamp.id).parent_id, box.id)

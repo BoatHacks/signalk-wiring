@@ -139,6 +139,23 @@ export function freeTabSpot (at, boxes, otherTabs = [], margin = 32) {
   return moved.__tab__ ? { x: moved.__tab__.x, y: moved.__tab__.y } : { x: at.x, y: at.y }
 }
 
+// Stage one of Auto-arrange (plan 0028): the layout for the devices that were
+// not placed by hand. `auto` is the layout of the whole page, `current` the
+// positions now, `fixed` the ids of the hand-placed devices. Those keep their
+// spot; the others take their place in the auto layout, moved by the usual
+// shift between the two frames (the median of how far the fixed devices are
+// from where the layout would have put them), so they land in the frame the
+// hand-placed ones are in. With nothing fixed it is the auto layout itself.
+export function arrangeFree (auto, current, fixed) {
+  const keep = fixed.filter((id) => current[id] && auto[id])
+  if (keep.length === 0) return { ...auto }
+  const dx = Math.round(median(keep.map((id) => current[id].x - auto[id].x)))
+  const dy = Math.round(median(keep.map((id) => current[id].y - auto[id].y)))
+  const out = {}
+  for (const id of Object.keys(auto)) out[id] = keep.includes(id) ? { x: current[id].x, y: current[id].y } : { x: auto[id].x + dx, y: auto[id].y + dy }
+  return out
+}
+
 // ---- Auto-arrange in two stages (plan 0025) ----
 
 export const ARRANGE_LABEL = 'Auto-arrange'

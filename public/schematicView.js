@@ -18,6 +18,7 @@ import { matchesRemoved, readShowRemoved, writeShowRemoved } from './zones.js'
 import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import * as Z from './zoneShapes.js'
 import * as N from './snapGrid.js'
+import * as L from './schematicLayout.js'
 import { midpoints } from './polygon.js'
 import { pageModel, insideText } from './enclosures.js'
 import { ensureInsidePage } from './insidePage.js'
@@ -246,6 +247,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const autoRoutedAt = useRef(0)
   const lastCornerDown = useRef(null)
   const [pos, setPos] = useState({})
+  const [hand, setHand] = useState({}) // device id -> true: placed by hand (dragged or dropped), kept by the first Auto-arrange click (plan 0028)
   const [bends, setBends] = useState({})
   const [stubPos, setStubPos] = useState({}) // cable id -> { x, y }: tabs the user placed
   const [shapes, setShapes] = useState([]) // zone shapes: { zoneId, kind, x, y, width, height, points? }
@@ -292,12 +294,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const recordKey = JSON.stringify([schematic.devices, schematic.wires, schematic.stubs || [], schematic.zoneShapes || []])
   useEffect(() => {
     const p = {}
-    for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
+    const hp = {}
+    for (const d of schematic.devices) { p[d.deviceId] = { x: d.x, y: d.y }; if (d.handPlaced) hp[d.deviceId] = true }
     const b = {}
     for (const w of schematic.wires) b[w.wireRunId] = w.points
     const sp = {}
     for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
     setPos(p)
+    setHand(hp)
     setBends(b)
     setStubPos(sp)
     setShapes(schematic.zoneShapes || [])
@@ -457,11 +461,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
 
   // ---- Persisting ----
-  const save = async (nextPos, nextBends, order, nextStubs = stubPos, nextShapes = shapes) => {
+  const save = async (nextPos, nextBends, order, nextStubs = stubPos, nextShapes = shapes, nextHand = hand) => {
     const ids = order || schematic.devices.map((d) => d.deviceId)
     try {
       await putResource('wiringSchematics', schematic.id, {
-        devices: ids.filter((id) => nextPos[id]).map((id) => ({ deviceId: id, x: Math.round(nextPos[id].x), y: Math.round(nextPos[id].y) })),
+        devices: ids.filter((id) => nextPos[id]).map((id) => ({ deviceId: id, x: Math.round(nextPos[id].x), y: Math.round(nextPos[id].y), ...(nextHand[id] ? { handPlaced: true } : {}) })),
         wires: Object.entries(nextBends)
           .filter(([id, pts]) => pts && pts.length > 0 && liveCables.some((c) => c.id === id))
           .map(([wireRunId, points]) => ({ wireRunId, points })),
@@ -536,7 +540,10 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       const corner = { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) }
       const next = tidied({ ...pos, [id]: snap ? N.snapPoint(corner) : corner }, [id])
       setPos(next)
-      await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id])
+      // dropped at a chosen spot: placed by hand; made by a click, it is free
+      const nextHand = at ? { ...hand, [id]: true } : hand
+      setHand(nextHand)
+      await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id], undefined, undefined, nextHand)
       setSelection({ type: 'device', id })
       setRenaming({ id, text: uniqueName(item.type), fresh: true })
     } catch (err) { onError(err.message) }
@@ -559,13 +566,17 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const name = deviceName(id) || 'Device'
     const next = { ...pos }
     delete next[id]
+    const wasHand = !!hand[id]
+    const nextHand = { ...hand }
+    delete nextHand[id]
+    setHand(nextHand)
     setSelection(null)
-    await save(next, bends, schematic.devices.map((d) => d.deviceId).filter((x) => x !== id))
+    await save(next, bends, schematic.devices.map((d) => d.deviceId).filter((x) => x !== id), undefined, undefined, nextHand)
     if (!old) return
     undo.offer({
       message: `"${name}" taken off this page.`,
       onUndo: () => patchStored((s) => ({
-        devices: G.withDevicePlaced(s.devices || [], { deviceId: id, x: Math.round(old.x), y: Math.round(old.y) }, index)
+        devices: G.withDevicePlaced(s.devices || [], { deviceId: id, x: Math.round(old.x), y: Math.round(old.y), ...(wasHand ? { handPlaced: true } : {}) }, index)
       }))
     })
   }
@@ -578,12 +589,16 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     armedPending.current = null
     setBusy(true)
     const before = { devices: schematic.devices, wires: schematic.wires, stubs: schematic.stubs || [] }
-    const layout = tidied(G.autoLayout(dagre, pageDevices, onPage), null, !step.clear.tabs)
+    // stage one keeps the hand-placed devices where they are; the full arrange moves everything and clears the marks
+    const fixed = step.full ? [] : pageDevices.map((d) => d.id).filter((id) => hand[id])
+    const auto = G.autoLayout(dagre, pageDevices, onPage)
+    const layout = tidied(fixed.length ? L.arrangeFree(auto, pos, fixed) : auto, fixed.length ? pageDevices.map((d) => d.id).filter((id) => !hand[id]) : null, !step.clear.tabs)
     setPos(layout)
     if (step.full) {
       setBends({})
       setStubPos({})
-      await save(layout, {}, undefined, {})
+      setHand({})
+      await save(layout, {}, undefined, {}, undefined, {})
       undo.offer({
         message: 'Everything on this page arranged.',
         onUndo: () => patchStored(() => ({ devices: before.devices, wires: before.wires, stubs: before.stubs }))
@@ -727,12 +742,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         drag.current = null
         setPreview(null)
         const p = {}
-        for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
+        const hp = {}
+        for (const d of schematic.devices) { p[d.deviceId] = { x: d.x, y: d.y }; if (d.handPlaced) hp[d.deviceId] = true }
         const b = {}
         for (const w of schematic.wires) b[w.wireRunId] = w.points
         const sp = {}
         for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
         setPos(p)
+        setHand(hp)
         setBends(b)
         setStubPos(sp)
         setShapes(schematic.zoneShapes || [])
@@ -978,7 +995,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     if (d.kind === 'move' && d.moved) {
       const next = tidied(pos, [d.id])
       if (next !== pos) setPos(next)
-      save(next, bends)
+      const nextHand = { ...hand, [d.id]: true } // dragged: placed by hand
+      setHand(nextHand)
+      save(next, bends, undefined, undefined, undefined, nextHand)
     }
     if (d.kind === 'bend' && d.moved) save(pos, bends)
     if (d.kind === 'seg' && d.moved && d.result) save(pos, { ...bends, [d.wireId]: d.result })

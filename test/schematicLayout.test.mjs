@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import dagre from '../public/vendor/dagre.esm.js'
 import * as L from '../public/schematicLayout.js'
+import * as S from '../public/schematic.js'
 
 const r = (id, x, y, w = 150, h = 46) => ({ id, x, y, w, h })
 const clash = (a, b, m) => a.x < b.x + b.w + m && a.x + a.w + m > b.x && a.y < b.y + b.h + m && a.y + a.h + m > b.y
@@ -74,4 +75,37 @@ test('arrangeStage: any edit puts the label back and the next click is stage one
   const edited = L.arrangeStage(armed, 'edit')
   assert.deepEqual(edited, { armed: false, label: 'Auto-arrange', full: false, clear: { bends: false, tabs: false } })
   assert.equal(L.arrangeStage(edited, 'click').full, false)
+})
+
+// ---- Hand-placed devices and Auto-arrange stage one (plan 0028) ----
+
+test('arrangeFree: hand-placed devices keep their spot, the others follow the layout in their frame', () => {
+  const auto = { a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, c: { x: 300, y: 100 }, d: { x: 600, y: 0 } }
+  const current = { a: { x: 1000, y: 500 }, b: { x: 40, y: 40 }, c: { x: 40, y: 40 }, d: { x: 7, y: 7 } }
+  const out = L.arrangeFree(auto, current, ['a'])
+  assert.deepEqual(out.a, { x: 1000, y: 500 })
+  // the others move by the same shift as a (1000, 500)
+  assert.deepEqual(out.b, { x: 1300, y: 500 })
+  assert.deepEqual(out.c, { x: 1300, y: 600 })
+  assert.deepEqual(out.d, { x: 1600, y: 500 })
+})
+
+test('arrangeFree: nothing fixed gives the auto layout, a fixed id that is not on the page is ignored', () => {
+  const auto = { a: { x: 0, y: 0 }, b: { x: 300, y: 0 } }
+  assert.deepEqual(L.arrangeFree(auto, { a: { x: 9, y: 9 }, b: { x: 9, y: 9 } }, []), auto)
+  assert.deepEqual(L.arrangeFree(auto, { a: { x: 9, y: 9 } }, ['gone']), auto)
+  const all = L.arrangeFree(auto, { a: { x: 9, y: 9 }, b: { x: 5, y: 5 } }, ['a', 'b'])
+  assert.deepEqual(all, { a: { x: 9, y: 9 }, b: { x: 5, y: 5 } })
+})
+
+test('stage one of Auto-arrange keeps marked devices fixed through the overlap pass too', () => {
+  const dev = (id, role) => ({ id, role, terminals: [] })
+  const devices = [dev('a', 'source'), dev('b', 'consumer'), dev('c', 'consumer')]
+  const auto = L.autoLayout(dagre, devices, [{ id: 'k1', fromDeviceId: 'a', toDeviceId: 'b', status: 'active' }, { id: 'k2', fromDeviceId: 'a', toDeviceId: 'c', status: 'active' }])
+  const current = { a: { x: 500, y: 500 }, b: { x: 0, y: 0 }, c: { x: 0, y: 0 } }
+  const merged = L.arrangeFree(auto, current, ['b'])
+  const boxes = devices.map((d) => ({ ...S.deviceBox(d, merged[d.id]) }))
+  const moved = L.resolveOverlaps(boxes, [], L.OVERLAP_MARGIN, ['a', 'c'])
+  assert.equal(moved.b, undefined)
+  assert.deepEqual(merged.b, { x: 0, y: 0 })
 })

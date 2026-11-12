@@ -73,7 +73,7 @@ test('migration 12 adds the rating columns to an older database, safe to run twi
   raw.close()
   for (let i = 0; i < 2; i++) {
     const store = new Store(file)
-    assert.equal(store.db.pragma('user_version', { simple: true }), 15)
+    assert.equal(store.db.pragma('user_version', { simple: true }), 16)
     const d = store.list('device')[0]
     assert.equal(d.name, 'Old switch')
     assert.equal(d.rated_dc_a, i === 0 ? null : 300)

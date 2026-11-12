@@ -465,6 +465,14 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices (parent_id)')
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_schematics_enclosure ON schematics (enclosure_id) WHERE enclosure_id IS NOT NULL')
     }
+  },
+  {
+    version: 16,
+    description: 'plan 0028: schematic_devices + hand_placed (1 when the user dragged or dropped the device; old rows read as free)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      if (!has('schematic_devices', 'hand_placed')) db.exec('ALTER TABLE schematic_devices ADD COLUMN hand_placed INTEGER NOT NULL DEFAULT 0')
+    }
   }
 ]
 
@@ -659,7 +667,7 @@ class Store {
       }
       return by
     }
-    const dByS = group(devices, (r) => ({ deviceId: r.device_id, x: r.x, y: r.y }))
+    const dByS = group(devices, (r) => ({ deviceId: r.device_id, x: r.x, y: r.y, ...(r.hand_placed ? { handPlaced: true } : {}) }))
     const wByS = group(wires, (r) => ({ wireRunId: r.wire_run_id, points: r.points ? JSON.parse(r.points) : [] }))
     const sByS = group(stubs, (r) => ({ wireRunId: r.wire_run_id, x: r.x, y: r.y }))
     const zByS = group(zoneShapes, (r) => {
@@ -704,7 +712,7 @@ class Store {
         if (!had.has(deviceId) && device.parent_id && device.parent_id !== insideOf) {
           throw new Error(`${device.name} is inside an enclosure: place it on that enclosure's inside page`)
         }
-        return { deviceId, x: finite(item.x, 'x'), y: finite(item.y, 'y') }
+        return { deviceId, x: finite(item.x, 'x'), y: finite(item.y, 'y'), ...(item.handPlaced === true ? { handPlaced: true } : {}) }
       })
     }
     if (fields.wires !== undefined) {
@@ -772,8 +780,8 @@ class Store {
     if (lists.devices) {
       this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
       const insert = this.db.prepare(
-        'INSERT INTO schematic_devices (id, schematic_id, position, device_id, x, y) VALUES (?, ?, ?, ?, ?, ?)')
-      lists.devices.forEach((d, i) => insert.run(crypto.randomUUID(), id, i, d.deviceId, d.x, d.y))
+        'INSERT INTO schematic_devices (id, schematic_id, position, device_id, x, y, hand_placed) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      lists.devices.forEach((d, i) => insert.run(crypto.randomUUID(), id, i, d.deviceId, d.x, d.y, d.handPlaced ? 1 : 0))
     }
     if (lists.wires) {
       this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
