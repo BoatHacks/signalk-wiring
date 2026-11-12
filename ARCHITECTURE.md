@@ -139,7 +139,7 @@ webapp's static assets are *not* served from here — see §2.4.
   (the dialog) and `public/measured.js` (measured values beside the rating,
   and the figures the load check uses).
 
-### 2.2.2 JSON OpenAPI discovery (`src/openapi.js`, plan 0027)
+### 2.2.2 JSON OpenAPI discovery (`src/openapi.js`, plan 0028)
 
 `index.js` exposes Signal K's synchronous `getOpenApi()` hook. The builder
 returns a fresh OpenAPI 3.0.3 document with relative plugin paths and the
@@ -594,6 +594,15 @@ The cable's effective route and length (`effectiveCableRoute` in
 stored: a cable with waypoints of its own keeps them, otherwise it follows
 its live, drawn conduits in order.
 
+The floorplan declutter (plan 0027) is client-side only, with no schema or
+server change. `floorLabels.js` decides which names are drawn,
+`floorCluster.js` groups markers by distance in screen pixels (so it follows
+the zoom), `floorBundles.js` merges shared route segments, and
+`floorLayers.js` holds the layer switches and role filter, saved in the
+browser's local storage under `wiring.floorLayers` inside try/catch, and the
+set of devices, runs and conduits that stay at full strength while something is
+selected. All four are pure and unit tested; `floorplanView.js` only draws.
+
 ## 4. Technology Stack
 
 | Layer | Choice | Why |
@@ -709,6 +718,10 @@ signalk-wiring/
     cablePopover.js            # the quick cable popover shared by both tools
     connectTool.js             # pure state machine of the floorplan connect tool
     floorplanView.js           # floorplan tab: upload, viewer, placement, routes
+    floorLabels.js             # pure: which device names show, label side at the edge
+    floorCluster.js            # pure: marker clusters in screen pixels
+    floorLayers.js             # pure: Show menu settings (local storage), role filter, focus set
+    floorBundles.js            # pure: routes along the same segment, bundle counts
     style.css
     vendor/                  # preact-standalone.module.js, dagre — vendored, no CDN (§2.4)
   test/

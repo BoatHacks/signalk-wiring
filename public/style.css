@@ -542,7 +542,7 @@ label.inline {
 }
 
 .device-marker circle { fill: var(--marker-consumer); fill-opacity: 0.6; stroke: var(--marker-stroke); stroke-width: 0.4; cursor: grab; }
-.device-marker text { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 0.6; pointer-events: none; }
+.device-marker text { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-linejoin: round; pointer-events: none; }
 
 .conduit-line { stroke: var(--text-muted); stroke-opacity: 0.25; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .conduit-line.active { stroke: var(--danger); stroke-opacity: 0.35; }
@@ -567,6 +567,26 @@ main:has(.floorplan-pair) { max-width: none; }
 .device-marker .enclosure-box { fill: var(--surface); fill-opacity: 0.9; stroke: var(--marker-distribution); stroke-width: 0.9; cursor: grab; }
 .device-marker .enclosure-count { stroke: none; font-weight: 600; }
 .device-marker.highlighted .enclosure-box { stroke: var(--link); }
+/* Plan 0027: markers that overlap collapse into a round marker with a count. */
+.device-marker .cluster-box { fill: var(--surface); fill-opacity: 0.95; stroke: var(--marker-distribution); stroke-width: 0.9; cursor: pointer; }
+.device-marker.cluster-marker.open .cluster-box { stroke: var(--link); }
+.device-marker .cluster-count { stroke: none; font-weight: 600; pointer-events: none; }
+.cluster-list {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, 12px);
+  max-width: min(260px, 80%);
+  max-height: 60%;
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  font-size: 13px;
+}
+.cluster-list ul { margin: 6px 0; padding-left: 18px; }
 
 .filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
 .filter-bar .form-field { min-width: 180px; }
@@ -811,3 +831,30 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-enclosure-link rect { fill: none; stroke: var(--link); stroke-width: 1.2; }
 .sch-enclosure-link path { fill: none; stroke: var(--link); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .schematic-inside { margin: 4px 0 8px; }
+
+/* Plan 0027: the Show menu and the focus fade. Faded things stay clickable. */
+.show-menu { position: relative; display: inline-block; }
+.show-menu summary { cursor: pointer; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); list-style: none; }
+.show-menu summary::-webkit-details-marker { display: none; }
+.show-menu summary.changed { border-color: var(--link); color: var(--link); }
+.show-menu-body {
+  position: absolute; z-index: 6; left: 0; top: calc(100% + 4px); min-width: 170px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+.show-roles { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
+.floorplan-canvas .faded { opacity: 0.2; }
+
+/* Plan 0027: routes along the same stretch, drawn once with a count. */
+.bundle { cursor: pointer; }
+.bundle-line { stroke: var(--text-muted); stroke-opacity: 0.6; stroke-linecap: round; }
+.bundle.conduit .bundle-line { stroke-opacity: 0.35; }
+.bundle.chosen .bundle-line { stroke: var(--accent); stroke-opacity: 0.9; }
+.bundle-count-bg { fill: var(--surface); stroke: var(--text-muted); stroke-width: 0.4; }
+.bundle.chosen .bundle-count-bg { stroke: var(--accent); }
+.bundle-count { fill: var(--text); font-weight: 600; pointer-events: none; }
+.conduit-line.chosen { stroke: var(--accent); stroke-opacity: 0.5; }
+.bundle-list .link-button { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; text-align: left; }
+.bundle-list ul { list-style: none; padding-left: 0; }
+.bundle-list li { margin: 4px 0; }

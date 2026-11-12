@@ -93,6 +93,9 @@ to someone else doesn't depend on the current owner being present.
   good when the message ends) or takes a selected device off the page only.
 - A **connect tool** on the floorplan: pick the From and To devices, click
   the route, and the cable gets the drawn route and its measured length.
+- A **decluttered floorplan**: device names only on hover or selection, numbered
+  marker clusters, a Show menu with layer switches and a role filter (kept per
+  browser), focus on the selection, and bundled routes with a count.
 - A **floorplan view**: upload a top-down or side drawing (SVG, PNG,
   JPEG or WebP), calibrate it once with two clicks and a real distance,
   then place devices by clicking (one 3D position shown in both views)

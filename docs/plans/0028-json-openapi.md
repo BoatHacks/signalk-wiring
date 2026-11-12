@@ -43,7 +43,8 @@ actions, and check the packed npm artifact.
 
 ## Verification
 
-- All 686 tests pass on Node 22.23.5 and 24.22.2.
+- All 722 tests pass on Node 22.23.5 and 24.22.2, including the tests added in
+  upstream 0.7.1 while this change was being prepared.
 - Swagger Parser 12 accepts the OpenAPI document. An isolated Ajv 8 probe
   validates all three request examples and 88 responses across 32 response
   contracts from the existing route/calibration tests. Validation tools are
