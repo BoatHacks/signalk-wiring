@@ -3,7 +3,7 @@ import { newId } from './ids.js'
 import { deviceIconUrl } from './deviceIcons.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
-  moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
+  moveWaypoint, removeWaypoint, insertWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
   metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints, conduitRoutePoints, unroutedCables,
   conduitMembers, effectiveCableRoute, cornerArrows, routeEndAction, routeWithEnd, continuationMarks,
   escapeStep, deleteStep
@@ -349,6 +349,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       if (!clustered.has(device.id)) cands.push({ kind: 'marker', x: px[0], y: px[1], target: { kind: 'device', key: device.id } })
     }
     for (const w of waypointMarkers) cands.push({ kind: 'marker', x: w.px[0], y: w.px[1], target: { kind: 'waypoint', key: w.index } })
+    for (const m of midMarkers) cands.push({ kind: 'marker', x: m.px[0], y: m.px[1], target: { kind: 'mid', key: m.index } })
     for (const c of clusterSet.clusters) cands.push({ kind: 'cluster', x: c.x / pxPerUnit, y: c.y / pxPerUnit, cluster: c })
     return pickTarget({ x, y }, cands, 'touch', pxPerUnit)
   }
@@ -441,13 +442,14 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       if (d.moved) {
         const [a, b] = metersAt(e)
         if (d.target.kind === 'device') actions.moveDevice(d.target.key, plan.view, a, b)
+        else if (d.target.kind === 'mid') actions.insertWaypoint(d.target.key, plan.view, a, b)
         else actions.moveWaypoint(d.target.key, plan.view, a, b)
       } else if (d.target.kind === 'device') {
         const tap = { id: d.target.key, t: Date.now(), x: e.clientX, y: e.clientY }
         if (ctx.tool === 'select' && isDoubleTap(lastTap.current, tap)) { lastTap.current = null; window.location.hash = deviceHash(d.target.key); return }
         lastTap.current = tap
         actions.selectDevice(d.target.key)
-      } else {
+      } else if (d.target.kind === 'waypoint') {
         actions.selectWaypoint(d.target.key)
       }
       return
@@ -505,6 +507,9 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const labelIds = layers.names ? visibleLabels(data.devices, { hoverId, selectedId: ctx.deviceId, members, run: ctx.run }) : new Set()
   const runLines = []
   const waypointMarkers = []
+  // A handle at the middle of each stretch of the chosen route: dragging it adds a point there.
+  const midMarkers = []
+  const midsOn = ctx.tool === 'select' || ctx.tool === 'route'
   // Where a route leaves this plan, a stub with a link to the plan it continues on.
   const continuations = []
   const addContinuations = (ownerId, points) => {
@@ -538,6 +543,10 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           const px = pxFor('waypoint', i, p)
           if (px) waypointMarkers.push({ index: i, px })
         })
+        for (let i = 0; midsOn && i < pxs.length - 1; i++) {
+          const a = pxs[i]; const b = pxs[i + 1]
+          if (a && b) midMarkers.push({ index: i + 1 - offset, px: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], a, b })
+        }
       }
     }
   }
@@ -572,6 +581,10 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           const px = pxFor('waypoint', i, p)
           if (px) waypointMarkers.push({ index: i, px })
         })
+        for (let i = 0; midsOn && i < pxs.length - 1; i++) {
+          const a = pxs[i]; const b = pxs[i + 1]
+          if (a && b) midMarkers.push({ index: i + 1, px: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], a, b })
+        }
       }
     }
   }
@@ -743,6 +756,16 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           <rect key=${'w' + w.index} x=${w.px[0] - unit} y=${w.px[1] - unit} width=${unit * 2} height=${unit * 2}
             class="waypoint ${ctx.waypointIndex === w.index ? 'selected' : ''}"
             onPointerDown=${(e) => onMarkerDown(e, { kind: 'waypoint', key: w.index })} />
+        `)}
+        ${midMarkers.map((m) => html`
+          <circle key=${'m' + m.index} cx=${m.px[0]} cy=${m.px[1]} r=${unit * 0.8} class="waypoint-mid" data-testid="route-mid"
+            onPointerDown=${(e) => onMarkerDown(e, { kind: 'mid', key: m.index })}><title>Drag to add a point</title></circle>
+        `)}
+        ${ghost && ghost.kind === 'mid' && midMarkers.filter((m) => m.index === ghost.key).map((m) => html`
+          <g key="midghost" class="waypoint-mid-ghost" pointer-events="none">
+            <polyline points=${[m.a, ghost.px, m.b].map((p) => p.join(',')).join(' ')} fill="none" class="run-line active" stroke-width=${unit * 0.5} stroke-dasharray=${unit * 1.2 + ' ' + unit * 0.8} />
+            <rect x=${ghost.px[0] - unit} y=${ghost.px[1] - unit} width=${unit * 2} height=${unit * 2} class="waypoint" />
+          </g>
         `)}
 
         ${deviceMarks.map(({ device, px, lit }) => {
@@ -1031,6 +1054,13 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
       setWaypointIndex(null)
     },
     moveWaypoint: (index, view, a, b) => saveRoute(moveWaypoint(currentRoute(), index, view, a, b)),
+    insertWaypoint: (index, view, a, b) => {
+      const route = currentRoute()
+      const points = conduit ? conduitRoutePoints(conduit) : routePoints(run, null, devicesById)
+      const offset = points.length - route.length
+      saveRoute(insertWaypoint(route, index, points[index + offset - 1] || null, view, a, b))
+      setWaypointIndex(null)
+    },
     removePlan: (plan) => {
       if (!window.confirm(`Remove the plan "${plan.name}"? Placed devices and routes are kept; the plan stays in the record as removed.`)) return
       guard(() => deleteResource('wiringPlans', plan.id))

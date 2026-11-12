@@ -564,6 +564,8 @@ label.inline {
 
 .waypoint { fill: var(--surface); stroke: var(--danger); stroke-width: 0.5; cursor: grab; }
 .waypoint.selected { fill: var(--danger); }
+.waypoint-mid { fill: var(--surface); stroke: var(--danger); stroke-width: 0.4; stroke-opacity: 0.7; fill-opacity: 0.8; cursor: copy; }
+.waypoint-mid:hover { fill-opacity: 1; stroke-opacity: 1; }
 
 main:has(.floorplan-pair) { max-width: none; }
 

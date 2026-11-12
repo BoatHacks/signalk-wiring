@@ -343,3 +343,23 @@ test('a route starts where the enclosure around its from-device is placed (plan 
   devices.set('box', { ...box, posX: null, posY: null, posZ: null })
   assert.equal(resolveRouteStart({ fromDeviceId: 'deep' }, null, devices), null)
 })
+
+test('insertWaypoint adds a point between two others, taking the axis the view hides from the point before', async () => {
+  const { insertWaypoint } = await import('../public/floorplan.js')
+  const route = [{ x: 0, y: 0, z: 1 }, { x: 4, y: 0, z: 3 }]
+  const out = insertWaypoint(route, 1, { x: 0, y: 0, z: 1 }, 'top', 2, 1.5)
+  assert.deepEqual(out, [{ x: 0, y: 0, z: 1 }, { x: 2, y: 1.5, z: 1 }, { x: 4, y: 0, z: 3 }])
+  // the input route is not changed
+  assert.equal(route.length, 2)
+})
+
+test('insertWaypoint at the start and the end, and with no previous point', async () => {
+  const { insertWaypoint } = await import('../public/floorplan.js')
+  const route = [{ x: 1, y: 1, z: 0 }, { x: 5, y: 1, z: 0 }]
+  assert.equal(insertWaypoint(route, 0, { x: 0, y: 0, z: 2 }, 'top', 0.5, 0.5)[0].z, 2)
+  assert.equal(insertWaypoint(route, 2, null, 'top', 6, 6)[2].x, 6)
+  assert.equal(insertWaypoint(route, 9, null, 'top', 7, 7).length, 3)
+  const first = insertWaypoint([], 0, null, 'top', 1, 2)
+  assert.equal(first.length, 1)
+  assert.equal(first[0].x, 1)
+})

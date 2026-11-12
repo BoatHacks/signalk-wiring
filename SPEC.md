@@ -513,7 +513,8 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   height never produce one. The route panel names the chosen cable and has a
   "Delete wire run" button that works like deleting a wire on the schematic
   (no confirmation, Undo, permanent delete when the Undo window ends); there
-  is no key shortcut for it. Escape cancels the in-progress route or the
+  is no key shortcut for it. With a route chosen, a circular handle sits in the middle of each
+  stretch; dragging it inserts a waypoint there (Select or Draw route tool). Escape cancels the in-progress route or the
   current tool; Delete removes the selected waypoint or clears the selected
   device's placement (it becomes "not placed", with Undo).
 - Conduits on the floorplan: draw a conduit's route like a cable's (it is
