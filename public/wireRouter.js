@@ -458,9 +458,13 @@ function makeSearch (grid) {
 
 // ---- Bridges ----------------------------------------------------------------
 
-// Hops on the horizontal segment of the wire that crosses another wire's
-// vertical segment (away from the ends, so shared terminals and junctions do
-// not count). Returns Map id -> [{ x, y }].
+// Hops where two lines cross (plan 0028). The horizontal segment hops over the
+// vertical one: { x, y }. Where the horizontal segment has no room for a hop
+// (the crossing lies close to one of its ends) but the vertical one has, the
+// vertical segment hops instead: { x, y, v: true }. Crossings at the ends of
+// both, and shared terminals and junctions, do not count. Every crossing keeps
+// its own entry; hops closer together than one hop are drawn as one wide hop
+// by pathToDWithBridges. Returns Map id -> [{ x, y, v? }].
 export function findBridges (paths) {
   const out = new Map()
   const ids = [...paths.keys()]
@@ -477,43 +481,66 @@ export function findBridges (paths) {
   }
   const segs = new Map(ids.map((id) => [id, segsOf(paths.get(id))]))
   const E = BRIDGE_R + 3
+  const add = (id, p) => {
+    if (!out.has(id)) out.set(id, [])
+    const list = out.get(id)
+    if (!list.some((q) => q.x === p.x && q.y === p.y && !!q.v === !!p.v)) list.push(p)
+  }
   for (const id of ids) {
     for (const other of ids) {
       if (other === id) continue
       for (const h of segs.get(id).hs) {
         for (const v of segs.get(other).vs) {
-          if (v.x - h.x0 < E || h.x1 - v.x < E) continue
-          if (h.y - v.y0 < E || v.y1 - h.y < E) continue
-          if (!out.has(id)) out.set(id, [])
-          out.get(id).push({ x: v.x, y: h.y })
+          if (v.x < h.x0 || v.x > h.x1 || h.y < v.y0 || h.y > v.y1) continue
+          if (h.y - v.y0 < E || v.y1 - h.y < E) continue // the vertical ends here: a junction, not a crossing
+          if (v.x - h.x0 >= E && h.x1 - v.x >= E) add(id, { x: v.x, y: h.y })
+          else if (v.x > h.x0 && v.x < h.x1) add(other, { x: v.x, y: h.y, v: true }) // no room on the horizontal: the vertical hops
         }
       }
     }
   }
-  // Hops on one segment must not touch: drop any closer than two radii.
-  for (const [id, list] of out) {
-    list.sort((a, b) => a.y - b.y || a.x - b.x)
-    const kept = []
-    for (const p of list) {
-      const last = kept[kept.length - 1]
-      if (!last || last.y !== p.y || p.x - last.x >= BRIDGE_R * 2 + 2) kept.push(p)
-    }
-    out.set(id, kept)
-  }
+  for (const [id, list] of out) list.sort((a, b) => !!a.v - !!b.v || a.y - b.y || a.x - b.x)
   return out
 }
 
-// An SVG path with a semicircular hop at each bridge (horizontal segments only).
+// Groups the hops of one segment: hops that would touch (closer than two radii
+// and a little room) become one wide hop. `coord` reads the position along the
+// segment; returns [{ from, to }] in the order of travel.
+function hopGroups (hops, coord, dir) {
+  const sorted = [...hops].sort((p, q) => dir * (coord(p) - coord(q)))
+  const groups = []
+  for (const h of sorted) {
+    const last = groups[groups.length - 1]
+    if (last && Math.abs(coord(h) - last.to) < BRIDGE_R * 2 + 2) last.to = coord(h)
+    else groups.push({ from: coord(h), to: coord(h) })
+  }
+  return groups
+}
+
+// An SVG path with a semicircular hop at each bridge: horizontal hops bulge
+// up, vertical ones to the right. Hops that would touch are drawn as one wide
+// hop (a half ellipse).
 export function pathToDWithBridges (points, bridges = []) {
   if (!points.length) return ''
   let d = `M${points[0].x} ${points[0].y}`
+  const R = BRIDGE_R
   for (let k = 1; k < points.length; k++) {
     const a = points[k - 1]
     const b = points[k]
     if (a.y === b.y && bridges.length) {
       const dir = Math.sign(b.x - a.x)
-      const hops = bridges.filter((h) => h.y === a.y && h.x > Math.min(a.x, b.x) && h.x < Math.max(a.x, b.x)).sort((p, q) => dir * (p.x - q.x))
-      for (const h of hops) d += ` L${h.x - dir * BRIDGE_R} ${a.y} A${BRIDGE_R} ${BRIDGE_R} 0 0 ${dir > 0 ? 0 : 1} ${h.x + dir * BRIDGE_R} ${a.y}`
+      const hops = bridges.filter((h) => !h.v && h.y === a.y && h.x > Math.min(a.x, b.x) && h.x < Math.max(a.x, b.x))
+      for (const g of hopGroups(hops, (h) => h.x, dir)) {
+        const rx = (Math.abs(g.to - g.from) + 2 * R) / 2
+        d += ` L${g.from - dir * R} ${a.y} A${rx} ${R} 0 0 ${dir > 0 ? 0 : 1} ${g.to + dir * R} ${a.y}`
+      }
+    } else if (a.x === b.x && bridges.length) {
+      const dir = Math.sign(b.y - a.y)
+      const hops = bridges.filter((h) => h.v && h.x === a.x && h.y > Math.min(a.y, b.y) && h.y < Math.max(a.y, b.y))
+      for (const g of hopGroups(hops, (h) => h.y, dir)) {
+        const ry = (Math.abs(g.to - g.from) + 2 * R) / 2
+        d += ` L${a.x} ${g.from - dir * R} A${R} ${ry} 0 0 ${dir > 0 ? 1 : 0} ${a.x} ${g.to + dir * R}`
+      }
     }
     d += ` L${b.x} ${b.y}`
   }

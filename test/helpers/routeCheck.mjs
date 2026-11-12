@@ -55,7 +55,9 @@ export function crossingsNearPorts (lines, dist) {
     for (const p of l.bridges || []) {
       for (const m of lines) {
         if (m === l) continue
-        const crosses = segs(m.points).some((s) => !s.h && Math.abs(s.a.x - p.x) < 0.01 && p.y >= lo(s) && p.y <= hi(s))
+        const crosses = segs(m.points).some((s) => (p.v
+          ? s.h && Math.abs(s.a.y - p.y) < 0.01 && p.x >= lo(s) && p.x <= hi(s)
+          : !s.h && Math.abs(s.a.x - p.x) < 0.01 && p.y >= lo(s) && p.y <= hi(s)))
         if (!crosses) continue
         const d = Math.min(portDistance(l, p.x, p.y), portDistance(m, p.x, p.y))
         if (d < dist) out.push({ ids: [l.id, m.id], at: p, d })
@@ -100,7 +102,8 @@ export function checkPage ({ lines, boxes, tabs = [], portClear = 0 }) {
             if (x < lo(hs) - 0.01 || x > hi(hs) + 0.01 || y < lo(vs) - 0.01 || y > hi(vs) + 0.01) continue
             const atEnd = x < lo(hs) + 0.01 || x > hi(hs) - 0.01 || y < lo(vs) + 0.01 || y > hi(vs) - 0.01
             if (atEnd) { if (!shared) bad('touch', A.l.id, B.l.id); continue }
-            const ok = (hl.bridges || []).some((p) => Math.abs(p.x - x) < 0.5 && Math.abs(p.y - y) < 0.5)
+            const vl = a.h ? B.l : A.l
+            const ok = [...(hl.bridges || []), ...(vl.bridges || [])].some((p) => Math.abs(p.x - x) < 0.5 && Math.abs(p.y - y) < 0.5)
             if (!ok) bad('crossing', A.l.id, B.l.id)
           }
         }
@@ -175,4 +178,27 @@ export function linesOf (input, result) {
     tabs.push({ id: s.cableId, rect: r.tab, deviceId: s.deviceId })
   }
   return { lines: lines.filter((l) => !l.fixed), boxes: input.boxes, tabs }
+}
+
+// Plain crossings (plan 0028): every place where a horizontal stretch of one
+// line crosses a vertical stretch of another, in the inside of both, and
+// neither line has a bridge there. `only` limits the check to pairs where
+// one line passes it (for example the stub lines). Returns [{ ids, at }].
+export function plainCrossings (lines, only = () => true) {
+  const out = []
+  for (const A of lines) {
+    for (const B of lines) {
+      if (A === B || !(only(A) || only(B))) continue
+      for (const h of segs(A.points).filter((s) => s.h)) {
+        for (const v of segs(B.points).filter((s) => !s.h && s.a.x === s.b.x)) { // a fallback line may have slanted stretches: not checked
+          const x = v.a.x
+          const y = h.a.y
+          if (!(x > lo(h) + 0.01 && x < hi(h) - 0.01 && y > lo(v) + 0.01 && y < hi(v) - 0.01)) continue
+          const has = [...(A.bridges || []), ...(B.bridges || [])].some((p) => Math.abs(p.x - x) < 0.5 && Math.abs(p.y - y) < 0.5)
+          if (!has) out.push({ ids: [A.id, B.id], at: { x, y } })
+        }
+      }
+    }
+  }
+  return out
 }
