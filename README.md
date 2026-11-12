@@ -15,6 +15,10 @@ to someone else doesn't depend on the current owner being present.
 - **Schematic routing**: wires are routed around device boxes with bridges at
   crossings, devices never overlap, spacing follows cable length, and conduit
   bands show wires that run together.
+- **Snap to grid on schematics**: a Snap button (on by default) snaps devices,
+  tabs, bend points and zone shapes to a faint 16 unit grid; hold Alt while
+  dragging to flip it. Devices you place by hand stay put when you click
+  Auto-arrange once; click it again to arrange everything.
 - **Cables between devices, circuits worked out for you**: you record
   cables from the supply side to the load side of devices (battery, fuse,
   switch, lamp) and the circuits follow. A circuit is what one fuse or
@@ -88,7 +92,9 @@ to someone else doesn't depend on the current owner being present.
   devices (or create them from a palette by role), drag a wire from one to
   another and the cable and its circuit exist; wires are right-angled and
   coloured by conductor, can be bent, and cables to devices on other pages
-  show as labelled stubs. Auto-arrange lays a page out from the supply.
+  show as labelled stubs. Auto-arrange lays a page out from the supply (the
+  first click leaves devices you placed by hand alone, the second arranges
+  everything).
   Delete removes the selected wire (with an Undo message; it is deleted for
   good when the message ends) or takes a selected device off the page only.
 - A **connect tool** on the floorplan: pick the From and To devices, click

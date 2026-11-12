@@ -92,12 +92,12 @@ like cables, and the first Auto-arrange click leaves hand-placed devices alone.
 
 ## Implementation Steps
 
-- [ ] Snap to grid: helpers, drag integration, toggle and grid drawing, with
+- [x] Snap to grid: helpers, drag integration, toggle and grid drawing, with
       tests.
-- [ ] Stub bridges: reproduce, fix, regression check.
-- [ ] Hand-placed mark: migration 16, store, drag and drop marking, stage one
+- [x] Stub bridges: reproduce, fix, regression check.
+- [x] Hand-placed mark: migration 16, store, drag and drop marking, stage one
       and two behaviour, with tests.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the three boxes in
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the three boxes in
       issue #14.
 
 ## Files to Create/Modify

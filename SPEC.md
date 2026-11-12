@@ -549,6 +549,33 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   itself is never removed from a canvas. Escape cancels a drag, a popover or
   the selection; keys are ignored while an input, select or textarea has
   focus.
+- Snap to grid and hand-placed devices on the schematic canvas (plan 0028).
+  A "Snap" toolbar button turns a 16 unit grid on or off (on by default, the
+  choice kept per browser in local storage; 16 units is the router's lane
+  pitch, so snapped devices, ports, tabs and lanes line up). While it is on a
+  faint dot grid is drawn under everything, in a theme colour for the day and
+  night themes, with dots that keep their size on screen when zooming and
+  disappear when they would be too dense to read. A dragged device snaps by its
+  top-left corner (a device dropped from the palette too), an off-page tab by
+  its top-left corner, a wire bend point by its coordinates, a dragged wire
+  stretch by its perpendicular coordinate (so it stays orthogonal and on a
+  lane), and a zone shape when it is moved, resized (Shift for a circle or
+  square follows the shorter side on corner handles) or has a polygon corner
+  moved. Holding Alt while dragging flips the choice (free movement with snap
+  on, snapping with snap off), also when pressed or released in the middle of
+  a drag; touch has no override, only the button. The wires are routed live
+  from the snapped positions. A device is "hand-placed" when the user drags it
+  or drops it at a chosen spot on the page (a device added from a list or by a
+  click on the palette, and a device placed by Auto-arrange, stay free). The
+  first Auto-arrange click arranges only the free devices and leaves the
+  hand-placed ones where they are; the second click (the full arrange) moves
+  everything and clears the marks together with the wire bend points and the
+  tabs the user placed, as one action that Undo reverses, marks included. A
+  page saved before the mark existed has all devices free, so its first click
+  moves them as before. A stretch of a line that crosses another where the
+  horizontal stretch has no room for a hop is hopped by the vertical stretch
+  instead, and hops that would touch are drawn as one wide hop, so no crossing
+  of a stub line with a wire or another stub line is a plain intersection.
 - A decluttered floorplan (plan 0027). A device is a coloured dot with no
   name by default; a name shows for the hovered device, the selected device,
   and the devices of a highlighted circuit, a selected conduit or a selected

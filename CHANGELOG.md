@@ -5,6 +5,29 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Snap to grid in the schematic editor (issue #14, plan 0028). A Snap button
+  turns a 16 unit grid on or off (on by default, remembered per browser) and a
+  faint dot grid shows while it is on, in both themes. Devices and off-page
+  tabs snap by their top-left corner, wire bend points and dragged stretches
+  by their coordinates, zone shapes when moved, resized or a polygon corner is
+  moved. Hold Alt while dragging to flip the snap.
+- Auto-arrange stage one leaves hand-placed devices alone (issue #14). A device
+  you drag or drop at a chosen spot is marked (new column
+  `schematic_devices.hand_placed`, migration 16; older pages have every device
+  free). The first click arranges only the other devices; the second click
+  arranges everything and clears the marks with the bend points and tabs, and
+  Undo restores them.
+
+### Fixed
+
+- Crossings of an off-page stub line with a wire or another stub line were
+  sometimes plain intersections (issue #14). Hops that lay closer together than
+  one hop were dropped, and a crossing near the end of a horizontal stretch got
+  none. Close hops are now drawn as one wide hop, and the vertical line hops
+  where the horizontal one has no room.
+
 ## [0.7.1] - 2026-11-12
 
 ### Changed

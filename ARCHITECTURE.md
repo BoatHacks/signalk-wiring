@@ -394,7 +394,8 @@ CREATE TABLE schematic_devices (  -- 0016: the devices on a page and where they 
   position INTEGER NOT NULL,
   device_id TEXT NOT NULL REFERENCES devices(id),
   x REAL NOT NULL,
-  y REAL NOT NULL
+  y REAL NOT NULL,
+  hand_placed INTEGER NOT NULL DEFAULT 0  -- 0028: 1 when the user dragged or dropped the device
 );
 
 CREATE TABLE schematic_wires (    -- 0016: only cables the user bent
@@ -447,7 +448,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are fifteen migrations (the third to fifteenth are described below): plan 0008's field
+every subsequent restart. There are sixteen migrations (the third to sixteenth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -768,5 +769,7 @@ Plan 0023 added the `schematic_zones` table (migration 14) for zone shapes (rect
 Plan 0024 added `devices.parent_id` and `schematics.enclosure_id` (migration 15) and `src/enclosures.js` (contents, path and boundary cables, mirrored in `public/enclosures.js`). Circuit derivation is untouched: cables end on the contained devices.
 
 Plan 0025 added router bundling (`bundleGroups`, parallel lanes beside one reference path per bundle, at most six bundles per page), the two-stage `arrangeStage` helper, `moveSegment` and `mergeShortJogs` for orthogonal segment dragging, and double-click re-routing of hand-routed wires.
+
+Plan 0028 added `schematic_devices.hand_placed` (migration 16, guarded with a `table_info` check, so safe to run twice; rows from before read as free). The schematic resource carries `handPlaced: true` on a placement only when set (a free device has no key); a write of the list replaces the marks. `public/snapGrid.js` holds the pure snap helpers (`snapValue`, `snapPoint`, `snapCorner`, `snapSegmentDelta`, `snapMoveShape`, `snapResizeShape`, the Alt rule `snapActive` and the local storage setting, default on, try/catch); `schematicView.js` applies them in one function that reads the Alt state of each pointer event and replays the last pointer position when Alt is pressed or released mid-drag. `arrangeFree` in `schematicLayout.js` keeps the hand-placed devices in stage one (the others take the auto layout shifted into their frame, and the overlap pass may move only them); stage two passes empty marks, bends and tabs to the same save and Undo puts them all back. `findBridges` in `wireRouter.js` keeps every crossing (no hop is dropped for lying near another), `pathToDWithBridges` draws hops that would touch as one wide half ellipse, and a crossing too near the end of the horizontal stretch is hopped by the vertical one (`{ x, y, v: true }`).
 
 Plan 0026 replaced the cheap drag routes with live routing through `createRouteThrottle` (one route at a time, 66 ms apart, latest request wins); the drop uses the same routing call.
