@@ -17,6 +17,7 @@ import { offerCableUndo, toast } from './canvasRemoval.js'
 import { matchesRemoved, readShowRemoved, writeShowRemoved } from './zones.js'
 import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import * as Z from './zoneShapes.js'
+import * as N from './snapGrid.js'
 import { midpoints } from './polygon.js'
 import { pageModel, insideText } from './enclosures.js'
 import { ensureInsidePage } from './insidePage.js'
@@ -259,6 +260,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const [armed, setArmed] = useState(false) // Auto-arrange has run and nothing was edited since
   const armedPending = useRef(null) // the edit key at the click, until the saved layout has come back
   const armedKey = useRef(null)
+  const [snapOn, setSnapOn] = useState(() => N.readSnap()) // snap to the 16 unit grid (plan 0028)
+  const lastMove = useRef(null) // the last pointer position of a drag, replayed when Alt is pressed or released
   const [preview, setPreview] = useState(null) // a wire being dragged: { a: {x,y}, b: {x,y}, targetId }
   const [popover, setPopover] = useState(null) // { start, at }
   const [moreForm, setMoreForm] = useState(null) // { cable?, prefill? }
@@ -408,6 +411,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   // while a bend point or a stretch is dragged, the viewBox stays as it was: the cheap routes drawn meanwhile must not rescale the page under the pointer
   const view = (drag.current && drag.current.frozen) || vb || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
   const fitNow = () => setVb(null)
+  const toggleSnap = () => { const v = !snapOn; setSnapOn(v); N.writeSnap(v) }
+  // one place decides: the toggle, flipped by the Alt key of this very event
+  const snapping = (e) => N.snapActive(snapOn, e && e.altKey)
 
   // ---- Coordinates ----
   const toCanvas = (e) => {
@@ -521,13 +527,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     for (let i = 2; ; i++) if (!taken.has(`${type} ${i}`.toLowerCase())) return `${type} ${i}`
   }
 
-  const createDevice = async (item, at) => {
+  const createDevice = async (item, at, snap = false) => {
     const c = at || centre()
     const id = newId()
     try {
       // A device made on an inside page goes into that enclosure.
       await putResource('wiringDevices', id, { name: uniqueName(item.type), type: item.type, role: item.role, ...(schematic.enclosureId ? { parentId: schematic.enclosureId } : {}) })
-      const next = tidied({ ...pos, [id]: { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) } }, [id])
+      const corner = { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) }
+      const next = tidied({ ...pos, [id]: snap ? N.snapPoint(corner) : corner }, [id])
       setPos(next)
       await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id])
       setSelection({ type: 'device', id })
@@ -742,6 +749,19 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     return () => document.removeEventListener('keydown', onKey)
   })
 
+  // Pressing or releasing Alt in the middle of a drag changes the snap at once,
+  // without the pointer having to move.
+  useEffect(() => {
+    const onAlt = (e) => {
+      if (e.key !== 'Alt' || !drag.current || !drag.current.moved || !lastMove.current) return
+      e.preventDefault()
+      onPointerMove({ ...lastMove.current, altKey: e.type === 'keydown' })
+    }
+    document.addEventListener('keydown', onAlt)
+    document.addEventListener('keyup', onAlt)
+    return () => { document.removeEventListener('keydown', onAlt); document.removeEventListener('keyup', onAlt) }
+  })
+
   // ---- Pointer handling ----
   const onPointerDown = (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return
@@ -869,35 +889,44 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const d = drag.current
     if (!d) return
     if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > MOVE_SLOP_PX) d.moved = true
+    lastMove.current = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey }
     if (!d.moved) return
     if (d.kind === 'move') {
       const p = toCanvas(e)
-      setPos((cur) => ({ ...cur, [d.id]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
+      const at = snapping(e) ? N.snapCorner(p, d.dx, d.dy) : { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) }
+      setPos((cur) => ({ ...cur, [d.id]: at }))
     } else if (d.kind === 'stub') {
       const p = toCanvas(e)
-      setStubPos((cur) => ({ ...cur, [d.stub.cableId]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
+      const at = snapping(e) ? N.snapCorner(p, d.dx, d.dy) : { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) }
+      setStubPos((cur) => ({ ...cur, [d.stub.cableId]: at }))
     } else if (d.kind === 'shape-move') {
       const p = toCanvas(e)
-      setShapes((cur) => Z.withShape(cur, Z.moveShape(d.orig, Math.round(p.x - d.px), Math.round(p.y - d.py))))
+      const dx = Math.round(p.x - d.px)
+      const dy = Math.round(p.y - d.py)
+      setShapes((cur) => Z.withShape(cur, snapping(e) ? N.snapMoveShape(d.orig, dx, dy) : Z.moveShape(d.orig, dx, dy)))
     } else if (d.kind === 'shape-resize') {
       const p = toCanvas(e)
-      setShapes((cur) => Z.withShape(cur, Z.resizeShape(d.orig, d.handle, p.x, p.y, e.shiftKey)))
+      setShapes((cur) => Z.withShape(cur, snapping(e) ? N.snapResizeShape(d.orig, d.handle, p.x, p.y, e.shiftKey) : Z.resizeShape(d.orig, d.handle, p.x, p.y, e.shiftKey)))
     } else if (d.kind === 'corner') {
       const p = toCanvas(e)
-      const points = d.orig.points.map((q, i) => (i === d.index ? { x: Math.round(p.x), y: Math.round(p.y) } : q))
+      const at = snapping(e) ? N.snapPoint(p) : { x: Math.round(p.x), y: Math.round(p.y) }
+      const points = d.orig.points.map((q, i) => (i === d.index ? at : q))
       setShapes((cur) => Z.withShape(cur, Z.withPoints(d.orig, points)))
     } else if (d.kind === 'seg') {
       const p = toCanvas(e)
       const a = d.path[d.index]
       const horiz = a.y === d.path[d.index + 1].y
-      const moved = G.moveSegment(d.path, d.index, Math.round(horiz ? p.y - d.mid.y : p.x - d.mid.x))
+      const raw = Math.round(horiz ? p.y - d.mid.y : p.x - d.mid.x)
+      const delta = snapping(e) ? N.snapSegmentDelta(horiz ? a.y : a.x, raw) : raw
+      const moved = G.moveSegment(d.path, d.index, delta)
       d.result = moved.slice(1, -1)
       setBends((cur) => ({ ...cur, [d.wireId]: d.result }))
     } else if (d.kind === 'bend') {
       const p = toCanvas(e)
+      const at = snapping(e) ? N.snapPoint(p) : { x: Math.round(p.x), y: Math.round(p.y) }
       setBends((cur) => {
         const list = [...(cur[d.wireId] || [])]
-        list[d.index] = { x: Math.round(p.x), y: Math.round(p.y) }
+        list[d.index] = at
         return { ...cur, [d.wireId]: list }
       })
     } else if (d.kind === 'wire') {
@@ -943,6 +972,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const onPointerUp = (e) => {
     const d = drag.current
     drag.current = null
+    lastMove.current = null
     if (!d) return
     if (d.kind === 'move' && !d.moved) lastTap.current = { id: d.id, t: Date.now(), x: e.clientX, y: e.clientY }
     if (d.kind === 'move' && d.moved) {
@@ -973,7 +1003,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     e.preventDefault()
     let item
     try { item = JSON.parse(e.dataTransfer.getData('text/plain')) } catch (err) { return }
-    if (item && item.type && item.role) createDevice(item, toCanvas(e))
+    if (item && item.type && item.role) createDevice(item, toCanvas(e), snapping(e))
   }
 
   // ---- Highlighting ----
@@ -1041,6 +1071,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${Z.addableZones(zones, shapes).map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
         </select>
         <button type="button" class=${liveOn ? 'active' : ''} data-testid="schematic-live" onClick=${() => { setLiveOn((v) => !v); onError(null) }}>${liveOn ? 'Live: on' : 'Live'}</button>
+        <button type="button" class=${snapOn ? 'active' : ''} data-testid="snap-toggle" aria-pressed=${snapOn ? 'true' : 'false'} title="Snap to a 16 unit grid. Hold Alt while dragging to flip it." onClick=${toggleSnap}>${snapOn ? 'Snap: on' : 'Snap'}</button>
         <button type="button" data-testid="auto-arrange" onClick=${autoArrange} disabled=${busy || boxes.length === 0}>${armed ? G.ARRANGE_ALL_LABEL : G.ARRANGE_LABEL}</button>
         <button type="button" onClick=${() => zoomAt(ZOOM_STEP)}>＋</button>
         <button type="button" onClick=${() => zoomAt(1 / ZOOM_STEP)}>－</button>
@@ -1088,6 +1119,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             viewBox="${view.x} ${view.y} ${view.w} ${view.h}"
             onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onDblClick=${onDblClick}
             onDragOver=${(e) => e.preventDefault()} onDrop=${onDrop}>
+            ${snapOn && html`<${SnapGrid} view=${view} scale=${scaleX} />`}
             <${ZoneShapes} shapes=${shown} nameOf=${zoneName} selectedId=${selection && selection.type === 'zone' ? selection.id : null} />
             ${bands.map((b) => html`<${ConduitBand} key=${b.conduitId} band=${b} />`)}
             ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName}
@@ -1158,6 +1190,25 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
 // Zone shapes on the background layer: they never take pointer events, the
 // canvas hit-tests their outline and label itself.
+// The faint dot grid shown while snapping is on. The dots sit on the multiples
+// of the grid (the pattern tile is shifted half a cell so a whole dot fits in
+// it) and keep their size on screen when zooming; too dense to be useful, the
+// grid is left out.
+function SnapGrid ({ view, scale }) {
+  const g = N.GRID
+  if (g * scale < 6) return null
+  const r = Math.max(0.5, 1.1 / scale)
+  return html`
+    <g class="sch-grid" data-testid="snap-grid" pointer-events="none">
+      <defs>
+        <pattern id="sch-grid-dots" x=${-g / 2} y=${-g / 2} width=${g} height=${g} patternUnits="userSpaceOnUse">
+          <circle cx=${g / 2} cy=${g / 2} r=${r} class="sch-grid-dot" />
+        </pattern>
+      </defs>
+      <rect x=${view.x} y=${view.y} width=${view.w} height=${view.h} fill="url(#sch-grid-dots)" />
+    </g>`
+}
+
 function ZoneShapes ({ shapes, nameOf, selectedId }) {
   return html`
     <g class="sch-zones">

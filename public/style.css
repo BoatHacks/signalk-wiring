@@ -43,6 +43,7 @@
   --live-off: #8a8a85;
   --live-unknown: #c9c4a8;
   --wire-highlight: #e0a800;
+  --grid-dot: #b9b6ac;
 }
 
 [data-theme="dark"] {
@@ -85,6 +86,7 @@
   --live-on: #ff5c47;
   --live-off: #4d332e;
   --live-unknown: #7a5048;
+  --grid-dot: #5a3d37;
 }
 
 * { box-sizing: border-box; }
@@ -771,6 +773,7 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-device.live-fixed .sch-device-box, .sch-device.live-locked .sch-device-box, .sch-device.live-none .sch-device-box { cursor: not-allowed; }
 
 /* Port blocks (devices whose terminals name ports) */
+.sch-grid-dot { fill: var(--grid-dot); fill-opacity: 0.8; }
 .sch-zone-shape { fill: var(--link); fill-opacity: 0.07; stroke: var(--link); stroke-width: 2; pointer-events: none; }
 .sch-zone.selected .sch-zone-shape { fill-opacity: 0.12; stroke-width: 3; }
 .sch-zone-label { font-size: 13px; font-weight: 600; fill: var(--link); pointer-events: none; }
