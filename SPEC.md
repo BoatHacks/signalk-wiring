@@ -549,6 +549,28 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   itself is never removed from a canvas. Escape cancels a drag, a popover or
   the selection; keys are ignored while an input, select or textarea has
   focus.
+- A decluttered floorplan (plan 0027). A device is a coloured dot with no
+  name by default; a name shows for the hovered device, the selected device,
+  and the devices of a highlighted circuit, a selected conduit or a selected
+  wire run. Names are about three quarters of the former size with a thin halo
+  in the surface colour, and a name that would run past the edge of the
+  drawing is placed on the other side of its marker. Markers that would
+  overlap (closer than the marker diameter plus 4 screen pixels, so zooming
+  in splits them) collapse into a numbered marker in the style of the
+  enclosure count; clicking it lists the devices with links to them. A
+  selected or highlighted device is never inside a cluster, and clusters are
+  only formed in the Select tool, so the other tools reach every device. A
+  "Show" menu on each plan has switches for Names, Devices, Cables and
+  Conduits and a role filter listing the roles that exist on the plan; the
+  choices are kept per browser in local storage, not on the server, and the
+  page works with storage blocked. While a device, wire run, circuit or
+  conduit is selected (Select and Draw route tools) everything outside it is
+  drawn at about 20 percent opacity but stays clickable. Where several wire
+  runs, or several conduits, run along the same segment (ends within 3 screen
+  pixels) they are drawn as one thicker line with a count at its midpoint;
+  clicking it highlights its members and lists them, and picking one selects
+  it. The route being edited is never bundled. Only segments with matching
+  ends are bundled, not partial overlaps.
 - A Connect tool on the floorplan, beside Select, Place device and Draw
   route: click the From device (supply side), then the To device, then the
   route waypoints on the plan, then Finish. The same popover asks the

@@ -86,11 +86,11 @@ off, and a selection fades everything else.
 
 ## Implementation Steps
 
-- [ ] Label rule, halo and edge placement, with tests.
-- [ ] Marker clusters and the cluster list, with tests.
-- [ ] Layer menu, role filter and focus on selection, with tests.
-- [ ] Bundled routes with a count, with tests.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
+- [x] Label rule, halo and edge placement, with tests.
+- [x] Marker clusters and the cluster list, with tests.
+- [x] Layer menu, role filter and focus on selection, with tests.
+- [x] Bundled routes with a count, with tests.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and tick the boxes in issue
       #21.
 
 ## Files to Create/Modify

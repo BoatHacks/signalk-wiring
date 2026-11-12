@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- The floorplan is decluttered (issue #21, plan 0027). Device names show only
+  for the hovered or selected device and for the devices of a highlighted
+  circuit, conduit or wire run, smaller and with a halo, and stay inside the
+  drawing at its edge. Overlapping markers collapse into numbered clusters
+  that list their devices when clicked. A new Show menu switches Names,
+  Devices, Cables and Conduits and filters by role, remembered per browser.
+  Selecting something fades the rest. Cables or conduits along the same
+  segment are drawn as one thicker line with a count; click it to list and
+  select them.
+
 ## [0.7.0] - 2026-11-09
 
 ### Changed
