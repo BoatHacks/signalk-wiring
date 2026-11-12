@@ -682,6 +682,12 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-device.role-storage .sch-device-box { stroke: var(--marker-storage); }
 .sch-device.role-distribution .sch-device-box { stroke: var(--marker-distribution); }
 .sch-device.role-converter .sch-device-box { stroke: var(--marker-converter); }
+/* Device color (plan 0030): outline and tint through variables set on the box;
+   the role outline above applies only when no color is set. Later rules (lit,
+   live) still win, and the night theme uses the dimmed red pair. */
+.sch-device.has-color { --c-stroke: var(--box-stroke); --c-fill: var(--box-fill); }
+[data-theme="dark"] .sch-device.has-color { --c-stroke: var(--box-stroke-night); --c-fill: var(--box-fill-night); }
+.sch-device.has-color .sch-device-box { stroke: var(--c-stroke); fill: var(--c-fill); }
 .sch-device.selected .sch-device-box { stroke-width: 3; }
 .sch-device.dim { opacity: 0.3; }
 .sch-device.lit .sch-device-box { stroke: var(--wire-highlight); stroke-width: 3; }

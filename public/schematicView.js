@@ -6,6 +6,7 @@ import { TYPE_SUGGESTIONS } from './deviceTypes.js'
 import { roleLabel } from './roles.js'
 import * as G from './schematic.js'
 import { startValues } from './quickCable.js'
+import { boxColors } from './colorTone.js'
 import { CablePopover } from './cablePopover.js'
 import { circuitsOfCable, cableTitle, CONDUCTOR_LABELS } from './cableForm.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
@@ -1264,10 +1265,16 @@ function ZoneHandles ({ shape }) {
 }
 
 function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
+  // A device color (plan 0030) sets the outline and a tint fill through
+  // variables; the stylesheet picks the day or the night pair.
+  const colors = boxColors(device.schematicBoxColor)
+  const colorStyle = colors
+    ? `--box-stroke:${colors.stroke};--box-fill:${colors.fill};--box-stroke-night:${colors.nightStroke};--box-fill-night:${colors.nightFill}`
+    : undefined
   const liveClass = live ? ` live-${live.look}${live.clickable ? ' live-clickable' : ''}` : ''
-  const cls = `sch-device role-${device.role || 'consumer'}${device.isEnclosure ? ' sch-enclosure' : ''}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}${liveClass}`
+  const cls = `sch-device role-${device.role || 'consumer'}${device.isEnclosure ? ' sch-enclosure' : ''}${colors ? ' has-color' : ''}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}${liveClass}`
   return html`
-    <g class=${cls} transform="translate(${box.x}, ${box.y})" data-device=${box.id} data-live=${live ? live.look : undefined}>
+    <g class=${cls} transform="translate(${box.x}, ${box.y})" style=${colorStyle} data-device=${box.id} data-live=${live ? live.look : undefined}>
       ${live && live.title && html`<title>${live.title}</title>`}
       <rect width=${box.w} height=${box.h} rx="5" class="sch-device-box" />
       <text x=${box.w / 2} y="14" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
