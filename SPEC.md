@@ -588,6 +588,29 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   horizontal stretch has no room for a hop is hopped by the vertical stretch
   instead, and hops that would touch are drawn as one wide hop, so no crossing
   of a stub line with a wire or another stub line is a plain intersection.
+- Touch polish for a large touch screen or tablet (plan 0031). On the
+  schematic canvas and the floorplan, one finger keeps its meaning (drag a
+  device, a wire handle, a tab, a marker or the empty canvas); two fingers pan
+  and pinch zoom the view around their midpoint, within the same zoom limits
+  as the buttons. A second finger cancels a running one-finger drag the way
+  Escape does (the start is restored, nothing is saved); lifting one finger
+  ends the gesture and the finger left does nothing until it is lifted. The
+  fingers must move 6 px before a gesture starts. The wheel and the zoom
+  buttons are unchanged. When the pressing pointer is a finger (read per
+  press, so a hybrid device behaves right), terminal dots, bend and midpoint
+  handles, zone corners and resize handles, the connect handle, off-page tabs,
+  floorplan device and waypoint markers and cluster markers take presses in an
+  invisible area of about 44 px on screen; nothing looks different, and a
+  mouse or pen sees no change. Where areas of neighbours would overlap, the
+  nearer target wins and no area covers another target's centre; over a device
+  box the box (a move) wins beyond the usual handle radius. The quick cable
+  popover and the cluster and bundle lists open fully inside the canvas, clear
+  of the finger, below the point or flipped above it, and scroll inside when
+  the canvas is too small. The canvases switch off the browser's own pinch
+  zoom, pull-to-refresh, text selection, callout and tap highlight; the rest
+  of the page uses touch-action manipulation, so buttons react without the
+  double-tap delay. Double-tapping a device still opens it. Phone layouts, a
+  night theme review and a long-press action are not part of this.
 - A decluttered floorplan (plan 0027). A device is a coloured dot with no
   name by default; a name shows for the hovered device, the selected device,
   and the devices of a highlighted circuit, a selected conduit or a selected

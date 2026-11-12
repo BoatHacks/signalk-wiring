@@ -19,6 +19,12 @@ to someone else doesn't depend on the current owner being present.
   tabs, bend points and zone shapes to a faint 16 unit grid; hold Alt while
   dragging to flip it. Devices you place by hand stay put when you click
   Auto-arrange once; click it again to arrange everything.
+- **Touch screens and tablets**: on the schematic and the floorplan, two
+  fingers pan and pinch zoom while one finger keeps dragging devices, handles
+  and markers (a second finger cancels the drag, nothing is saved). Small
+  targets get a larger invisible hit area for fingers only, popovers stay on
+  screen, and the browser's own pinch, pull-to-refresh and text selection stay
+  out of the canvases. Not yet checked on real touch hardware.
 - **Device colors**: give a device a schematic box color (hex text or a color
   picker, empty for the theme color). Its schematic box gets that outline and
   a light tint as fill, enclosures included, and the red night theme dims it.

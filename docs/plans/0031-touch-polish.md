@@ -90,10 +90,10 @@ screen, and the browser's own gestures stop interfering with the canvases.
 
 ## Implementation Steps
 
-- [ ] Pinch and two-finger pan on both canvases, with tests.
-- [ ] Touch target hit areas, with tests.
-- [ ] Popover placement and the browser guards, with tests.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, a real-touch checklist, and a
+- [x] Pinch and two-finger pan on both canvases, with tests.
+- [x] Touch target hit areas, with tests.
+- [x] Popover placement and the browser guards, with tests.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, a real-touch checklist, and a
       comment on issue #12 listing what is done and what remains.
 
 ## Files to Create/Modify
@@ -111,3 +111,30 @@ screen, and the browser's own gestures stop interfering with the canvases.
 ## Open questions
 
 None. The decisions and the reviewed defaults are above.
+
+## Real-touch checklist (for a pass on the real touch screen)
+
+Tried only in headless Chromium with emulated touch, so please check these on
+the real screen:
+
+1. Schematic: pinch out and in with two fingers; the view zooms around the
+   fingers. Drag two fingers together; the view pans. Rotating the fingers
+   changes nothing.
+2. Start dragging a device with one finger, then put a second finger down: the
+   device jumps back and nothing is saved. Lift one finger: the view stays
+   still until both are up.
+3. Floorplan: the same pinch and pan; drag a marker with one finger, then add
+   a second finger and see it return.
+4. Tap and drag a terminal dot, the small connect handle, a bend handle and a
+   midpoint handle with a fingertip about 1 cm off target; they should still
+   take the press. Densely packed terminals should pick the nearer one.
+5. Tap a tiny off-page tab and a floorplan marker or cluster number just
+   outside the drawn shape.
+6. Draw a wire near each screen edge: the quick cable popover stays fully on
+   screen, clear of the fingertip, and scrolls inside when the screen is small.
+   Open a cluster list near the right and bottom edges.
+7. While on a canvas, the page does not zoom, scroll, pull to refresh or select
+   text. Buttons react at once, without the double-tap delay.
+8. Double-tap a device on the schematic and on the floorplan: its page opens.
+9. With a mouse (on a hybrid device if you have one): nothing about handle
+   sizes or panning has changed.

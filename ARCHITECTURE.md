@@ -786,3 +786,35 @@ detailed set is drawn. `simpleIconSvg(key, size)` gives inline markup. Nothing i
 the app displays these icons yet; a device's attached image stays the only icon.
 
 Plan 0030 added `devices.schematic_box_color` and `devices.schematic_icon_color` (migration 17, TEXT, nullable, guarded with a `table_info` check, so safe to run twice; old rows read null). `Store._checkColors` validates on create and update: empty or null clears, `#rrggbb` or `#rgb` is accepted (expanded, lower case), anything else throws a message; changes are logged like any field. The device resource serves them as `schematicBoxColor` and `schematicIconColor`. The device form has a `color` field type (`ColorField` in `app.js`: hex text, native picker kept in sync, Clear, inline message; `colorFieldState` in `deviceFields.js` decides validity and an invalid value blocks the save). `public/colorTone.js` is pure: `parseHex`, `normalizeHex`, `boxFill` (18 percent mix into a surface), `nightTone` (luminance mapped to a dim red, capped at `NIGHT_MAX_RED`) and `boxColors`. `DeviceShape` in `schematicView.js` sets the four results as inline custom properties on the box group and adds `has-color`; `style.css` picks the day or night pair (`--c-stroke`, `--c-fill`) at the same specificity as the role outline and before the selected, highlighted and live rules, so those still win. The icon color is not drawn.
+
+## Touch polish (plan 0031)
+
+Three pure modules, no DOM, tested without a browser. `public/touchGestures.js`:
+`pinchStep(prev, next, deadZone)` takes two touch points before and after a
+move and returns the scale, the midpoint move and `idle` (inside the 6 px dead
+zone); `pinchView(view, rect, step, limits)` returns the new viewBox so the
+drawing point under the old midpoint ends up under the new one, with the width
+bounded by `limits` (the floorplan passes its zoom span, the schematic has no
+limit, like its buttons). `public/touchTargets.js`: `hitRadius(kind,
+pointerType, zoom)` (the base radius for a mouse or pen, the radius that gives
+44 px for a finger), `rectPad` for tabs and `pickTarget`, which cuts every
+candidate's radius to half the distance to its nearest neighbour (never below
+the base) and returns the nearest hit. `public/popoverPlace.js`:
+`placePopover(anchor, size, viewport, margin, gap)` centres on the anchor, opens
+below, flips above, shrinks to the roomier side and returns `maxWidth` and
+`maxHeight`.
+
+Both canvases track touch pointers by `pointerId` in a capture-phase handler on
+the svg (so a second finger never reaches a marker handler). The second finger
+cancels the running drag (`cancelDrag` in the schematic restores positions,
+routes, tabs and shapes from the saved page; the floorplan drops the ghost) and
+starts a gesture; pointer moves of the gesture update the viewBox from a
+synchronously kept view, so rapid events do not drift. The hit areas are
+geometric, not extra DOM: the schematic's `onPointerDown` and the floorplan's
+svg `onPointerDown` read `e.pointerType` of that press and, for a finger, pick
+the target with `pickTarget`; the mouse path is the old code. The popover and
+the cluster and bundle lists use `placePopover` with the wrap's size (the list
+height is estimated from its row count). CSS: `touch-action: none`,
+`overscroll-behavior: contain`, `user-select: none`, no callout or tap highlight
+on `.schematic-canvas` and `.floorplan-canvas`; `touch-action: manipulation` on
+`html, body`.
