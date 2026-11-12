@@ -47,6 +47,22 @@ module.exports = function (app) {
         title: 'Switch light/dark theme automatically',
         description: 'The webapp follows vessels.self.environment.sun (day, dawn, sunrise, sunset, dusk, night) or, failing that, environment.mode (day or night) instead of the manual toggle. Needs a plugin that publishes one of those paths.',
         default: false
+      },
+      voltageDropLimitCritical: {
+        type: 'number',
+        title: 'Voltage drop limit, critical loads (%)',
+        description: 'The cable checks warn when a cable drops more than this share of the circuit voltage on a circuit that has a critical device (bilge pump, refrigerator, autopilot, navigation light, windlass). Advisory only. 0.5 to 20.',
+        minimum: 0.5,
+        maximum: 20,
+        default: 3
+      },
+      voltageDropLimitNormal: {
+        type: 'number',
+        title: 'Voltage drop limit, other loads (%)',
+        description: 'The cable checks warn when a cable drops more than this share of the circuit voltage on any other circuit. Advisory only. 0.5 to 20.',
+        minimum: 0.5,
+        maximum: 20,
+        default: 10
       }
     }
   }

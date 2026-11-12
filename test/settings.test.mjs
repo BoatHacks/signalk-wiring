@@ -21,3 +21,8 @@ test('colour placeholder follows the convention, freestyle has none', () => {
   assert.equal(colorPlaceholder('freestyle'), '')
   assert.equal(colorPlaceholder('unknown'), '')
 })
+
+test('the webapp defaults carry the 3 and 10 percent voltage drop limits', () => {
+  assert.equal(DEFAULT_SETTINGS.voltageDropLimitCritical, 3)
+  assert.equal(DEFAULT_SETTINGS.voltageDropLimitNormal, 10)
+})

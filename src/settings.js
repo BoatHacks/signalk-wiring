@@ -3,6 +3,17 @@
 const CONVENTIONS = ['freestyle', 'abyc-e11', 'din-en-iso-13297']
 const GAUGE_UNITS = ['AWG', 'mm2']
 const LENGTH_UNITS = ['m', 'ft']
+const DROP_LIMIT_MIN = 0.5
+const DROP_LIMIT_MAX = 20
+const DROP_LIMIT_CRITICAL = 3
+const DROP_LIMIT_NORMAL = 10
+
+// A voltage drop limit in percent: a number from 0.5 to 20, else the default.
+function dropLimit (value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= DROP_LIMIT_MIN && value <= DROP_LIMIT_MAX
+    ? value
+    : fallback
+}
 
 // Plugin options come from the admin UI's config form and may be missing
 // (first start) or stale (an option value removed in a later version), so
@@ -13,7 +24,9 @@ function resolveSettings (options) {
     convention: CONVENTIONS.includes(o.convention) ? o.convention : 'freestyle',
     defaultGaugeUnit: GAUGE_UNITS.includes(o.defaultGaugeUnit) ? o.defaultGaugeUnit : 'AWG',
     defaultLengthUnit: LENGTH_UNITS.includes(o.defaultLengthUnit) ? o.defaultLengthUnit : 'm',
-    autoTheme: o.autoTheme === true
+    autoTheme: o.autoTheme === true,
+    voltageDropLimitCritical: dropLimit(o.voltageDropLimitCritical, DROP_LIMIT_CRITICAL),
+    voltageDropLimitNormal: dropLimit(o.voltageDropLimitNormal, DROP_LIMIT_NORMAL)
   }
 }
 
@@ -41,4 +54,4 @@ function createSettingsProvider (settings) {
   }
 }
 
-module.exports = { resolveSettings, createSettingsProvider }
+module.exports = { DROP_LIMIT_MIN, DROP_LIMIT_MAX, resolveSettings, createSettingsProvider }
