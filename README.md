@@ -83,7 +83,10 @@ to someone else doesn't depend on the current owner being present.
   already removed, which can then be deleted permanently (with its history and
   attachments) from the Cables tab.
 - A **change log** per record: every create/edit/removal is timestamped
-  with a before/after diff, viewable from the webapp.
+  with a before/after diff, viewable from the webapp. The **Changes** tab
+  shows what changed lately across the whole system, grouped by record and
+  written in words, with filters for date range, kind and text. A record
+  deleted for good leaves a one-line "permanently deleted" entry.
 - The same look as the stowage webapp: a header bar, an underlined tab
   strip, and a red-shifted **night theme** that protects night vision,
   switched by a button or, with the `autoTheme` option, by the vessel's

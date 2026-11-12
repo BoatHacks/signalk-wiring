@@ -136,7 +136,10 @@ them.
   appends a **change log entry** rather than silently overwriting history.
 - `removed → gone`: a removed cable can be deleted permanently on a second,
   confirmed step (the Cables tab). This erases the cable with its conductors,
-  conduit assignments, schematic bends, attachments and change log. On the
+  conduit assignments, schematic bends, attachments and change log, except
+  for one entry "permanently deleted" that stays in the log with the name and
+  kind of the record (this holds for every kind that can be purged), so the
+  Changes tab can show what disappeared. On the
   schematic canvas and the floorplan, removing a cable shows the undo message
   and, when it ends without an Undo, deletes the cable the same way, with no
   confirm dialog and no second step. A removed device, conduit or schematic can also be deleted permanently
@@ -492,6 +495,22 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 - An auto-generated circuit diagram (devices joined by cables, negative
   returns dotted) rendered from the derived circuit, per circuit.
 - A change log view per record, showing prior edits.
+- A **Changes** tab (plan 0033, issue #13) beside the others: what changed
+  lately across the whole system, grouped by record (device, cable, conduit,
+  zone, plan, circuit or schematic), groups ordered by their latest change,
+  newest first. Each entry says what changed in words ("gauge: 6 to 10 mm2",
+  "terminals added: B+"), with its time in the browser's local time; the
+  group header links to the record, or says "permanently deleted" with no
+  link once the record is gone for good. Filters: date range (today, 7 days,
+  30 days which is the default, or custom dates), kind (several can be
+  picked) and a text search over names and what happened. A group shows its
+  latest 5 entries with "Show N more", and the list of groups loads 20 at a
+  time with "Show more records". Circuit entries are hidden unless the
+  Circuits kind is picked, because circuits follow the cables by
+  themselves. Device groups use the shared device label (icon and name). It
+  reads `GET /plugins/signalk-wiring/changelog` (admin login, like the
+  per-record log). Positions and layout changes on schematics and plans are
+  not logged, so they do not appear.
 - A settings panel for the installation's convention
   (ABYC E-11 / DIN EN ISO 13297 / freestyle), used only to drive UI
   labeling hints (e.g. suggested wire colors), never enforced.

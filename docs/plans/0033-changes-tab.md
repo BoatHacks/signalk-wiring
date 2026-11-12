@@ -74,10 +74,10 @@ be read one record at a time.
 
 ## Implementation Steps
 
-- [ ] The tombstone entry on purge, with tests.
-- [ ] The `GET /changelog` route and the group query, with tests.
-- [ ] `describeEntry` and the Changes tab.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, tick the boxes in issue #13.
+- [x] The tombstone entry on purge, with tests.
+- [x] The `GET /changelog` route and the group query, with tests.
+- [x] `describeEntry` and the Changes tab.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, tick the boxes in issue #13.
 
 ## Files to Create/Modify
 

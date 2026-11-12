@@ -79,7 +79,28 @@ Registered via `registerWithRouter(router)`. Owns:
   + their devices) shaped for a diagram renderer.
 - Derivation leftovers (`GET /plugins/signalk-wiring/derived`, readonly
   access): the battery banks and the warnings that belong to no circuit.
-- Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`).
+- Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`), and
+  across records for the Changes tab (`GET /plugins/signalk-wiring/changelog`,
+  plan 0033). Both are registered on the plain router, so they are admin-only
+  like attachments; the webapp reads them with the admin login it already
+  needs for writes. Query: `kind` (comma separated or repeated), `since` and
+  `until` (ISO times), `q` (record name or entry summary, case-insensitive),
+  `id` (one record only, used by "Show N more"), `limit` (groups, default 20,
+  at most 100), `cursor` and `entries` (entries per group, default 5, at most
+  1000). The result is `{ groups, nextCursor }`; a group has `kind`, `id`,
+  `name` (the current name, or for a record that is gone the name from its
+  newest entry that carries one), `status` (`active`, `removed` or `purged`
+  when the record no longer exists), `latest`, `units` (the unit columns of
+  the current record, so "6 to 10 mm2" can name its unit), `entries` (newest
+  first, parsed `diff`) and `more` (how many are not in `entries`). Groups
+  sort by their latest entry's time and rowid, newest first; the cursor is
+  that pair, so paging has no gaps or repeats. Circuit entries are left out
+  unless the `circuit` kind is asked for. `Store.changeGroups` does the query.
+- On every purge, `Store._eraseHistory` erases the record's change log and
+  inserts one entry (`summary` "permanently deleted", `diff_json` with the
+  `name` and `kind`; a cable is named by its label or its two ends). The
+  webapp's Changes tab (`public/changesView.js`, words in `public/changes.js`)
+  reads the route above.
 - Live view, switching and calibration routes live in `src/liveRoutes.js`
   (see §2.2.1), registered from `index.js` beside these.
 - Device icons (`GET /plugins/signalk-wiring/devices/:id/icon`), registered
