@@ -588,6 +588,8 @@ function changeSummary (existing, updated) {
   return 'updated'
 }
 
+const PURGED_SUMMARY = 'permanently deleted'
+
 class Store {
   constructor (dbPath) {
     this.db = new Database(dbPath)
@@ -1731,7 +1733,7 @@ class Store {
         this.db.prepare(`DELETE FROM ${table} WHERE wire_run_id = ?`).run(id)
       }
       this.db.prepare("DELETE FROM attachments WHERE owner_type = 'wireRun' AND owner_id = ?").run(id)
-      this.db.prepare("DELETE FROM change_log WHERE record_type = 'wireRun' AND record_id = ?").run(id)
+      this._eraseHistory('wireRun', id, cable)
       this.db.prepare('DELETE FROM wire_runs WHERE id = ?').run(id)
     })()
     this._afterWrite('wireRun')
@@ -1751,8 +1753,26 @@ class Store {
   _purgeOwned (kind, id) {
     const attachments = this.listAttachmentsByOwner(kind, id)
     this.db.prepare('DELETE FROM attachments WHERE owner_type = ? AND owner_id = ?').run(kind, id)
-    this.db.prepare('DELETE FROM change_log WHERE record_type = ? AND record_id = ?').run(kind, id)
+    this._eraseHistory(kind, id, this.get(kind, id))
     return attachments
+  }
+
+  // The name a record goes by in the change log: a cable has no name of its
+  // own, so it is its label or the two devices it joins.
+  recordName (kind, record) {
+    if (!record) return null
+    if (kind !== 'wireRun') return record.name || null
+    if (record.cable_label) return record.cable_label
+    const name = (id) => (this.get('device', id) || {}).name || '?'
+    return `${name(record.from_device_id)} to ${name(record.to_device_id)}`
+  }
+
+  // Erases a purged record's history and leaves one short entry in its place
+  // naming it, so the Changes tab can show what disappeared.
+  _eraseHistory (kind, id, record) {
+    const name = this.recordName(kind, record)
+    this.db.prepare('DELETE FROM change_log WHERE record_type = ? AND record_id = ?').run(kind, id)
+    this._logChange(kind, id, PURGED_SUMMARY, { name, kind })
   }
 
   // The cables, live or removed, that end on a device: as the cable's own ends
@@ -1878,4 +1898,4 @@ class Store {
   }
 }
 
-module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES, METER_UNITS }
+module.exports = { Store, PURGED_SUMMARY, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES, METER_UNITS }

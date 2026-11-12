@@ -611,7 +611,7 @@ test('DELETE /cables/:id/purge refuses a live cable and erases a removed one wit
   assert.equal(store.get('wireRun', cable.id), null)
   assert.equal(store.getAttachment(attachment.id), null)
   assert.equal(fs.existsSync(path.join(dataDir, 'attachments', `${attachment.id}.jpg`)), false)
-  assert.equal(store.changeLog('wireRun', cable.id).length, 0)
+  assert.deepEqual(store.changeLog('wireRun', cable.id).map((e) => e.summary), ['permanently deleted'])
   assert.equal(store.db.prepare('SELECT COUNT(*) n FROM wire_run_conductors WHERE wire_run_id = ?').get(cable.id).n, 0)
   assert.ok(store.get('wireRun', keep.id))
 
