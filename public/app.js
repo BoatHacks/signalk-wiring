@@ -42,6 +42,7 @@ import {
   CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
   chemistryFill, typeBatteryFill, socPathFill, installedAgeText, fractionToPercent, bankOfBattery, describeBank
 } from './batteries.js'
+import { ChangesTab } from './changesView.js'
 import { canBeIcon, iconChoice, attachmentKind } from './deviceIcons.js'
 import { DeviceIcon, DeviceLabel, DeviceIconSvg, iconSpace } from './deviceIcon.js'
 
@@ -2691,6 +2692,12 @@ function NotFoundNotice ({ message, onClose }) {
   `
 }
 
+// The Changes tab reads the devices once so a device group shows its icon.
+function ChangesFromApp () {
+  const { items } = useResourceList('wiringDevices')
+  return html`<${ChangesTab} devices=${items} routesBase=${ROUTES_BASE} />`
+}
+
 function AppBody () {
   const settings = useSettings()
   const [theme, toggleTheme] = useTheme(settings.autoTheme)
@@ -2713,7 +2720,7 @@ function AppBody () {
   const detailMissing = (nextTab) => () => missing(nextTab)(`That ${named[nextTab]} was not found.`)
   const nav = [
     ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'],
-    ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan']
+    ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan'], ['changes', 'Changes']
   ]
   const cableForm = (props) => html`<${CableForm} ...${props} />`
 
@@ -2749,6 +2756,7 @@ function AppBody () {
       ${tab === 'zones' && html`<${ZonesManager} />`}
       ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${cableForm}
         selectedId=${id} onSelect=${open('schematics')} onNotFound=${missing('schematics')} />`}
+      ${tab === 'changes' && html`<${ChangesFromApp} />`}
       ${tab === 'floorplan' && html`<${FloorplanTab} renderCableForm=${cableForm}
         planId=${id} onPlanChange=${(planId) => go({ tab: 'floorplan', id: planId })} onNotFound=${missing('floorplan')} />`}
       </main>

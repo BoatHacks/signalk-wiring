@@ -5,7 +5,7 @@
 // functions, so they are tested without a DOM; only App touches
 // window.location. Tools, forms, selections and zoom stay out of the URL.
 
-export const TABS = ['circuits', 'cables', 'devices', 'batteries', 'conduits', 'load', 'zones', 'schematics', 'floorplan']
+export const TABS = ['circuits', 'cables', 'devices', 'batteries', 'conduits', 'load', 'zones', 'schematics', 'floorplan', 'changes']
 export const DEFAULT_TAB = 'circuits'
 
 // Tabs whose route may carry an id.

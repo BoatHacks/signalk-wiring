@@ -53,3 +53,10 @@ test('round trip', () => {
     }
   }
 })
+
+test('changes tab: routes with no id', () => {
+  assert.ok(TABS.includes('changes'))
+  assert.equal(hashForState({ tab: 'changes', id: 'x' }), '#/changes')
+  assert.deepEqual(parseHash('#/changes'), { tab: 'changes', id: null })
+  assert.deepEqual(parseHash('#/changes/x'), { tab: 'changes', id: null })
+})

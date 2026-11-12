@@ -602,6 +602,16 @@ function loggedName (rows) {
   return null
 }
 
+// The units a record's numbers are in, so an entry that changed only a number
+// can still say "6 to 10 mm2".
+function unitsOf (record) {
+  const units = {}
+  if (record) {
+    for (const f of ['gauge_unit', 'length_unit', 'diameter_unit']) if (record[f]) units[f] = record[f]
+  }
+  return units
+}
+
 const PURGED_SUMMARY = 'permanently deleted'
 
 class Store {
@@ -1899,6 +1909,7 @@ class Store {
         if (list.length === 0) continue
       }
       groups.push({
+        record,
         kind: g.kind,
         id: g.id,
         name,
@@ -1925,6 +1936,7 @@ class Store {
         name: g.name,
         status: g.status,
         latest: g.latest,
+        units: unitsOf(g.record),
         entries: g.list.slice(0, entries),
         more: Math.max(0, g.total - entries)
       })),
