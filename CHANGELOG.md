@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-12
+
 ### Changed
 
 - The floorplan is decluttered (issue #21, plan 0027). Device names show only
