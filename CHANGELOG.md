@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-12
+
 ### Added
 
 - Cable checks (issue #10, plan 0034), advisory only. Every cable that carries current (signal, data, antenna and earth-only cables are exempt) is checked for size against the fuse or breaker that protects it and against its load, and for voltage drop over its round trip length. Warning badges ("cable too small", "voltage drop high", a muted "cannot check: needs length") on the Cables tab open a popover with every number and where it came from, the Load Summary counts the results, and a mark on the schematic wire and its stub shows the reason on hover, with the badges again in the wire inspector. Two plugin options set the voltage drop limits for critical and other loads (3 and 10 percent, 0.5 to 20). The ampacity table is our own and conservative, with its sources in `docs/cable-checks.md`, and is awaiting review before a release.
@@ -13,9 +15,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Device colors (plan 0030). A device has a schematic box color and a schematic icon color (new columns `devices.schematic_box_color` and `schematic_icon_color`, migration 17), edited in the device form with a hex field, a color picker and a Clear button, and shown with swatches on the device page. A colored device box on the schematic gets that outline and a light tint fill, enclosure boxes included, and the red night theme dims it. The icon color is stored only; nothing draws it yet.
 - A built-in library of simple 24 by 24 line icons, one per device type with role fallbacks and a generic one, and a pure `iconFor(device)` that picks the icon from type and model text.
 - Device icons are shown (plan 0032). A device's icon now comes before its name in the Devices list, the circuits list and circuit page, both From and To of the cables tables, the circuit diagram nodes, the schematic New device palette, beside the type and device pickers, and on the device page title. A device with its own attached icon image keeps showing that image. Icons follow the day and night themes, rows keep their height, and long names still truncate.
-
 - Changes tab (issue #13, plan 0033). A new tab lists what changed lately across the whole system, grouped by record (device, cable, conduit, zone, plan, circuit or schematic), newest activity first, with each entry in words ("gauge: 6 to 10 mm2", "terminals added: B+") and its local time. The group header links to the record. Filters for date range (today, 7 days, 30 days by default, custom), kind (several) and text; a group shows its latest 5 entries with "Show N more", and groups load 20 at a time. Circuit entries stay hidden unless the Circuits kind is picked. New route `GET /plugins/signalk-wiring/changelog` (admin login, like the per-record log).
 - Deleting a record permanently now leaves one entry "permanently deleted" in the change log, with its name and kind, for cables, devices, conduits and schematic pages. Its other history is still erased.
+
+### Changed
+
+- Dashed AC lines on the schematics and the floorplan now show the gaps of the dashes in a lighter tint of the line colour (half the opacity of the dash on the schematics) instead of the page background, so an AC wire reads as one line.
 
 ### Fixed
 
