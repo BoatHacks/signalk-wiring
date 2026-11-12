@@ -4,6 +4,7 @@ import dagre from './vendor/dagre.esm.js'
 import { newId } from './ids.js'
 import { TYPE_SUGGESTIONS } from './deviceTypes.js'
 import { roleLabel } from './roles.js'
+import { DeviceIcon } from './deviceIcon.js'
 import * as G from './schematic.js'
 import { startValues } from './quickCable.js'
 import { boxColors } from './colorTone.js'
@@ -1243,7 +1244,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
                 <button type="button" key=${item.role + item.type} class="palette-item" draggable="true"
                   data-testid="palette-item"
                   onDragStart=${(e) => e.dataTransfer.setData('text/plain', JSON.stringify(item))}
-                  onClick=${() => createDevice(item)}>${item.type}</button>
+                  onClick=${() => createDevice(item)}><${DeviceIcon} bare=${item} size=${20} /><span>${item.type}</span></button>
               `)}
             </div>
           `)}

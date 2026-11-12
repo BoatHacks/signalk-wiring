@@ -43,6 +43,7 @@ import {
   chemistryFill, typeBatteryFill, socPathFill, installedAgeText, fractionToPercent, bankOfBattery, describeBank
 } from './batteries.js'
 import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
+import { DeviceIcon, DeviceLabel } from './deviceIcon.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -196,6 +197,8 @@ function TypeField ({ role, value, onChange }) {
 
   return html`
     <div>
+      <div class="picker-with-icon">
+      <${DeviceIcon} bare=${value ? { type: value, role } : null} size=${20} />
       <select value=${adding ? ADD_OPTION : value}
         onChange=${(e) => {
           if (e.target.value === ADD_OPTION) setAdding(true)
@@ -212,6 +215,7 @@ function TypeField ({ role, value, onChange }) {
         `}
         <option value=${ADD_OPTION}>Add type…</option>
       </select>
+      </div>
       ${adding && html`
         <div class="row-actions">
           <input type="text" value=${newType} placeholder="Type, e.g. Sonar" autofocus
@@ -1191,6 +1195,8 @@ function DevicePicker ({ label, hint, value, onChange, devices, onCreated, defau
   return html`
     <label class="form-field">
       <span>${label}${required ? ' *' : ''}</span>
+      <div class="picker-with-icon">
+      <${DeviceIcon} device=${!adding && value ? known.get(value) : null} bare=${adding ? { role } : null} size=${20} />
       <select value=${adding ? NEW_DEVICE : value || ''}
         onChange=${(e) => {
           if (e.target.value === NEW_DEVICE) setAdding(true)
@@ -1200,6 +1206,7 @@ function DevicePicker ({ label, hint, value, onChange, devices, onCreated, defau
         ${options.map((d) => html`<option value=${d.id} key=${d.id}>${d.name} (${roleLabel(d.role)})</option>`)}
         <option value=${NEW_DEVICE}>New device…</option>
       </select>
+      </div>
       ${adding && html`
         <div class="row-actions">
           <input type="text" value=${name} placeholder="Device name" autofocus
@@ -2104,7 +2111,7 @@ function DevicesList ({ onSelect }) {
           <div class="list-item-main">
             ${picking && html`<input type="checkbox" class="checkbox-input" checked=${ticked.has(device.id)} data-testid="bulk-check"
               aria-label=${'Select ' + device.name} onClick=${(e) => e.stopPropagation()} onChange=${() => tick(device.id)} />`}
-            ${deviceIconUrl(device) && html`<img class="device-icon" src=${deviceIconUrl(device)} alt="" />`}
+            <${DeviceIcon} device=${device} size=${18} imageSize=${32} />
             <div>
             <div>${device.name}</div>
             <div class="meta">${roleLabel(device.role)} | ${device.type || 'no type recorded'}${device.zone ? ` | ${device.zone}` : ''}${(device.tags || []).length ? ` | ${device.tags.join(', ')}` : ''}${insideText(items, device.id) ? ` | in ${insideText(items, device.id)}` : ''}${device.role === 'enclosure' ? ` | holds ${(device.contents || []).length}` : ''}</div>
@@ -2316,8 +2323,8 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
       ${device && !editing && html`
         <div class="card">
           <h2>
-            ${deviceIconUrl(device) && html`<img class="device-icon device-icon-large" src=${deviceIconUrl(device)} alt="" />`}
-            ${device.name} <${StatusBadge} status=${device.status} />
+            <${DeviceLabel} device=${device} size=${28} imageSize=${44} tone="text" />
+            <${StatusBadge} status=${device.status} />
           </h2>
           <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
           ${insideText(allDevices, deviceId) && html`
