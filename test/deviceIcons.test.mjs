@@ -26,3 +26,16 @@ test('attachmentKind labels PDFs, images and other files', () => {
   assert.equal(attachmentKind('text/plain'), 'File')
   assert.equal(attachmentKind(undefined), 'File')
 })
+
+import { iconChoice } from '../public/deviceIcons.js'
+
+test('iconChoice: own image wins, then the built-in icon, then role, then nothing', () => {
+  assert.deepEqual(iconChoice({ id: 'd1', iconAttachmentId: 'a1', type: 'Battery', role: 'storage' }),
+    { kind: 'image', url: '/plugins/signalk-wiring/devices/d1/icon?v=a1' })
+  assert.deepEqual(iconChoice({ id: 'd1', type: 'Battery', role: 'storage' }), { kind: 'builtin', key: 'battery' })
+  assert.deepEqual(iconChoice({ id: 'd1', type: 'Mystery gadget', role: 'source' }), { kind: 'builtin', key: 'source' })
+  assert.deepEqual(iconChoice({ id: 'd1' }), { kind: 'builtin', key: 'generic' })
+  assert.equal(iconChoice(null), null)
+  assert.equal(iconChoice(undefined, {}), null)
+  assert.deepEqual(iconChoice(null, { type: 'Fuse', role: 'distribution' }), { kind: 'builtin', key: 'fuse' })
+})

@@ -901,3 +901,15 @@ main:has(.schematic-editor) { max-width: none; }
   -webkit-tap-highlight-color: transparent;
 }
 .schematic-canvas-wrap, .floorplan-canvas-wrap { overscroll-behavior: contain; }
+
+/* Device icons before names (plan 0032): inline SVG, no layout shift */
+.dev-icon { display: inline-flex; flex: none; vertical-align: middle; line-height: 0; }
+.dev-icon svg { display: block; }
+.dev-icon-muted { color: var(--text-muted-strong); }
+.dev-icon-text { color: var(--text); }
+.dev-label { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; vertical-align: middle; }
+.dev-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.device-icon-inline { flex: none; border-radius: 4px; object-fit: cover; }
+.picker-with-icon { display: flex; align-items: center; gap: 8px; }
+.picker-with-icon select { flex: 1; min-width: 0; }
+.palette-item { display: flex; align-items: center; gap: 8px; }
