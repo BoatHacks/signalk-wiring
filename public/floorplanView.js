@@ -10,6 +10,7 @@ import {
 } from './floorplan.js'
 import { hashForState } from './router.js'
 import { isTypingTarget, wireLineStyle, scaledDash, isDoubleTap, deviceHash } from './schematic.js'
+import { pickTarget } from './touchTargets.js'
 import { pinchStep, pinchView, DEAD_ZONE_PX } from './touchGestures.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo } from './canvasRemoval.js'
@@ -309,7 +310,30 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
 
   const onPointerDown = (e) => {
     if (e.pointerType === 'touch' && touches.current.size >= 2) return
+    // A finger gets an invisible hit area of about 44 px around each marker
+    // and cluster (plan 0031): a press that missed the drawn marker but is
+    // inside the area acts on that marker. A mouse or pen sees no change.
+    const hit = e.pointerType === 'touch' ? touchTargetAt(e) : null
+    if (hit && hit.kind === 'cluster') {
+      e.stopPropagation()
+      setOpenBundle(null)
+      setOpenCluster(openCluster && openCluster.id === hit.cluster.id ? null : { id: hit.cluster.id, ids: hit.cluster.ids, px: [hit.x, hit.y] })
+      return
+    }
+    if (hit) { onMarkerDown(e, hit.target); return }
     setOpenCluster(null); setOpenBundle(null); startDrag(e, null)
+  }
+
+  // The marker, waypoint or cluster whose hit area holds this press, if any.
+  const touchTargetAt = (e) => {
+    const [x, y] = toDrawing(e)
+    const cands = []
+    for (const { device, px } of deviceMarks) {
+      if (!clustered.has(device.id)) cands.push({ kind: 'marker', x: px[0], y: px[1], target: { kind: 'device', key: device.id } })
+    }
+    for (const w of waypointMarkers) cands.push({ kind: 'marker', x: w.px[0], y: w.px[1], target: { kind: 'waypoint', key: w.index } })
+    for (const c of clusterSet.clusters) cands.push({ kind: 'cluster', x: c.x / pxPerUnit, y: c.y / pxPerUnit, cluster: c })
+    return pickTarget({ x, y }, cands, 'touch', pxPerUnit)
   }
 
   // Two fingers pan and pinch the view. A second finger first cancels the

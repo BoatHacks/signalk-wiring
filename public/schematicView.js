@@ -20,6 +20,7 @@ import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import * as Z from './zoneShapes.js'
 import * as N from './snapGrid.js'
 import * as TG from './touchGestures.js'
+import * as TT from './touchTargets.js'
 import * as L from './schematicLayout.js'
 import { midpoints } from './polygon.js'
 import { pageModel, insideText } from './enclosures.js'
@@ -846,8 +847,14 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const p = toCanvas(e)
     setTabMenu(null)
     try { svgRef.current.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointers cannot be captured */ }
+    // A finger gets larger invisible hit areas than a mouse (plan 0031); the
+    // pointer type of this press decides.
+    const touchPress = e.pointerType === 'touch'
+    const zoom = 1 / TG.viewScale(view, svgRef.current.getBoundingClientRect())
     // A tab: a click opens its menu, a drag moves it (not in live mode).
-    const tab = stubs.find((s) => p.x >= s.tab.x && p.x <= s.tab.x + s.tab.w && p.y >= s.tab.y && p.y <= s.tab.y + s.tab.h)
+    const tabPad = (s) => TT.rectPad(TT.hitRadius('tab', e.pointerType, zoom), s.tab.w, s.tab.h)
+    const tabDist = (s) => Math.hypot(s.tab.x + s.tab.w / 2 - p.x, s.tab.y + s.tab.h / 2 - p.y)
+    const tab = stubs.filter((s) => TT.insideRect(s.tab, p.x, p.y, tabPad(s))).sort((a, b) => tabDist(a) - tabDist(b))[0]
     if (tab) { drag.current = { kind: 'stub', stub: tab, dx: p.x - tab.tab.x, dy: p.y - tab.tab.y, sx: e.clientX, sy: e.clientY, moved: false }; return }
     if (liveOn) {
       const hit = G.hitDevice(boxes, p.x, p.y)
@@ -859,7 +866,20 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const sel = selectedWireId && wires.find((w) => w.id === selectedWireId)
     if (sel) {
       const cur = bends[sel.id] || []
-      const bi = G.hitBend(cur, p.x, p.y)
+      const mids = midHandles(sel.path)
+      let bi
+      let mi
+      if (touchPress) {
+        const hit = TT.pickTarget(p, [
+          ...cur.map((q, i) => ({ kind: 'bend', index: i, x: q.x, y: q.y })),
+          ...mids.map((m, i) => ({ kind: 'midpoint', index: i, x: m.x, y: m.y }))
+        ], e.pointerType, zoom)
+        bi = hit && hit.kind === 'bend' ? hit.index : -1
+        mi = hit && hit.kind === 'midpoint' ? hit.index : -1
+      } else {
+        bi = G.hitBend(cur, p.x, p.y)
+        mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
+      }
       if (bi >= 0) {
         const now = Date.now()
         const last = lastBendDown.current
@@ -874,8 +894,6 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         drag.current = { kind: 'bend', frozen: { ...view }, wireId: sel.id, index: bi, sx: e.clientX, sy: e.clientY, moved: false }
         return
       }
-      const mids = midHandles(sel.path)
-      const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
       if (mi >= 0 && (sel.path[mi].x === sel.path[mi + 1].x || sel.path[mi].y === sel.path[mi + 1].y)) {
         // the handle of a horizontal or vertical segment moves that segment, perpendicular to itself
         drag.current = { kind: 'seg', frozen: { ...view }, wireId: sel.id, index: mi, path: sel.path, mid: mids[mi], sx: e.clientX, sy: e.clientY, moved: false }
@@ -893,7 +911,20 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const selShape = selection && selection.type === 'zone' ? shapes.find((sh) => sh.zoneId === selection.id) : null
     if (selShape && selShape.kind === 'polygon') {
       const pts = selShape.points
-      const ci = pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 9)
+      const mids = midpoints(pts)
+      let ci
+      let mi
+      if (touchPress) {
+        const hit = TT.pickTarget(p, [
+          ...pts.map((q, i) => ({ kind: 'corner', index: i, x: q.x, y: q.y })),
+          ...mids.map((m, i) => ({ kind: 'midpoint', index: i, x: m.x, y: m.y }))
+        ], e.pointerType, zoom)
+        ci = hit && hit.kind === 'corner' ? hit.index : -1
+        mi = hit && hit.kind === 'midpoint' ? hit.index : -1
+      } else {
+        ci = pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 9)
+        mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
+      }
       if (ci >= 0) {
         const now = Date.now()
         const last = lastCornerDown.current
@@ -911,8 +942,6 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         drag.current = { kind: 'corner', orig: selShape, index: ci, sx: e.clientX, sy: e.clientY, moved: false }
         return
       }
-      const mids = midpoints(pts)
-      const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
       if (mi >= 0) {
         const added = Z.addCorner(selShape, mi, { x: Math.round(mids[mi].x), y: Math.round(mids[mi].y) })
         setShapes(Z.withShape(shapes, added.shape))
@@ -920,11 +949,28 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         return
       }
     } else if (selShape) {
-      const h = Z.hitHandle(selShape, p.x, p.y)
+      const hit = touchPress ? TT.pickTarget(p, Z.handlePositions(selShape).map((q) => ({ kind: 'corner', id: q.id, x: q.x, y: q.y })), e.pointerType, zoom) : null
+      const h = touchPress ? (hit && hit.id) : Z.hitHandle(selShape, p.x, p.y)
       if (h) { drag.current = { kind: 'shape-resize', orig: selShape, handle: h, sx: e.clientX, sy: e.clientY, moved: false }; return }
     }
-    const term = G.hitTerminal(wireBoxes, p.x, p.y)
-    const handle = !term && wireBoxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
+    let term
+    let handle
+    if (touchPress) {
+      // terminal dots and connect handles compete; the nearest centre wins
+      const cands = []
+      for (const b of wireBoxes) {
+        for (const t of b.terminals) cands.push({ kind: 'terminal', box: b, t, x: t.x, y: t.y })
+        cands.push({ kind: 'handle', box: b, x: b.x + b.w / 2, y: b.bottomPorts ? b.y : b.y + b.h })
+      }
+      let hit = TT.pickTarget(p, cands, e.pointerType, zoom)
+      // the larger area reaches outside the box; over the body itself the box (a move) wins beyond the usual radius
+      if (hit && TT.insideRect(hit.box, p.x, p.y) && Math.hypot(hit.x - p.x, hit.y - p.y) > TT.BASE_RADIUS[hit.kind]) hit = null
+      term = hit && hit.kind === 'terminal' ? { deviceId: hit.box.id, terminal: hit.t.name } : null
+      handle = hit && hit.kind === 'handle' ? hit.box : null
+    } else {
+      term = G.hitTerminal(wireBoxes, p.x, p.y)
+      handle = !term && wireBoxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
+    }
     if (term || handle) {
       const id = term ? term.deviceId : handle.id
       drag.current = { kind: 'wire', fromId: id, fromTerminal: term ? term.terminal : '', sx: e.clientX, sy: e.clientY, moved: false }
