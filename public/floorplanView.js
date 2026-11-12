@@ -11,6 +11,7 @@ import {
 import { hashForState } from './router.js'
 import { isTypingTarget, wireLineStyle, scaledDash, isDoubleTap, deviceHash } from './schematic.js'
 import { pickTarget } from './touchTargets.js'
+import { placePopover } from './popoverPlace.js'
 import { pinchStep, pinchView, DEAD_ZONE_PX } from './touchGestures.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo } from './canvasRemoval.js'
@@ -322,6 +323,22 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
     if (hit) { onMarkerDown(e, hit.target); return }
     setOpenCluster(null); setOpenBundle(null); startDrag(e, null)
+  }
+
+  // Where a list opened at a drawing point goes: fully inside the canvas and
+  // clear of the finger (plan 0031). The anchor is mapped to pixels of the wrap
+  // around the canvas; the list height is estimated from its row count.
+  const listStyle = (px, rows) => {
+    const svg = svgRef.current
+    const wrap = svg && svg.parentElement
+    if (!svg || !wrap) return { left: '0px', top: '0px' }
+    const pt = svg.createSVGPoint()
+    pt.x = px[0]; pt.y = px[1]
+    const s = pt.matrixTransform(svg.getScreenCTM())
+    const w = wrap.getBoundingClientRect()
+    const vp = { width: w.width, height: w.height }
+    const at = placePopover({ x: s.x - w.left, y: s.y - w.top }, { width: Math.min(260, vp.width * 0.8), height: 90 + 22 * rows }, vp, 8)
+    return { left: at.left + 'px', top: at.top + 'px', transform: 'none', maxWidth: Math.min(at.maxWidth, 260) + 'px', maxHeight: at.maxHeight + 'px' }
   }
 
   // The marker, waypoint or cluster whose hit area holds this press, if any.
@@ -804,7 +821,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       </svg>
       ${openCluster && html`
         <div class="cluster-list" data-testid="cluster-list"
-          style=${{ left: ((openCluster.px[0] - box.x) / box.width * 100) + '%', top: ((openCluster.px[1] - box.y) / box.height * 100) + '%' }}>
+          style=${listStyle(openCluster.px, openCluster.ids.length)}>
           <strong>${openCluster.ids.length} devices here</strong>
           <ul>
             ${openCluster.ids.map((id) => html`
@@ -816,7 +833,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       `}
       ${openBundle && html`
         <div class="cluster-list bundle-list" data-testid="bundle-list"
-          style=${{ left: ((openBundle.px[0] - box.x) / box.width * 100) + '%', top: ((openBundle.px[1] - box.y) / box.height * 100) + '%' }}>
+          style=${listStyle(openBundle.px, openBundle.ids.length)}>
           <strong>${openBundle.ids.length} ${openBundle.kind === 'run' ? 'cables' : 'conduits'} along this stretch</strong>
           <ul>
             ${bundleMembers(openBundle.kind, openBundle.ids).map((m) => html`

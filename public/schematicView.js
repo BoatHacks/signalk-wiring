@@ -21,6 +21,7 @@ import * as Z from './zoneShapes.js'
 import * as N from './snapGrid.js'
 import * as TG from './touchGestures.js'
 import * as TT from './touchTargets.js'
+import { placePopover } from './popoverPlace.js'
 import * as L from './schematicLayout.js'
 import { midpoints } from './polygon.js'
 import { pageModel, insideText } from './enclosures.js'
@@ -28,6 +29,7 @@ import { ensureInsidePage } from './insidePage.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
+const POPOVER_SIZE = { width: 250, height: 260 } // the quick cable popover, for placing it
 const MOVE_SLOP_PX = 3
 const ROUTE_INTERVAL_MS = 66 // live routing while dragging: at most about 15 routes per second (plan 0026)
 const DOUBLE_CLICK_MS = 400
@@ -645,7 +647,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     })
     const at = toScreen(p)
     const wrap = svgRef.current.parentElement.getBoundingClientRect()
-    setPopover({ start, at: { x: Math.max(4, Math.min(at.x, wrap.width - 250)), y: Math.max(4, Math.min(at.y, wrap.height - 260)) } })
+    // fully on screen, and clear of the finger that just lifted (plan 0031)
+    setPopover({ start, at: placePopover(at, { width: POPOVER_SIZE.width, height: POPOVER_SIZE.height }, { width: wrap.width, height: wrap.height }, 8) })
   }
 
   const createCable = async (payload, id) => {
@@ -1264,7 +1267,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             ${preview && html`<path class="sch-preview" d=${G.pathToD([preview.a, preview.b])} />`}
           </svg>
           ${popover && html`<${CablePopover} start=${popover.start}
-            style=${`left:${popover.at.x}px;top:${popover.at.y}px`}
+            style=${`left:${popover.at.left}px;top:${popover.at.top}px;max-width:${popover.at.maxWidth}px;max-height:${popover.at.maxHeight}px;overflow-y:auto`}
             onCreate=${(payload) => createCable(payload)}
             onMore=${(values) => { setMoreForm({ prefill: values }); setPopover(null) }}
             onCancel=${() => setPopover(null)} />`}
