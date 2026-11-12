@@ -27,8 +27,9 @@ guarantee.
 - **Where results appear:** warning badges on the cable rows and a count in the
   load summary, and a warning mark on the wire in the schematic with the reason
   on hover or tap.
-- **Signal cables are exempt.** A cable whose conductors are all of the type
-  "Signal or data" is not checked at all, for voltage drop and for ampacity: no
+- **Signal cables and earth-only cables are exempt.** A cable whose conductors
+  are all of the type "Signal or data" or earth (a mix of those counts) is not
+  checked at all, for voltage drop and for ampacity: no
   verdict and no "cannot check" badge, since nothing is missing. Antenna cables
   are recorded as "Signal or data" too (no new cable type); a cable label or
   note can say "antenna". A cable that mixes signal and power conductors is

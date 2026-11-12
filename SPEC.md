@@ -754,8 +754,8 @@ and every assumption are in `docs/cable-checks.md`.
   page has live data) can only raise the figure; else rated power over the
   voltage (watts over power factor on AC); else the protection rating as the
   worst case. A cable shared by several circuits carries all of them.
-- Exempt: a cable whose conductors are all signal or data (antenna cables are
-  recorded as signal or data) shows nothing. A mixed cable is checked on its
+- Exempt: a cable with no current-carrying conductor (all signal or data, which
+  includes antenna cables, earth only, or a mix of those) shows nothing. A mixed cable is checked on its
   power conductors. Missing gauge, length, voltage, a circuit or any current
   gives a muted "cannot check: needs ...".
 - Display: badges on the Cables tab rows with a popover of the numbers, their

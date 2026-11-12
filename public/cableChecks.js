@@ -6,7 +6,7 @@
 //
 // A result is { verdict, ... } with the verdict one of
 //   'ok', 'warning', 'fail', 'cannot' (something needed is missing) or
-//   'exempt' (a cable whose conductors are all signal or data: not checked).
+//   'exempt' (a cable whose conductors are all signal, data or earth: not checked).
 // It carries the numbers used and where each came from, so the reasoning can
 // be shown next to it.
 
@@ -28,6 +28,14 @@ function conductorTypes (cable) {
 export function isSignalOnly (cable) {
   const types = (cable.conductors || []).map((c) => c.conductor)
   return types.length > 0 && types.every((t) => t === 'signal')
+}
+
+// A cable with no current-carrying conductor (signal, data and antenna cables,
+// earth-only cables, or a mix of those) is not checked at all: nothing to size
+// and no voltage drop that matters.
+export function isNonPower (cable) {
+  const types = (cable.conductors || []).map((c) => c.conductor)
+  return types.length > 0 && types.every((t) => t === 'signal' || t === 'earth')
 }
 
 // Current-carrying conductors of a cable: positive, negative, AC line and
@@ -240,7 +248,7 @@ function dropCheck (table, lengthM, c, limits) {
 //            the cable serves, count: current-carrying conductors in its
 //            bundle (bundleCount), limits: { critical, normal } in percent }
 export function checkCable (cable, ctx = {}) {
-  if (isSignalOnly(cable)) return { verdict: 'exempt', exempt: true, missing: [] }
+  if (isNonPower(cable)) return { verdict: 'exempt', exempt: true, missing: [] }
   const limits = { ...DEFAULT_LIMITS, ...(ctx.limits || {}) }
   const circuits = ctx.circuits || []
   const c = circuits.length > 0 ? combine(circuits) : null

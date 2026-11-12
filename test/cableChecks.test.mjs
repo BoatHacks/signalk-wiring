@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import {
   checkCable, checkAll, circuitInput, chooseCurrent, deratingFactor, bundleCount, ampacityFor,
-  resistivity, lengthMetres, isSignalOnly, powerConductorCount, badgesFor, wireMark, countVerdicts, DEFAULT_LIMITS,
+  resistivity, lengthMetres, isSignalOnly, isNonPower, powerConductorCount, badgesFor, wireMark, countVerdicts, DEFAULT_LIMITS,
   liveAmpsByCircuit, pathMidpoint, explain, ADVISORY_NOTE
 } from '../public/cableChecks.js'
 import { AMPACITY_A, AWG_AREA_MM2, SOURCES, DERATING } from '../public/cableAmpacity.js'
@@ -235,6 +235,20 @@ test('ampacity against a known load when nothing protects the circuit', () => {
   const ok = checkCable(cable({ gauge: 2.5 }), { circuits: [circ({ ratingA: 20 })] })
   assert.equal(ok.ampacity.verdict, 'ok')
   assert.equal(ok.ampacity.loadA, null)
+})
+
+test('earth-only cables and signal plus earth cables are exempt too', () => {
+  assert.equal(isNonPower({ conductors: [{ conductor: 'earth' }] }), true)
+  assert.equal(isNonPower({ conductors: [{ conductor: 'signal' }, { conductor: 'earth' }] }), true)
+  assert.equal(isNonPower({ conductors: [{ conductor: 'earth' }, { conductor: 'line' }] }), false)
+  assert.equal(isNonPower({ conductors: [] }), false)
+  const earth = cable({ conductors: [{ conductor: 'earth' }], gauge: '', length: '' })
+  assert.deepEqual(checkCable(earth, { circuits: [] }), { verdict: 'exempt', exempt: true, missing: [] })
+  assert.deepEqual(badgesFor(checkCable(earth)), [])
+  assert.equal(wireMark(checkCable(earth)), null)
+  // an AC cable with line, neutral and earth is still checked
+  const ac = cable({ conductors: [{ conductor: 'line' }, { conductor: 'neutral' }, { conductor: 'earth' }] })
+  assert.notEqual(checkCable(ac, { circuits: [] }).verdict, 'exempt')
 })
 
 test('signal-only cables are exempt; mixed cables are checked on the power conductors', () => {

@@ -19,7 +19,9 @@ guarantee, and the app says so wherever it shows a result.
    autopilot, navigation light, windlass), 10 percent otherwise. Both limits are
    plugin options. Over the limit is a warning ("voltage drop high").
 
-A cable whose conductors are all signal or data is exempt: no verdict, no badge.
+A cable with no current-carrying conductor is exempt: no verdict, no badge. That
+means a cable whose conductors are all signal or data (antenna cables are
+recorded as signal or data), an earth-only cable, or a mix of those.
 A cable that mixes signal and power conductors is checked on its power
 conductors only (positive, negative, AC line, AC neutral). Missing gauge,
 length, voltage, a circuit, or any current to check against gives a muted
