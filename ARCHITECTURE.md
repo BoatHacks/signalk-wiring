@@ -689,6 +689,7 @@ signalk-wiring/
     calibrationStats.js      # pure: delta and watch statistics
     calibration.js           # calibration run state machine
     safety.js                # critical-looking device types
+    settings.js              # plugin options and the wiringSettings resource
     store.js                 # SQLite access layer
     schema.sql                # table definitions (§3)
   public/                   # name required by the signalk-webapp keyword (§2.4)
@@ -712,6 +713,9 @@ signalk-wiring/
     calibrate.js               # the Calibrate load dialog
     measured.js                # measured values beside the rating, load figures
     schematic.js               # pure geometry: boxes, terminals, routing, stubs, hit tests
+    cableAmpacity.js           # data: ampacity table, derating, assumptions, sources (plan 0034)
+    cableChecks.js             # pure: size and voltage drop checks of a cable
+    cableCheckView.js          # badges and the reasoning popover
     schematicView.js           # schematics tab: pages, canvas, palette, wires, bends
     batteries.js               # chemistry and purpose lists, defaults, bank card text
     batteriesView.js           # the Batteries tab
@@ -780,6 +784,26 @@ No external services or network dependencies at runtime.
   worth deciding before other tooling comes to depend on the current
   anonymous-read contract.
 
+
+## Cable checks (plan 0034)
+
+`public/cableAmpacity.js` is the data file: the ampacity table (AWG and mm2),
+the derating bands, the AWG cross-sections, the assumptions and the cited
+sources; `docs/cable-checks.md` explains each figure. `public/cableChecks.js`
+is pure: `circuitInput` turns a derived circuit into rating, voltage, rated
+and measured amps, power factor and the critical flag (a device of a type
+`isCriticalType` accepts); `bundleCount` counts current-carrying conductors in
+a cable's conduits; `checkCable` returns a result with a verdict (ok, warning,
+fail, cannot, exempt), an `ampacity` and a `drop` part holding every number and
+its source; `checkAll` joins cables to circuits through `derived.cableIds` and
+`returnCableIds`; `badgesFor`, `wireMark`, `explain` and `liveAmpsByCircuit`
+serve the display. `public/cableCheckView.js` has the badges and the popover.
+The Cables tab, the Load Summary and the schematic each call `checkAll` on the
+lists they already load, with the limits from `useSettings()`. The limits are
+two plugin options resolved in `src/settings.js` and served by the
+`wiringSettings` resource. Nothing is stored: results are computed on render.
+The schematic mark is a `pointer-events: none` group; wire hit testing is
+geometric, so selection and touch hit areas are unchanged.
 
 ## Schematic routing and layout (plan 0021)
 

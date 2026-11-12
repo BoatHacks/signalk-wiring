@@ -106,11 +106,11 @@ guarantee.
 
 ## Implementation Steps
 
-- [ ] The ampacity data file, `docs/cable-checks.md`, and `cableChecks.js` with
+- [x] The ampacity data file, `docs/cable-checks.md`, and `cableChecks.js` with
       tests.
-- [ ] The two plugin options and their tests.
-- [ ] Badges, popover, load summary count and schematic mark.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, tick the boxes in issue #10.
+- [x] The two plugin options and their tests.
+- [x] Badges, popover, load summary count and schematic mark.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, a comment on issue #10.
 - [ ] The user reviews the table and assumptions before a release.
 
 ## Files to Create/Modify

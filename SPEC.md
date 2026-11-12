@@ -709,7 +709,8 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   for energy; the table says whether a circuit is measured, partly measured
   or rated, and whether any figure is an estimate. An "incomplete" circuit
   says under its badge what is missing (voltage, rating or both) and what to
-  do, the badges have tooltips and a legend sits under the table. A group figure is counted
+  do, the badges have tooltips and a legend sits under the table. A line above
+  the table counts the cable checks (see Cable checks below). A group figure is counted
   once per circuit, and a measured figure takes no power factor. The summary
   states its own known limitations in the UI (a device fed by more than one
   circuit counts its full wattage on each; peaks are summed as if they
@@ -732,6 +733,37 @@ Circuits, wire runs, devices, attachments, and change log entries must
 all survive a server restart. Nothing in this plugin is ephemeral.
 Storage mechanism is detailed in ARCHITECTURE.md.
 
+### 7.x Cable checks (plan 0034, issue #10)
+
+Advisory checks on every cable, never a safety guarantee; the wording says
+"advisory" wherever a result is shown. Details, the ampacity table, its sources
+and every assumption are in `docs/cable-checks.md`.
+
+- Size: the cable's derated ampacity against the rating of the fuse or breaker
+  protecting its circuit ("cable too small" when the protection is more than the
+  cable carries) and against the load current when known. The table is copper,
+  stranded, 105 C insulation, 30 C ambient for the whole boat; conductors
+  sharing a conduit derate it (the current-carrying conductors of all cables in
+  the cable's conduits are counted, earth and signal not).
+- Voltage drop: round trip (twice the length) resistance of the cable's gauge
+  at 50 C, times the current, as a percentage of the circuit's nominal voltage,
+  against the critical limit (3 percent, circuits with a device of a critical
+  type) or the normal limit (10 percent). On AC the power factor is applied.
+  Over the limit is "voltage drop high".
+- Current: measured (an accepted calibration peak, or a live value where the
+  page has live data) can only raise the figure; else rated power over the
+  voltage (watts over power factor on AC); else the protection rating as the
+  worst case. A cable shared by several circuits carries all of them.
+- Exempt: a cable whose conductors are all signal or data (antenna cables are
+  recorded as signal or data) shows nothing. A mixed cable is checked on its
+  power conductors. Missing gauge, length, voltage, a circuit or any current
+  gives a muted "cannot check: needs ...".
+- Display: badges on the Cables tab rows with a popover of the numbers, their
+  sources and the assumptions; a count line in the Load Summary; a warning mark
+  on a schematic wire and its stub with the reason as the hover text, and the
+  badges and popover again in the wire inspector for touch. The mark takes no
+  pointer events. Live current is used on the schematic only while Live is on.
+
 ## 9. Configuration
 
 - **Convention**: ABYC E-11 | DIN EN ISO 13297 | freestyle (default:
@@ -742,6 +774,11 @@ Storage mechanism is detailed in ARCHITECTURE.md.
 - **Default length unit**: m | ft — pre-selected on new wire run forms,
   overridable per record (default: m). Same reasoning as the gauge unit
   above: a preference to reduce re-entry, not something enforced.
+- **Voltage drop limit, critical loads**: percent, 0.5 to 20 (default 3).
+- **Voltage drop limit, other loads**: percent, 0.5 to 20 (default 10). Both
+  are used by the cable checks, are validated (a bad value falls back to the
+  default) and reach the webapp through the `wiringSettings` resource as
+  `voltageDropLimitCritical` and `voltageDropLimitNormal`.
 
 Everything else (zones, circuit/device names, voltage, breaker rating,
 rated power, SignalK path) is free-form user data, not plugin

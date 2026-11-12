@@ -77,6 +77,15 @@ to someone else doesn't depend on the current owner being present.
   optional power factor on AC) and checked against the rating of the fuse or
   breaker that protects it, flagging circuits over their rating and saying what
   is missing on incomplete ones.
+- **Cable checks (advisory)**: every cable that is not signal only is checked
+  for size against the fuse or breaker that protects it and against its load,
+  and for voltage drop (3 percent on a circuit with a critical device, 10
+  percent otherwise, both plugin options). Warning badges on the Cables tab
+  open the reasoning with every number and its source, the load summary counts
+  the results and a mark shows on the schematic wire. The ampacity table is our
+  own and conservative, with its sources in `docs/cable-checks.md`; it is
+  advice, not a safety guarantee, and the table is awaiting review before a
+  release.
 - **Removing keeps the record.** "Removing" a record marks it `removed`
   rather than dropping it, so the wiring's history stays intact — a refit
   doesn't erase what used to be there. The one exception is a cable that is
