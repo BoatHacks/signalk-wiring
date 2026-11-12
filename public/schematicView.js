@@ -633,9 +633,12 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   // ---- Drawing wires ----
   // Where a dragged wire would land: a terminal, else any other device box.
-  const wireTarget = (p, fromId) => {
+  // A wire may end on another terminal of its own device (a jumper between two
+  // ports of one module); a bare box or the same terminal of that device is not
+  // a target, since the ports to connect would be unclear.
+  const wireTarget = (p, fromId, fromTerminal = '') => {
     const t = G.hitTerminal(wireBoxes, p.x, p.y)
-    if (t && t.deviceId !== fromId) return t
+    if (t && (t.deviceId !== fromId || (t.terminal && t.terminal !== fromTerminal))) return t
     const b = G.hitDevice(wireBoxes, p.x, p.y)
     return b && b.id !== fromId ? { deviceId: b.id, terminal: '', x: p.x, y: p.y } : null
   }
@@ -1059,7 +1062,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       })
     } else if (d.kind === 'wire') {
       const p = toCanvas(e)
-      const target = wireTarget(p, d.fromId)
+      const target = wireTarget(p, d.fromId, d.fromTerminal)
       const fromBox = boxById.get(d.fromId)
       setPreview({ a: G.anchorOf(fromBox, d.fromTerminal, p), b: target ? { x: target.x, y: target.y } : p, targetId: target ? target.deviceId : null })
     } else if (d.kind === 'pan') {
@@ -1124,7 +1127,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     if (d.kind === 'wire') {
       setPreview(null)
       const p = toCanvas(e)
-      const target = d.moved ? wireTarget(p, d.fromId) : null
+      const target = d.moved ? wireTarget(p, d.fromId, d.fromTerminal) : null
       if (target) openPopover(d.fromId, d.fromTerminal, target.deviceId, target.terminal || '', p)
     }
     if (d.kind === 'pan' && !d.moved) setSelection(null)

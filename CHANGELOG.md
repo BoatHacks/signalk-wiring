@@ -11,6 +11,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Device colors (plan 0030). A device has a schematic box color and a schematic icon color (new columns `devices.schematic_box_color` and `schematic_icon_color`, migration 17), edited in the device form with a hex field, a color picker and a Clear button, and shown with swatches on the device page. A colored device box on the schematic gets that outline and a light tint fill, enclosure boxes included, and the red night theme dims it. The icon color is stored only; nothing draws it yet.
 - A built-in library of simple 24 by 24 line icons, one per device type with role fallbacks and a generic one, and a pure `iconFor(device)` that picks the icon from type and model text. It is not displayed anywhere yet.
 
+### Fixed
+
+- A wire can now be drawn between two terminals of the same device, for example from one relay contact to another on a relay board. The wire drawing, the quick cable popover and the cable form accepted only two different devices before; they now accept one device when the two ends name different terminals. A wire dropped on two signal terminals starts as a signal cable even when the device also has power terminals. Same terminal on both ends and a bare box of the same device are still refused.
+
 ## [0.7.2] - 2026-11-12
 
 ### Added

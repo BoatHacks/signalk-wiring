@@ -45,6 +45,12 @@ export function suggestKind (from, fromTerminal, to, toTerminal) {
   if (terminals.length > 0 && terminals.every((t) => t.conductor === 'signal')) {
     return { kind: 'signal', mismatch: null }
   }
+  // Both ends dropped on named signal terminals (a relay contact, an input, a
+  // data port) is a signal cable, whatever else the devices have.
+  const droppedOn = (device, name) => name && (device.terminals || []).find((t) => t.name === name)
+  const a = droppedOn(from, fromTerminal)
+  const b = droppedOn(to, toTerminal)
+  if (a && b && a.conductor === 'signal' && b.conductor === 'signal') return { kind: 'signal', mismatch: null }
   const fromCurrent = endCurrent(from, fromTerminal)
   const toCurrent = endCurrent(to, toTerminal)
   if (!fromCurrent && !toCurrent) return { kind: defaultKind(from, to), mismatch: null }
