@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- A built-in library of simple 24 by 24 line icons, one per device type with role fallbacks and a generic one, and a pure `iconFor(device)` that picks the icon from type and model text. It is not displayed anywhere yet.
+
 ## [0.7.2] - 2026-11-12
 
 ### Added

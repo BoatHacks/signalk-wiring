@@ -679,6 +679,7 @@ signalk-wiring/
     loadSummary.js             # panel load summary: calculation, UI
     deviceTypes.js             # popular device types per role, dropdown options
     deviceIcons.js             # icon url, which images can be icons
+    builtinIcons.js            # built-in simple icon library and iconFor(device); not displayed yet (plan 0029)
     conduits.js                # conduit kinds, cable names, list helpers
     theme.js                   # light and red night theme, optional auto switching
     roles.js                   # device roles: labels and hints
@@ -773,3 +774,13 @@ Plan 0025 added router bundling (`bundleGroups`, parallel lanes beside one refer
 Plan 0028 added `schematic_devices.hand_placed` (migration 16, guarded with a `table_info` check, so safe to run twice; rows from before read as free). The schematic resource carries `handPlaced: true` on a placement only when set (a free device has no key); a write of the list replaces the marks. `public/snapGrid.js` holds the pure snap helpers (`snapValue`, `snapPoint`, `snapCorner`, `snapSegmentDelta`, `snapMoveShape`, `snapResizeShape`, the Alt rule `snapActive` and the local storage setting, default on, try/catch); `schematicView.js` applies them in one function that reads the Alt state of each pointer event and replays the last pointer position when Alt is pressed or released mid-drag. `arrangeFree` in `schematicLayout.js` keeps the hand-placed devices in stage one (the others take the auto layout shifted into their frame, and the overlap pass may move only them); stage two passes empty marks, bends and tabs to the same save and Undo puts them all back. `findBridges` in `wireRouter.js` keeps every crossing (no hop is dropped for lying near another), `pathToDWithBridges` draws hops that would touch as one wide half ellipse, and a crossing too near the end of the horizontal stretch is hopped by the vertical one (`{ x, y, v: true }`).
 
 Plan 0026 replaced the cheap drag routes with live routing through `createRouteThrottle` (one route at a time, 66 ms apart, latest request wins); the drop uses the same routing call.
+
+## Built-in icon library (plan 0029)
+
+`public/builtinIcons.js` holds the simple icon set: 24 by 24 line icons as
+markup strings (`SIMPLE_ICONS`, `currentColor` strokes, so they follow the
+theme), one per device type, a fallback per role and a generic one. The pure
+`iconFor(device)` returns `{ simple, detailed }`: the simple key comes from the
+type (then the model text, then the role); `detailed` is always null until the
+detailed set is drawn. `simpleIconSvg(key, size)` gives inline markup. Nothing in
+the app displays these icons yet; a device's attached image stays the only icon.

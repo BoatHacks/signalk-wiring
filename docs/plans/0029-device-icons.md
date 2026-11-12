@@ -59,6 +59,12 @@ roadmap item (issue #23).
 - A static preview gallery for review (not part of the app): an HTML sheet of
   all icons at several sizes, in day and night colours.
 
+## Notes
+
+- The stencil set from the Victron community was reviewed and not used: it is
+  third-party artwork extracted from Victron PDFs, has no licence and is raster only.
+- Only the simple set is built so far; `iconFor` returns a null detailed key.
+
 ## Defaults chosen without asking
 
 - The user's own attached icon image keeps priority over the built-in ones in
@@ -81,10 +87,10 @@ roadmap item (issue #23).
 
 ## Implementation Steps
 
-- [ ] Simple icons for all device types, `iconFor`, tests.
-- [ ] Detailed icons for the Victron units.
-- [ ] Detailed icons for the other boat devices.
-- [ ] Device page and list display, the review gallery.
+- [x] Simple icons for all device types, `iconFor`, tests.
+- [ ] Detailed icons for the Victron units. Deferred by the user, not dropped.
+- [ ] Detailed icons for the other boat devices. Deferred by the user, not dropped.
+- [ ] Device page and list display, the review gallery. Deferred by the user, not dropped.
 - [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, and a comment on issue #23
       with the port tagging convention.
 
