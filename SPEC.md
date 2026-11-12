@@ -346,6 +346,12 @@ import is a deferred feature (see 10.2), not an MVP input source.
 
 ### 6.1 REST API / Public Methods
 
+- The plugin's synchronous `getOpenApi()` hook exposes an OpenAPI 3.0 document
+  through `GET /skServer/openapi/plugins/signalk-wiring`. It covers the 22
+  JSON/no-content plugin operations, with request/response schemas, access
+  requirements and mutation effects. Binary transfers and native resource
+  collections are separate. Discovery does not authorize execution or change
+  handler validation; native access checks and switching safety rules apply.
 - `Circuit` (read-only in effect, see §4), `WireRun`, and `Device` are served as SignalK resource types
   (`/signalk/v2/api/resources/wiringCircuits`, `.../wiringWireRuns`,
   `.../wiringDevices`, `.../wiringPlans`, `.../wiringZones`,

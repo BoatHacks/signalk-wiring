@@ -5,6 +5,13 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Native Signal K OpenAPI discovery for the 22 JSON/no-content plugin
+  operations, including inputs, responses, access requirements and switching,
+  calibration and purge effects. Built with reusable JavaScript helpers and
+  shared runtime constants; no new dependencies or route behavior changes.
+
 ## [0.7.0] - 2026-11-09
 
 ### Changed

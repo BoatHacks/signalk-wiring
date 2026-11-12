@@ -139,6 +139,26 @@ webapp's static assets are *not* served from here — see §2.4.
   (the dialog) and `public/measured.js` (measured values beside the rating,
   and the figures the load check uses).
 
+### 2.2.2 JSON OpenAPI discovery (`src/openapi.js`, plan 0027)
+
+`index.js` exposes Signal K's synchronous `getOpenApi()` hook. The builder
+returns a fresh OpenAPI 3.0.3 document with relative plugin paths and the
+`/plugins/signalk-wiring` server URL; Signal K publishes it under
+`/skServer/openapi/plugins/signalk-wiring`. Discovery works before the store
+starts and never reads vessel records.
+
+Small JavaScript helpers build schemas, parameters and operation metadata.
+Calibration timing defaults and change-log kinds come from the runtime
+modules. No schema-library dependency, build step or checked-in generated JSON
+is needed. Contracts remain explicit: existing handwritten validators cannot
+reliably generate them. Tests compare the document with registered routes,
+including their access levels and the older admin-only fallback.
+
+The document covers JSON and no-content responses, including destructive
+purges and hardware-affecting switching/calibration. It excludes binary
+transfers and the native Resources API. It describes permissions and effects
+without changing route registration, validation or authorization.
+
 ### 2.3 Storage layer (`src/store.js`)
 
 Wraps `node:sqlite` through `src/db.js`. Owns all reads/writes to `circuits`, `wire_runs`, `wire_run_conductors`,
