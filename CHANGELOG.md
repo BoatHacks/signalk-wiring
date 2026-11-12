@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-12
+
 ### Added
 
 - Snap to grid in the schematic editor (issue #14, plan 0028). A Snap button
