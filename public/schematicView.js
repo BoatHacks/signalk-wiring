@@ -13,6 +13,8 @@ import { circuitsOfCable, cableTitle, CONDUCTOR_LABELS } from './cableForm.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
+import { checkAll, liveAmpsByCircuit, wireMark, pathMidpoint } from './cableChecks.js'
+import { limitsFrom, CheckBadges, CheckPopover } from './cableCheckView.js'
 import { PortBlocks } from './ports.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo, toast } from './canvasRemoval.js'
@@ -294,6 +296,16 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     onError(null)
     try { await live.toggle(id) } catch (err) { onError(err.message) }
   }
+  // The cable checks (plan 0034). The live values are used only while Live is
+  // on and only to raise the current; otherwise rated values stand.
+  const checks = checkAll({
+    cables,
+    circuits,
+    devices,
+    conduits,
+    limits: limitsFrom(settings),
+    liveAmps: liveOn ? liveAmpsByCircuit(circuits.filter((c) => c.status === 'active' && c.derived), live.live, live.values) : undefined
+  })
 
   // Layout lives in local state while it is being dragged and is written
   // when the drag ends. It is reset from the record whenever that changes.
@@ -1257,10 +1269,10 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             ${snapOn && html`<${SnapGrid} view=${view} scale=${scaleX} />`}
             <${ZoneShapes} shapes=${shown} nameOf=${zoneName} selectedId=${selection && selection.type === 'zone' ? selection.id : null} />
             ${bands.map((b) => html`<${ConduitBand} key=${b.conduitId} band=${b} />`)}
-            ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName}
+            ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName} mark=${wireMark(checks.get(w.id))}
               selected=${!!selection && selection.type === 'wire' && selection.id === w.id}
               dim=${dimming && !hl.cableIds.has(w.id)} lit=${dimming && hl.cableIds.has(w.id)} />`)}
-            ${stubs.map((s) => html`<${StubShape} key=${s.cableId} stub=${s} />`)}
+            ${stubs.map((s) => html`<${StubShape} key=${s.cableId} stub=${s} mark=${wireMark(checks.get(s.cableId))} />`)}
             ${selectedWireId && html`<${BendHandles} wire=${wires.find((w) => w.id === selectedWireId)} bends=${bends[selectedWireId] || []} />`}
             ${boxes.map((b) => html`<${DeviceShape} key=${b.id} box=${b} device=${drawnById.get(b.id)}
               selected=${!!selection && selection.type === 'device' && selection.id === b.id}
@@ -1294,6 +1306,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <div class="schematic-inspector" data-testid="wire-inspector">
           <strong>${cableTitle(selectedWire.stored, new Map(devices.map((d) => [d.id, d.name])))}</strong>
           <span class="meta">${selectedWire.cable.conductors.length ? selectedWire.cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] || c.conductor).join(' + ') : 'Positive'}${selectedWire.cable.gauge != null ? ', ' + formatGauge(selectedWire.cable.gauge, selectedWire.cable.gaugeUnit) : ''}${selectedWire.cable.length != null ? ', ' + selectedWire.cable.length + ' ' + (selectedWire.cable.lengthUnit || '') : ''}</span>
+          ${checks.get(selectedWire.id) && html`<${InspectorCheck} result=${checks.get(selectedWire.id)} />`}
           <span class="meta" data-testid="wire-circuits">${wireCircuits.length ? wireCircuits.map(circuitLine).join('; ') : 'Not part of a circuit yet.'}</span>
           <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.stored })}>Edit cable</button>
           ${(bends[selectedWire.id] || []).length > 0 && html`<button type="button" class="link-btn" onClick=${() => straighten(selectedWire.id)}>Straighten</button>`}
@@ -1405,6 +1418,18 @@ function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
   `
 }
 
+// The check of the selected wire in the inspector: its badges, each opening
+// the reasoning on tap, so a touch screen has what hover gives a mouse.
+function InspectorCheck ({ result }) {
+  const [open, setOpen] = useState(null)
+  return html`
+    <span class="inspector-check">
+      <${CheckBadges} result=${result} onOpen=${(anchor) => setOpen(anchor)} />
+      ${open && html`<${CheckPopover} result=${result} anchor=${open} title="Cable check" onClose=${() => setOpen(null)} />`}
+    </span>
+  `
+}
+
 function cableLine (cable, deviceName) {
   const parts = [cable.cableLabel || `${deviceName(cable.fromDeviceId) || '?'} to ${deviceName(cable.toDeviceId) || '?'}`]
   if (cable.gauge != null) parts.push(formatGauge(cable.gauge, cable.gaugeUnit))
@@ -1412,7 +1437,23 @@ function cableLine (cable, deviceName) {
   return parts.join(', ')
 }
 
-function WireShape ({ wire, deviceName, selected, dim, lit }) {
+// The warning mark of the cable checks: a small triangle with an exclamation
+// mark where a path is half way. It takes no pointer events, so wire and stub
+// selection and every touch hit area work as before; the reason is the title
+// of the wire or stub line it belongs to.
+function CheckMark ({ path, mark }) {
+  const at = mark && pathMidpoint(path)
+  if (!at) return null
+  return html`
+    <g class=${'sch-check-mark check-' + mark.verdict} transform=${`translate(${at.x}, ${at.y})`} data-testid="check-mark" data-verdict=${mark.verdict}>
+      <path d="M0 -9 L9 6 L-9 6 Z" class="sch-check-tri" />
+      <path d="M0 -4 L0 1" class="sch-check-bang" />
+      <circle cx="0" cy="3.6" r="0.9" class="sch-check-dot" />
+    </g>
+  `
+}
+
+function WireShape ({ wire, deviceName, selected, dim, lit, mark }) {
   const types = G.conductorTypes(wire.cable)
   const style = G.wireLineStyle(wire.cable)
   const d = G.pathToDWithBridges(wire.path, wire.bridges)
@@ -1421,9 +1462,10 @@ function WireShape ({ wire, deviceName, selected, dim, lit }) {
   return html`
     <g class=${cls} data-wire=${wire.id} data-current=${style.current || ''}>
       ${style.dasharray && html`<path d=${d} class="sch-wire-line sch-wire-gap c-${types[0]}" />`}
-      <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.stored || wire.cable, deviceName)}</title></path>
+      <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.stored || wire.cable, deviceName)}${mark ? '\n' + mark.text : ''}</title></path>
       ${paired && style.dasharray && html`<path d=${paired} class="sch-wire-pair sch-wire-gap c-${types[1]}" />`}
       ${paired && html`<path d=${paired} class="sch-wire-pair c-${types[1]}" stroke-dasharray=${style.dasharray || undefined} />`}
+      <${CheckMark} path=${wire.path} mark=${mark} />
     </g>
   `
 }
@@ -1448,16 +1490,17 @@ function ConduitBand ({ band }) {
 // The line to a tab is drawn like the wire it stands for (conductor colours,
 // a second conductor line, DC solid or AC dashed); the tab
 // stays the off-page marker.
-function StubShape ({ stub }) {
+function StubShape ({ stub, mark }) {
   const types = G.conductorTypes(stub.cable)
   const style = G.wireLineStyle(stub.cable)
   const paired = types.length > 1 ? G.pathToD(G.offsetPath(stub.path, 4)) : null
   return html`
     <g class="sch-stub" data-stub=${stub.cableId} data-current=${style.current || ''}>
       ${style.dasharray && html`<path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line sch-wire-gap c-' + types[0]} />`}
-      <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line c-' + types[0]} stroke-dasharray=${style.dasharray || undefined} />
+      <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line c-' + types[0]} stroke-dasharray=${style.dasharray || undefined}>${mark && html`<title>${mark.text}</title>`}</path>
       ${paired && style.dasharray && html`<path d=${paired} class=${'sch-wire-pair sch-wire-gap c-' + types[1]} />`}
       ${paired && html`<path d=${paired} class=${'sch-wire-pair c-' + types[1]} stroke-dasharray=${style.dasharray || undefined} />`}
+      ${stub.path && html`<${CheckMark} path=${stub.path} mark=${mark} />`}
       <rect x=${stub.tab.x} y=${stub.tab.y} width=${stub.tab.w} height=${stub.tab.h} rx="3" class="sch-tab" />
       <text x=${stub.tab.x + stub.tab.w / 2} y=${stub.tab.y + 14} text-anchor="middle" class="sch-tab-label">${shorten(stub.label, 20)}</text>
     </g>

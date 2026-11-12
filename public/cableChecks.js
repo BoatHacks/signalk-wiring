@@ -344,3 +344,111 @@ export function wireMark (result) {
 
 const fmt = (n) => (Math.abs(n) >= 100 ? String(Math.round(n)) : String(Math.round(n * 10) / 10))
 export { fmt as formatNumber }
+
+// ---- Live current, the reasoning text and the schematic mark position ----
+
+// Measured amps per circuit id from what the Live view already has: the first
+// trustworthy meter of each consumer a circuit ends at (amps as they are,
+// watts over the circuit voltage). Only circuits with at least one reading are
+// in the map. A circuit with some consumers unmetered gives the readings that
+// exist, which can only be a low estimate; the check only lets a measured
+// figure raise the current, so that is the safe direction.
+//   live: the answer of GET /live ({ consumers });  values: Map of SignalK path
+//   (without vessels.self.) to value;  circuits: derived circuit resources.
+export function liveAmpsByCircuit (circuits, live, values) {
+  const out = new Map()
+  if (!live || !live.consumers || !values) return out
+  const strip = (path) => String(path || '').replace(/^vessels\.self\./, '')
+  for (const circuit of circuits || []) {
+    const d = circuit.derived
+    if (!d) continue
+    let amps = 0
+    let any = false
+    for (const id of d.endDeviceIds || []) {
+      const consumer = live.consumers[id]
+      const meter = consumer && (consumer.meters || []).find((m) => !m.lowConfidence)
+      if (!meter) continue
+      const v = values.get(strip(meter.path))
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue
+      if (meter.unit === 'W') {
+        if (!(d.voltage > 0)) continue
+        amps += Math.abs(v) / d.voltage
+      } else amps += Math.abs(v)
+      any = true
+    }
+    if (any) out.set(circuit.id, amps)
+  }
+  return out
+}
+
+// The point halfway along a path (a list of { x, y }), by length; null for a
+// path of fewer than two points.
+export function pathMidpoint (path) {
+  if (!path || path.length < 2) return null
+  let total = 0
+  for (let i = 1; i < path.length; i++) total += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
+  if (total === 0) return { x: path[0].x, y: path[0].y }
+  let left = total / 2
+  for (let i = 1; i < path.length; i++) {
+    const seg = Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
+    if (left <= seg && seg > 0) {
+      const t = left / seg
+      return { x: path[i - 1].x + (path[i].x - path[i - 1].x) * t, y: path[i - 1].y + (path[i].y - path[i - 1].y) * t }
+    }
+    left -= seg
+  }
+  const last = path[path.length - 1]
+  return { x: last.x, y: last.y }
+}
+
+export const ADVISORY_NOTE = 'Advisory only. This is not a safety guarantee: check the cable against the maker\'s data and the rules that apply to your boat.'
+export const TABLE_URL = 'https://github.com/BoatHacks/signalk-wiring/blob/main/docs/cable-checks.md'
+
+const SOURCE_TEXT = {
+  measured: 'measured',
+  'rated power': 'rated power of the consumers over the circuit voltage',
+  'protection rating': 'rating of the protecting fuse or breaker, as the worst case'
+}
+
+// The reasoning for a result as plain lines: { heading, lines } sections, the
+// assumptions and the advisory note. Everything the verdict rests on is named
+// with where it came from.
+export function explain (result) {
+  if (!result || result.exempt) return null
+  const sections = []
+  const a = result.ampacity
+  if (a) {
+    const lines = []
+    if (a.verdict === 'cannot') lines.push(`Not checked: needs ${joinNeeds(a.missing)}.`)
+    else {
+      lines.push(`Table figure ${fmt(a.baseA)} A (our table, copper, 105 C insulation, 30 C ambient).`)
+      lines.push(`${a.conductorCount} current-carrying conductor${a.conductorCount === 1 ? '' : 's'} in the bundle: factor ${a.deratingFactor}, so ${fmt(a.deratedA)} A allowed.`)
+      if (a.protectionA !== null) {
+        lines.push(`Fuse or breaker: ${fmt(a.protectionA)} A (protection rating). ${a.issues.includes('protection') ? 'More than the cable can carry.' : 'Within what the cable can carry.'}`)
+      }
+      if (a.loadA !== null) {
+        lines.push(`Load: ${fmt(a.loadA)} A (${SOURCE_TEXT[a.loadSource]}). ${a.issues.includes('load') ? 'More than the cable can carry.' : 'Within what the cable can carry.'}`)
+      }
+    }
+    sections.push({ heading: 'Cable size', verdict: a.verdict, lines })
+  }
+  const d = result.drop
+  if (d) {
+    const lines = []
+    if (d.verdict === 'cannot') lines.push(`Not checked: needs ${joinNeeds(d.missing)}.`)
+    else {
+      lines.push(`Length ${fmt(d.lengthM)} m, round trip ${fmt(d.roundTripM)} m (feed plus return), ${fmt(d.areaMm2)} mm2 copper at ${result.assumptions.operatingC} C: ${(d.resistanceOhm).toPrecision(3)} ohm.`)
+      lines.push(`Current ${fmt(d.currentA)} A (${SOURCE_TEXT[d.currentSource]}).${d.ac ? ` AC, power factor ${d.powerFactor}.` : ''}`)
+      lines.push(`Voltage ${fmt(d.voltageV)} V (nominal voltage of the circuit).`)
+      lines.push(`Drop ${d.dropV.toFixed(2)} V, ${d.dropPercent.toFixed(1)} % of the voltage, against the ${d.limitKind} limit of ${d.limitPercent} %${d.limitKind === 'critical' ? ' (the circuit has a critical device)' : ''}.`)
+    }
+    sections.push({ heading: 'Voltage drop', verdict: d.verdict, lines })
+  }
+  const as = result.assumptions
+  const assumptions = [
+    `${as.material}, ${as.insulationC} C insulation, ${as.ambientC} C ambient for the whole boat.`,
+    'Each cable is checked alone, its return taken as the same size and length.',
+    'A measured current can only raise the figure used.'
+  ]
+  return { sections, assumptions, note: ADVISORY_NOTE, circuits: result.circuits }
+}

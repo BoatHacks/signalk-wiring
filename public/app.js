@@ -43,6 +43,8 @@ import {
   chemistryFill, typeBatteryFill, socPathFill, installedAgeText, fractionToPercent, bankOfBattery, describeBank
 } from './batteries.js'
 import { ChangesTab } from './changesView.js'
+import { checkAll } from './cableChecks.js'
+import { CheckBadges, CheckPopover, limitsFrom } from './cableCheckView.js'
 import { canBeIcon, iconChoice, attachmentKind } from './deviceIcons.js'
 import { DeviceIcon, DeviceLabel, DeviceIconSvg, iconSpace } from './deviceIcon.js'
 
@@ -1564,6 +1566,9 @@ function CablesList () {
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const conduitNameById = new Map(conduits.map((c) => [c.id, c.name]))
+  // The cable checks (plan 0034), rated values only: this tab has no live data.
+  const checks = checkAll({ cables, circuits, devices, conduits, limits: limitsFrom(settings) })
+  const [checkOpen, setCheckOpen] = useState(null) // { id, anchor }
   const endNames = (c) => [deviceNameById.get(c.fromDeviceId), deviceNameById.get(c.toDeviceId)]
   const visible = cables.filter((c) =>
     matchesFilter(c, filter) && matchesRemoved(c, showRemoved) && matchesSearch(c, query, endNames(c)))
@@ -1682,7 +1687,7 @@ function CablesList () {
       ${visible.length > 0 && html`
         <table>
           <thead>
-            <tr><th><input type="checkbox" class="checkbox-input" title="Select all shown" checked=${allVisiblePicked} onChange=${toggleAllVisible} /></th><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Conduits</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Status</th><th></th></tr>
+            <tr><th><input type="checkbox" class="checkbox-input" title="Select all shown" checked=${allVisiblePicked} onChange=${toggleAllVisible} /></th><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Conduits</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Checks</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
             ${visible.flatMap((cable) => {
@@ -1699,6 +1704,7 @@ function CablesList () {
                   <td>${cable.length ? `${cable.length} ${cable.lengthUnit || ''}` : '-'}</td>
                   <td>${cable.zone || '-'}${(cable.tags || []).length ? html`<div class="meta">${cable.tags.join(', ')}</div>` : ''}</td>
                   <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '-'}</td>
+                  <td class="check-cell"><${CheckBadges} result=${checks.get(cable.id)} onOpen=${(anchor) => setCheckOpen({ id: cable.id, anchor })} /></td>
                   <td><${StatusBadge} status=${cable.status} /></td>
                   <td class="actions-cell"><div class="row-actions">
                     <${IconButton} icon="edit" label="Edit" onClick=${() => { setNotice(null); setForm(cable) }} />
@@ -1714,15 +1720,20 @@ function CablesList () {
                 </tr>
               `]
               if (attachmentsId === cable.id) {
-                rows.push(html`<tr key="${cable.id}-attachments"><td colspan="12"><${AttachmentList} ownerType="wireRun" ownerId=${cable.id} /></td></tr>`)
+                rows.push(html`<tr key="${cable.id}-attachments"><td colspan="13"><${AttachmentList} ownerType="wireRun" ownerId=${cable.id} /></td></tr>`)
               }
               if (historyId === cable.id) {
-                rows.push(html`<tr key="${cable.id}-history"><td colspan="12"><${ChangeLog} kind="wireRun" id=${cable.id} /></td></tr>`)
+                rows.push(html`<tr key="${cable.id}-history"><td colspan="13"><${ChangeLog} kind="wireRun" id=${cable.id} /></td></tr>`)
               }
               return rows
             })}
           </tbody>
         </table>
+      `}
+      ${checkOpen && checks.get(checkOpen.id) && html`
+        <${CheckPopover} result=${checks.get(checkOpen.id)} anchor=${checkOpen.anchor}
+          title=${cableTitle(cables.find((c) => c.id === checkOpen.id) || {}, deviceNameById)}
+          onClose=${() => setCheckOpen(null)} />
       `}
     </div>
   `

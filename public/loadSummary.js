@@ -1,6 +1,9 @@
 import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { loadFigures } from './measured.js'
 import { hashForState } from './router.js'
+import { useSettings } from './settings.js'
+import { checkAll, countVerdicts } from './cableChecks.js'
+import { limitsFrom } from './cableCheckView.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 
@@ -119,6 +122,20 @@ export function calculateCircuitLoad (circuit, deviceById) {
   }
 }
 
+// The one line about the cable checks, or null when there is nothing to say:
+// "Cable checks (advisory): 2 cables too small or with a high voltage drop,
+// 3 cannot be checked, 9 ok." Counts come from countVerdicts().
+export function checkSummaryLine (counts) {
+  const total = counts.ok + counts.warning + counts.fail + counts.cannot
+  if (total === 0) return null
+  const parts = []
+  if (counts.fail > 0) parts.push(`${counts.fail} too small`)
+  if (counts.warning > 0) parts.push(`${counts.warning} with a high voltage drop`)
+  if (counts.cannot > 0) parts.push(`${counts.cannot} cannot be checked yet`)
+  parts.push(`${counts.ok} ok`)
+  return `Cable checks (advisory): ${parts.join(', ')}.`
+}
+
 // What an "incomplete" circuit is missing and what to do about it, or null
 // when nothing is. Shown as a line under the badge and as its tooltip.
 export function incompleteReason (load) {
@@ -153,9 +170,13 @@ function formatAmps (amps) {
 export function LoadSummary () {
   const { loading: circuitsLoading, error: circuitsError, items: circuits } = useResourceList('wiringCircuits')
   const { items: devices } = useResourceList('wiringDevices')
+  const { items: cables } = useResourceList('wiringWireRuns')
+  const { items: conduits } = useResourceList('wiringConduits')
+  const settings = useSettings()
 
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const activeCircuits = circuits.filter((c) => c.status === 'active' && c.derived)
+  const checkLine = checkSummaryLine(countVerdicts(checkAll({ cables, circuits, devices, conduits, limits: limitsFrom(settings) })))
 
   return html`
     <div>
@@ -171,6 +192,10 @@ export function LoadSummary () {
         actually just a backup path — treat this as a starting point, not a certified
         calculation.
       </p>
+      ${checkLine && html`
+        <p class="meta check-summary" data-testid="check-summary">${checkLine}
+          ${' '}<a class="route-link" href=${hashForState({ tab: 'cables' })}>See the Cables tab</a>.</p>
+      `}
       ${circuitsLoading && html`<div class="empty-state">Loading…</div>`}
       <${ErrorBannerLocal} message=${circuitsError} />
       ${!circuitsLoading && !circuitsError && activeCircuits.length === 0 && html`

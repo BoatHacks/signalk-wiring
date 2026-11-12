@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import {
   checkCable, checkAll, circuitInput, chooseCurrent, deratingFactor, bundleCount, ampacityFor,
-  resistivity, lengthMetres, isSignalOnly, powerConductorCount, badgesFor, wireMark, countVerdicts, DEFAULT_LIMITS
+  resistivity, lengthMetres, isSignalOnly, powerConductorCount, badgesFor, wireMark, countVerdicts, DEFAULT_LIMITS,
+  liveAmpsByCircuit, pathMidpoint, explain, ADVISORY_NOTE
 } from '../public/cableChecks.js'
 import { AMPACITY_A, AWG_AREA_MM2, SOURCES, DERATING } from '../public/cableAmpacity.js'
 import { AWG_SIZES, MM2_SIZES } from '../public/gauge.js'
@@ -365,4 +366,50 @@ test('badges and the wire mark', () => {
   assert.deepEqual(badgesFor(warn).map((b) => b.text), ['voltage drop high'])
   assert.match(wireMark(warn).text, /Voltage drop 3.6 % is over the critical limit of 3 %/)
   assert.equal(wireMark(checkCable(cable(), { circuits: [] })), null)
+})
+
+test('liveAmpsByCircuit sums the live meters of the consumers a circuit ends at', () => {
+  const live = { consumers: {
+    a: { meters: [{ path: 'electrical.a.current', unit: 'A' }] },
+    b: { meters: [{ path: 'electrical.b.power', unit: 'W' }] },
+    c: { meters: [{ path: 'electrical.c.current', unit: 'A', lowConfidence: true }] }
+  } }
+  const values = new Map([['electrical.a.current', 2], ['electrical.b.power', 24], ['electrical.c.current', 9]])
+  const circuits = [
+    { id: 'x', derived: { voltage: 12, endDeviceIds: ['a', 'b', 'c'] } },
+    { id: 'y', derived: { voltage: 12, endDeviceIds: ['c'] } },
+    { id: 'z', derived: { voltage: 12, endDeviceIds: ['a'] } }
+  ]
+  // x: 2 A + 24 W / 12 V = 2 + 2 = 4 A; the low-confidence meter is ignored; y has no reading
+  const out = liveAmpsByCircuit(circuits, live, values)
+  assert.equal(out.get('x'), 4)
+  assert.equal(out.has('y'), false)
+  assert.equal(out.get('z'), 2)
+  assert.equal(liveAmpsByCircuit(circuits, null, values).size, 0)
+  assert.equal(liveAmpsByCircuit(circuits, live, new Map()).size, 0)
+})
+
+test('pathMidpoint is halfway along the length', () => {
+  assert.deepEqual(pathMidpoint([{ x: 0, y: 0 }, { x: 10, y: 0 }]), { x: 5, y: 0 })
+  // lengths 10 and 30: the middle is 20 along, 10 into the second segment
+  assert.deepEqual(pathMidpoint([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 30 }]), { x: 10, y: 10 })
+  assert.equal(pathMidpoint([{ x: 1, y: 1 }]), null)
+  assert.deepEqual(pathMidpoint([{ x: 2, y: 3 }, { x: 2, y: 3 }]), { x: 2, y: 3 })
+})
+
+test('explain names each number and its source, and carries the advisory note', () => {
+  const r = checkCable(cable(), { circuits: [circ({ ratingA: 20, ratedA: 100 / 12, critical: true })] })
+  const e = explain(r)
+  const text = e.sections.flatMap((s) => s.lines).join('\n')
+  assert.match(text, /Table figure 35 A/)
+  assert.match(text, /Fuse or breaker: 20 A \(protection rating\)/)
+  assert.match(text, /Load: 8.3 A \(rated power/)
+  assert.match(text, /round trip 10 m/)
+  assert.match(text, /3\.6 % of the voltage, against the critical limit of 3 %/)
+  assert.equal(e.note, ADVISORY_NOTE)
+  assert.match(ADVISORY_NOTE, /Advisory/)
+  assert.ok(e.assumptions.some((l) => /105 C insulation, 30 C ambient/.test(l)))
+  const missing = explain(checkCable(cable({ length: '' }), { circuits: [circ({ ratingA: 20 })] }))
+  assert.match(missing.sections[1].lines[0], /Not checked: needs length/)
+  assert.equal(explain(checkCable(cable({ conductors: [{ conductor: 'signal' }] }))), null)
 })
