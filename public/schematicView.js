@@ -1298,7 +1298,9 @@ function WireShape ({ wire, deviceName, selected, dim, lit }) {
   const cls = `sch-wire${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
   return html`
     <g class=${cls} data-wire=${wire.id} data-current=${style.current || ''}>
+      ${style.dasharray && html`<path d=${d} class="sch-wire-line sch-wire-gap c-${types[0]}" />`}
       <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.stored || wire.cable, deviceName)}</title></path>
+      ${paired && style.dasharray && html`<path d=${paired} class="sch-wire-pair sch-wire-gap c-${types[1]}" />`}
       ${paired && html`<path d=${paired} class="sch-wire-pair c-${types[1]}" stroke-dasharray=${style.dasharray || undefined} />`}
     </g>
   `
@@ -1330,7 +1332,9 @@ function StubShape ({ stub }) {
   const paired = types.length > 1 ? G.pathToD(G.offsetPath(stub.path, 4)) : null
   return html`
     <g class="sch-stub" data-stub=${stub.cableId} data-current=${style.current || ''}>
+      ${style.dasharray && html`<path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line sch-wire-gap c-' + types[0]} />`}
       <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line c-' + types[0]} stroke-dasharray=${style.dasharray || undefined} />
+      ${paired && style.dasharray && html`<path d=${paired} class=${'sch-wire-pair sch-wire-gap c-' + types[1]} />`}
       ${paired && html`<path d=${paired} class=${'sch-wire-pair c-' + types[1]} stroke-dasharray=${style.dasharray || undefined} />`}
       <rect x=${stub.tab.x} y=${stub.tab.y} width=${stub.tab.w} height=${stub.tab.h} rx="3" class="sch-tab" />
       <text x=${stub.tab.x + stub.tab.w / 2} y=${stub.tab.y + 14} text-anchor="middle" class="sch-tab-label">${shorten(stub.label, 20)}</text>

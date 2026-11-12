@@ -626,6 +626,11 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         `))}
         ${conduitBundles.bundles.map((b) => bundleMark(b, 'conduit'))}
 
+        ${runLines.map((l, i) => l.dash ? uncoveredPieces(i, l.pts, runBundles.covered).map((piece, n) => html`
+          <polyline key=${'g' + l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
+            class="run-line run-gap ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
+            stroke-width=${unit * (l.active ? 0.9 : 0.5)} />
+        `) : null)}
         ${runLines.map((l, i) => uncoveredPieces(i, l.pts, runBundles.covered).map((piece, n) => html`
           <polyline key=${l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
             class="run-line ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"

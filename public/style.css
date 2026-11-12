@@ -553,6 +553,10 @@ label.inline {
 .run-line { stroke: var(--text-muted); stroke-opacity: 0.5; stroke-linejoin: round; pointer-events: none; }
 .run-line.highlighted { stroke: var(--accent); stroke-opacity: 0.9; }
 .run-line.active { stroke: var(--danger); stroke-opacity: 1; }
+/* dashed (AC) routes: the gaps show the same colour at half the dash opacity */
+.run-line.run-gap { stroke-opacity: 0.25; }
+.run-line.run-gap.highlighted { stroke-opacity: 0.45; }
+.run-line.run-gap.active { stroke-opacity: 0.5; }
 
 .waypoint { fill: var(--surface); stroke: var(--danger); stroke-width: 0.5; cursor: grab; }
 .waypoint.selected { fill: var(--danger); }
@@ -699,6 +703,8 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-wire-line.c-earth { stroke: var(--wire-earth); }
 .sch-wire-line.c-signal { stroke: var(--wire-signal); }
 .sch-wire-pair { stroke-width: 1.5; }
+/* AC lines are dashed; the gaps show the same colour, lighter, instead of the background */
+.sch-wire-gap { stroke-opacity: 0.5; pointer-events: none; }
 .sch-wire-pair.c-positive { stroke: var(--wire-positive); }
 .sch-wire-pair.c-negative { stroke: var(--wire-negative); }
 .sch-wire-pair.c-line { stroke: var(--wire-line); }
