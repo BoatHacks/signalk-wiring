@@ -588,6 +588,20 @@ function changeSummary (existing, updated) {
   return 'updated'
 }
 
+// The name of a record that no longer exists, from its newest logged entry
+// that carries one (the permanent deletion entry, a deleted zone, a creation).
+function loggedName (rows) {
+  for (const row of rows) {
+    let diff
+    try { diff = JSON.parse(row.diff_json) } catch (e) { continue }
+    if (!diff) continue
+    const name = (typeof diff.name === 'string' && diff.name) ||
+      (diff.before && diff.before.name) || (diff.after && diff.after.name)
+    if (name) return name
+  }
+  return null
+}
+
 const PURGED_SUMMARY = 'permanently deleted'
 
 class Store {
@@ -1849,6 +1863,73 @@ class Store {
     return this.db
       .prepare('SELECT * FROM change_log WHERE record_type = ? AND record_id = ? ORDER BY timestamp ASC')
       .all(kind, id)
+  }
+
+  // The change log across records for the Changes tab: one group per record
+  // with its entries in the range, newest first. Groups are ordered by their
+  // latest entry (newest first) and paged with a cursor made of that entry's
+  // time and rowid. Circuits, whose records the app keeps in step with the
+  // cables by itself, are left out unless the circuit kind is asked for.
+  // Options: kinds, since, until (ISO times), q, id (one record only),
+  // limit (groups), cursor, entries (cap per group).
+  changeGroups ({ kinds, since, until, q, id, limit = 20, cursor, entries = 5 } = {}) {
+    const wanted = kinds && kinds.length > 0 ? kinds : Object.keys(TABLES).filter((k) => k !== 'circuit')
+    const where = [`record_type IN (${wanted.map(() => '?').join(', ')})`]
+    const args = [...wanted]
+    if (since) { where.push('timestamp >= ?'); args.push(since) }
+    if (until) { where.push('timestamp <= ?'); args.push(until) }
+    if (id) { where.push('record_id = ?'); args.push(id) }
+    const rows = this.db
+      .prepare(`SELECT rowid AS seq, * FROM change_log WHERE ${where.join(' AND ')} ORDER BY timestamp DESC, rowid DESC`)
+      .all(...args)
+    const needle = q ? String(q).trim().toLowerCase() : ''
+    const byRecord = new Map()
+    for (const row of rows) {
+      const key = `${row.record_type}\n${row.record_id}`
+      if (!byRecord.has(key)) byRecord.set(key, { kind: row.record_type, id: row.record_id, rows: [] })
+      byRecord.get(key).rows.push(row)
+    }
+    const groups = []
+    for (const g of byRecord.values()) {
+      const record = this.get(g.kind, g.id)
+      const name = this.recordName(g.kind, record) || loggedName(g.rows)
+      let list = g.rows
+      if (needle && !(name || '').toLowerCase().includes(needle)) {
+        list = list.filter((r) => r.summary.toLowerCase().includes(needle))
+        if (list.length === 0) continue
+      }
+      groups.push({
+        kind: g.kind,
+        id: g.id,
+        name,
+        status: !record ? 'purged' : record.status === REMOVED_STATUS ? 'removed' : 'active',
+        latest: list[0].timestamp,
+        seq: list[0].seq,
+        total: list.length,
+        list
+      })
+    }
+    groups.sort((a, b) => (a.latest < b.latest ? 1 : a.latest > b.latest ? -1 : b.seq - a.seq))
+    let start = 0
+    if (cursor) {
+      const [time, seq] = String(cursor).split('|')
+      const at = groups.findIndex((g) => g.latest < time || (g.latest === time && g.seq < Number(seq)))
+      start = at < 0 ? groups.length : at
+    }
+    const page = groups.slice(start, start + limit)
+    const last = page[page.length - 1]
+    return {
+      groups: page.map((g) => ({
+        kind: g.kind,
+        id: g.id,
+        name: g.name,
+        status: g.status,
+        latest: g.latest,
+        entries: g.list.slice(0, entries),
+        more: Math.max(0, g.total - entries)
+      })),
+      nextCursor: start + limit < groups.length && last ? `${last.latest}|${last.seq}` : null
+    }
   }
 
   // Attachments aren't part of the removed-but-kept lifecycle (SPEC.md

@@ -262,6 +262,33 @@ test('GET /changelog/:kind/:id returns parsed diff entries', () => {
   cleanup()
 })
 
+test('GET /changelog returns groups across kinds with parsed entries, filters and a cursor', () => {
+  const { store, router, cleanup } = setup()
+  const pump = store.create('device', { name: 'Bilge pump' })
+  const hose = store.create('conduit', { name: 'Main hose' })
+  store.update('device', pump.id, { name: 'Bilge pump 2' })
+  const call = (query) => {
+    const res = new FakeResponse()
+    router.invoke('get', '/changelog', new FakeRequest({ query }), res)
+    return res
+  }
+  let res = call({})
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.groups.length, 2)
+  const group = res.body.groups.find((g) => g.id === pump.id)
+  assert.equal(group.kind, 'device')
+  assert.equal(group.entries[0].summary, 'updated')
+  assert.deepEqual(group.entries[0].diff.name, { before: 'Bilge pump', after: 'Bilge pump 2' })
+  assert.equal(group.entries[0].diffJson, undefined)
+  assert.deepEqual(call({ kind: 'conduit' }).body.groups.map((g) => g.id), [hose.id])
+  assert.deepEqual(call({ kind: 'conduit,device' }).body.groups.length, 2)
+  assert.equal(call({ limit: '1' }).body.groups.length, 1)
+  assert.ok(call({ limit: '1' }).body.nextCursor)
+  assert.equal(call({ id: pump.id, entries: '1' }).body.groups[0].more, 1)
+  assert.equal(call({ kind: 'nonsense' }).statusCode, 400)
+  cleanup()
+})
+
 test('GET /changelog/:kind/:id rejects an unknown kind', () => {
   const { router, cleanup } = setup()
   const req = new FakeRequest({ params: { kind: 'nonsense', id: 'x' } })

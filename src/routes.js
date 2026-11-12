@@ -337,6 +337,36 @@ function registerRoutes (router, getStore, dataDir) {
     res.json(diagram)
   })
 
+  // The change log across records, grouped by record (the Changes tab). Served
+  // like the per-record log below, so the webapp reads it with the same login.
+  router.get('/changelog', requireStore, (req, res) => {
+    const q = req.query || {}
+    const kinds = [].concat(q.kind || []).join(',').split(',').filter(Boolean)
+    const bad = kinds.find((k) => !CHANGE_LOG_KINDS.has(k))
+    if (bad) {
+      res.status(400).json({ error: `kind must be one of: ${[...CHANGE_LOG_KINDS].join(', ')}` })
+      return
+    }
+    const number = (v, fallback, max) => {
+      const n = Number.parseInt(v, 10)
+      return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback
+    }
+    const result = req.wiringStore.changeGroups({
+      kinds,
+      since: q.since || undefined,
+      until: q.until || undefined,
+      q: q.q || undefined,
+      id: q.id || undefined,
+      limit: number(q.limit, 20, 100),
+      cursor: q.cursor || undefined,
+      entries: number(q.entries, 5, 1000)
+    })
+    res.json({
+      groups: result.groups.map((g) => ({ ...g, entries: g.entries.map(changeLogEntryToResource) })),
+      nextCursor: result.nextCursor
+    })
+  })
+
   router.get('/changelog/:kind/:id', requireStore, (req, res) => {
     const { kind, id } = req.params
     if (!CHANGE_LOG_KINDS.has(kind)) {
