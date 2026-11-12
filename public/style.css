@@ -913,3 +913,4 @@ main:has(.schematic-editor) { max-width: none; }
 .picker-with-icon { display: flex; align-items: center; gap: 8px; }
 .picker-with-icon select { flex: 1; min-width: 0; }
 .palette-item { display: flex; align-items: center; gap: 8px; }
+.diagram-icon { color: var(--text-muted-strong); pointer-events: none; }

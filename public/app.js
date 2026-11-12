@@ -42,8 +42,8 @@ import {
   CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
   chemistryFill, typeBatteryFill, socPathFill, installedAgeText, fractionToPercent, bankOfBattery, describeBank
 } from './batteries.js'
-import { canBeIcon, deviceIconUrl, attachmentKind } from './deviceIcons.js'
-import { DeviceIcon, DeviceLabel } from './deviceIcon.js'
+import { canBeIcon, iconChoice, attachmentKind } from './deviceIcons.js'
+import { DeviceIcon, DeviceLabel, DeviceIconSvg, iconSpace } from './deviceIcon.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ROUTES_BASE = '/plugins/signalk-wiring'
@@ -136,9 +136,11 @@ function RouteLink ({ tab, id, children }) {
 }
 
 // A device name that links to the device, or "?" when the device is unknown.
-function DeviceLink ({ id, names }) {
+function DeviceLink ({ id, names, devices }) {
   const name = id ? names.get(id) : null
-  return name ? html`<${RouteLink} tab="devices" id=${id}>${name}<//>` : '?'
+  if (!name) return '?'
+  const device = devices ? devices.get(id) : null
+  return html`<${RouteLink} tab="devices" id=${id}><${DeviceLabel} device=${device} name=${name} size=${18} /><//>`
 }
 
 // The remembered "Show removed" choice of one list; off by default.
@@ -1559,6 +1561,7 @@ function CablesList () {
   const { items: circuits } = useResourceList('wiringCircuits', reloadKey)
   const { items: conduits } = useResourceList('wiringConduits')
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
+  const deviceById = new Map(devices.map((d) => [d.id, d]))
   const conduitNameById = new Map(conduits.map((c) => [c.id, c.name]))
   const endNames = (c) => [deviceNameById.get(c.fromDeviceId), deviceNameById.get(c.toDeviceId)]
   const visible = cables.filter((c) =>
@@ -1686,8 +1689,8 @@ function CablesList () {
               const rows = [html`
                 <tr key=${cable.id}>
                   <td><input type="checkbox" class="checkbox-input" checked=${picked.has(cable.id)} onChange=${() => togglePicked(cable.id)} /></td>
-                  <td><${DeviceLink} id=${cable.fromDeviceId} names=${deviceNameById} /></td>
-                  <td><${DeviceLink} id=${cable.toDeviceId} names=${deviceNameById} /></td>
+                  <td><${DeviceLink} id=${cable.fromDeviceId} names=${deviceNameById} devices=${deviceById} /></td>
+                  <td><${DeviceLink} id=${cable.toDeviceId} names=${deviceNameById} devices=${deviceById} /></td>
                   <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}${cable.link ? html` <span class="badge link-badge" data-testid="link-badge">${cable.link}</span>` : ''}</td>
                   <td>${cable.cableLabel || '-'}</td>
                   <td>${(cable.conduitIds || []).map((id) => conduitNameById.get(id) || '?').join(' > ') || '-'}</td>
@@ -1763,6 +1766,8 @@ function CircuitsList ({ onSelect }) {
   const [query, setQuery] = useState('')
   const [showRemoved, setShowRemoved] = useShowRemoved('circuits')
   const nameById = new Map(devices.map((d) => [d.id, d.name]))
+  const deviceById = new Map(devices.map((d) => [d.id, d]))
+  const labels = (ids) => ids.map((id, i) => html`${i > 0 ? ', ' : ''}<${DeviceLink} id=${id} names=${nameById} devices=${deviceById} />`)
   const endNames = (c) => c.derived ? [...c.derived.supplyDeviceIds, ...c.derived.endDeviceIds].map((id) => nameById.get(id)) : []
   const removedCount = items.filter((c) => c.status === 'removed').length
   const visible = items
@@ -1797,7 +1802,7 @@ function CircuitsList ({ onSelect }) {
           >
             <div>
               <div>${circuit.name}</div>
-              <div class="meta">${circuitFacts(circuit)}${d && d.supplyDeviceIds.length ? ` – from ${d.supplyDeviceIds.map((id) => nameById.get(id) || '?').join(', ')}` : ''}${d && d.endDeviceIds.length ? ` – to ${d.endDeviceIds.map((id) => nameById.get(id) || '?').join(', ')}` : ''}</div>
+              <div class="meta">${circuitFacts(circuit)}${d && d.supplyDeviceIds.length ? html` - from ${labels(d.supplyDeviceIds)}` : ''}${d && d.endDeviceIds.length ? html` - to ${labels(d.endDeviceIds)}` : ''}</div>
             </div>
             <div>
               ${d && d.unprotected && html`<span class="badge over-rating">no protection</span> `}
@@ -1814,7 +1819,7 @@ function CircuitsList ({ onSelect }) {
 // Built from data already fetched through the resource API: the derived
 // circuit says which cables belong to it, and the cables say which devices
 // they join. Return (negative) cables are drawn dotted.
-function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new Map(), live, onLiveError }) {
+function DiagramView ({ cables, deviceNameById, deviceById = new Map(), live, onLiveError }) {
   if (cables.length === 0) return null
 
   const nodes = []
@@ -1823,7 +1828,7 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new
     if (!id || seenNodeIds.has(id)) return
     seenNodeIds.add(id)
     const deviceName = deviceNameById.get(id)
-    nodes.push({ id, label: deviceName || '?', kind: deviceName ? 'device' : 'label', icon: deviceIconById.get(id) || null })
+    nodes.push({ id, label: deviceName || '?', kind: deviceName ? 'device' : 'label', icon: iconChoice(deviceById.get(id)) })
   }
   for (const wr of cables) {
     addNode(wr.fromDeviceId)
@@ -1836,14 +1841,15 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new
   for (const n of nodes) {
     // A live battery reading is drawn inside the box, so the box grows to fit it.
     const liveReadingW = live && live.info(n.id) && live.info(n.id).reading ? live.info(n.id).reading.length * 5.4 + 16 : 0
-    const labelW = Math.max(90, n.label.length * 7 + 28, liveReadingW) + (n.icon ? 36 : 0)
+    const labelW = Math.max(90, n.label.length * 7 + 28, liveReadingW) + iconSpace(n.icon)
     // A box for the device's terminals and ports (relative to the node's corner),
     // as wide as the label needs.
     const hasPorts = ((deviceById.get(n.id) || {}).terminals || []).some((t) => t.port)
     // With ports, the name sits in a header row and the port labels need room beside it.
     n.box = deviceBox(deviceById.get(n.id) || { id: n.id, terminals: [] }, { x: 0, y: 0 }, { w: hasPorts ? Math.max(labelW, n.label.length * 7 + 120) : labelW })
     const portless = n.box.terminals.length === 0
-    const height = portless ? (n.icon ? 48 : 40) : Math.max(n.icon ? 48 : 40, n.box.h)
+    const minH = n.icon && n.icon.kind === 'image' ? 48 : 40
+    const height = portless ? minH : Math.max(minH, n.box.h)
     const width = portless ? labelW : n.box.w
     n.terminals = n.box.terminals
     g.setNode(n.id, { width, height })
@@ -1901,8 +1907,8 @@ function DiagramView ({ cables, deviceNameById, deviceIconById, deviceById = new
               onClick=${live ? toggle : undefined}>
               ${liveState && html`<title>${liveState.title}</title>`}
               <rect width=${pos.width} height=${pos.height} rx="6" class="diagram-node diagram-node-${n.kind}" />
-              ${n.icon && html`<image href=${n.icon} x="6" y=${(pos.height - 36) / 2} width="36" height="36" preserveAspectRatio="xMidYMid meet" />`}
-              <text x=${(pos.width + (n.icon ? 36 : 0)) / 2} y=${n.box.ports.length > 0 ? 18 : pos.height / 2 + 4} text-anchor="middle" class="diagram-label">
+              <${DeviceIconSvg} choice=${n.icon} height=${pos.height} headerRow=${n.box.ports.length > 0} />
+              <text x=${(pos.width + iconSpace(n.icon)) / 2} y=${n.box.ports.length > 0 ? 18 : pos.height / 2 + 4} text-anchor="middle" class="diagram-label">
                 ${n.label}
               </text>
               <${PortBlocks} box=${n.box} originX=${0} originY=${0} />
@@ -1925,7 +1931,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
   const { items: cables } = useResourceList('wiringWireRuns')
   const { items: devices } = useResourceList('wiringDevices')
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
-  const deviceIconById = new Map(devices.filter((d) => deviceIconUrl(d)).map((d) => [d.id, deviceIconUrl(d)]))
+  const deviceById = new Map(devices.map((d) => [d.id, d]))
   const [liveOn, setLiveOn] = useState(false)
   const [liveError, setLiveError] = useState(null)
   const live = useLive(liveOn, 0, (id) => deviceNameById.get(id) || id)
@@ -1948,7 +1954,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
   const cableById = new Map(cables.map((c) => [c.id, c]))
   const feedCables = d ? d.cableIds.map((id) => cableById.get(id)).filter(Boolean) : []
   const returnCables = d ? d.returnCableIds.map((id) => ({ ...cableById.get(id), isReturn: true })).filter((c) => c.id) : []
-  const names = (ids) => ids.length === 0 ? '-' : ids.map((id, i) => html`${i > 0 ? ', ' : ''}<${DeviceLink} id=${id} names=${deviceNameById} />`)
+  const names = (ids) => ids.length === 0 ? '-' : ids.map((id, i) => html`${i > 0 ? ', ' : ''}<${DeviceLink} id=${id} names=${deviceNameById} devices=${deviceById} />`)
 
   return html`
     <div>
@@ -1959,7 +1965,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
           <h2>${circuit.name} <${StatusBadge} status=${circuit.status} /></h2>
           <div class="meta">${circuitFacts(circuit)}</div>
           ${d && html`
-            <div class="meta">Protected by: ${d.protectorId ? html`<${DeviceLink} id=${d.protectorId} names=${deviceNameById} />` : 'nothing (no fuse or breaker)'}</div>
+            <div class="meta">Protected by: ${d.protectorId ? html`<${DeviceLink} id=${d.protectorId} names=${deviceNameById} devices=${deviceById} />` : 'nothing (no fuse or breaker)'}</div>
             <div class="meta">Supply: ${names(d.supplyDeviceIds)}</div>
             <div class="meta">Ends at: ${names(d.endDeviceIds)}</div>
             ${d.implicitReturnDeviceIds.length > 0 && html`<div class="meta">Negative assumed alongside the feed for: ${names(d.implicitReturnDeviceIds)}</div>`}
@@ -1988,7 +1994,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
         </div>
         ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
         ${liveError && html`<div class="error-banner">${liveError}</div>`}
-        <${DiagramView} cables=${[...feedCables, ...returnCables]} deviceNameById=${deviceNameById} deviceIconById=${deviceIconById} deviceById=${new Map(devices.map((d) => [d.id, d]))}
+        <${DiagramView} cables=${[...feedCables, ...returnCables]} deviceNameById=${deviceNameById} deviceById=${deviceById}
           live=${liveOn ? live : null} onLiveError=${setLiveError} />
       `}
 
@@ -2000,8 +2006,8 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
           <tbody>
             ${[...feedCables, ...returnCables].map((c) => html`
               <tr key=${(c.isReturn ? 'r-' : 'f-') + c.id}>
-                <td><${DeviceLink} id=${c.fromDeviceId} names=${deviceNameById} /></td>
-                <td><${DeviceLink} id=${c.toDeviceId} names=${deviceNameById} /></td>
+                <td><${DeviceLink} id=${c.fromDeviceId} names=${deviceNameById} devices=${deviceById} /></td>
+                <td><${DeviceLink} id=${c.toDeviceId} names=${deviceNameById} devices=${deviceById} /></td>
                 <td>${c.isReturn ? 'Negative return' : 'Feed'}</td>
                 <td><${RouteLink} tab="cables">${c.cableLabel || 'Cable'}<//></td>
                 <td>${formatGauge(c.gauge, c.gaugeUnit)}</td>
