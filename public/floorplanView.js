@@ -22,6 +22,9 @@ import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { visibleLabels, labelWidth, labelSide } from './floorLabels.js'
+import {
+  loadLayers, saveLayers, toggleLayer, toggleRole, roleShown, rolesPresent, layersChanged, focusSet, LAYER_SWITCHES
+} from './floorLayers.js'
 import { clusterMarkers, clusterRadius } from './floorCluster.js'
 import { placementBlock, isInside, childrenOf, contentsOf } from './enclosures.js'
 
@@ -400,7 +403,9 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   }
 
   const members = ctx.members
-  const labelIds = visibleLabels(data.devices, { hoverId, selectedId: ctx.deviceId, members, run: ctx.run })
+  const layers = ctx.layers
+  const focus = ctx.focus
+  const labelIds = layers.names ? visibleLabels(data.devices, { hoverId, selectedId: ctx.deviceId, members, run: ctx.run }) : new Set()
   const runLines = []
   const waypointMarkers = []
   // Where a route leaves this plan, a stub with a link to the plan it continues on.
@@ -426,7 +431,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         const key = i - offset // index into the stored route; negative for the derived start
         return ownRoute && key >= 0 && isActive ? pxFor('waypoint', key, p) : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)
       })
-      for (const seg of visibleSegments(pxs)) {
+      for (const seg of layers.cables ? visibleSegments(pxs) : []) {
         runLines.push({ id: run.id, dash: wireLineStyle(run).dasharray, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' ') })
       }
       addContinuations(run.id, points)
@@ -461,7 +466,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       const pxs = points.map((p, i) => (isActive
         ? pxFor('waypoint', i, p)
         : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)))
-      for (const seg of visibleSegments(pxs)) {
+      for (const seg of layers.conduits ? visibleSegments(pxs) : []) {
         conduitLines.push({ id: conduit.id, active: isActive, points: seg.map((p) => p.join(',')).join(' ') })
       }
       addContinuations(conduit.id, points)
@@ -478,6 +483,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   // distance is measured on screen, so zooming in splits a cluster. Only the
   // Select tool clusters: the other tools need to reach every device.
   const deviceMarks = []
+  const allMarks = [] // placed devices before the layer switches, for the role filter
   if (cal) {
     for (const device of data.devices) {
       // A device inside an enclosure is shown by the enclosure's marker.
@@ -487,6 +493,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       const lit = ctx.deviceId === device.id || (members && members.deviceIds.has(device.id)) ||
         (ctx.run && (ctx.run.fromDeviceId === device.id || ctx.run.toDeviceId === device.id)) ||
         (ctx.connect && (ctx.connect.fromId === device.id || ctx.connect.toId === device.id))
+      allMarks.push({ device, px, lit: !!lit })
+      if (!layers.devices || (!lit && !roleShown(layers, device.role))) continue
       deviceMarks.push({ device, px, lit: !!lit })
     }
   }
@@ -513,6 +521,28 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           ? html`<button onClick=${startCalibrating}>${cal ? 'Recalibrate' : 'Calibrate'}</button>`
           : html`<button onClick=${stopCalibrating}>Cancel calibration</button>`}
         <button onClick=${() => actions.removePlan(plan)}>Remove plan</button>
+        <details class="show-menu" data-testid="show-menu">
+          <summary class=${layersChanged(layers) ? 'changed' : ''}>Show</summary>
+          <div class="show-menu-body">
+            ${LAYER_SWITCHES.map((sw) => html`
+              <label class="inline" key=${sw.key}>
+                <input type="checkbox" data-testid=${'show-' + sw.key} checked=${layers[sw.key]} onChange=${() => ctx.setLayers(toggleLayer(layers, sw.key))} />
+                ${sw.label}
+              </label>
+            `)}
+            ${allMarks.length > 0 && html`
+              <div class="show-roles" data-testid="show-roles">
+                <span class="meta">Roles</span>
+                ${rolesPresent(allMarks.map((m) => m.device)).map((r) => html`
+                  <label class="inline" key=${r.value}>
+                    <input type="checkbox" data-testid=${'role-' + r.value} checked=${roleShown(layers, r.value)} onChange=${() => ctx.setLayers(toggleRole(layers, r.value))} />
+                    ${r.label}
+                  </label>
+                `)}
+              </div>
+            `}
+          </div>
+        </details>
       </div>
 
       ${!cal && !calibrating && html`
@@ -552,12 +582,12 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
 
         ${conduitLines.map((l, i) => html`
           <polyline key=${'k' + l.id + ':' + i} points=${l.points} fill="none"
-            class="conduit-line ${l.active ? 'active' : ''}" stroke-width=${unit * (l.active ? 2 : 1.6)} />
+            class="conduit-line ${l.active ? 'active' : ''} ${focus && !focus.conduitIds.has(l.id) ? 'faded' : ''}" stroke-width=${unit * (l.active ? 2 : 1.6)} />
         `)}
 
         ${runLines.map((l, i) => html`
           <polyline key=${l.id + ':' + i} points=${l.points} fill="none"
-            class="run-line ${l.active ? 'active' : ''} ${l.highlighted ? 'highlighted' : ''}"
+            class="run-line ${l.active ? 'active' : ''} ${l.highlighted ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
             stroke-width=${unit * (l.active ? 0.9 : 0.5)}
             stroke-dasharray=${scaledDash(l.dash, unit * (l.active ? 0.9 : 0.5) / 3) || undefined} />
         `)}
@@ -576,7 +606,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           if (clustered.has(device.id)) return null
           const liveState = ctx.live ? ctx.live.info(device.id) : null
           return html`
-            <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''} ${liveState ? 'live-' + liveState.look + (liveState.clickable ? ' live-clickable' : '') : ctx.live ? 'live-none' : ''}"
+            <g key=${device.id} class="device-marker role-${device.role || 'consumer'} ${lit ? 'highlighted' : ''} ${focus && !focus.deviceIds.has(device.id) ? 'faded' : ''} ${liveState ? 'live-' + liveState.look + (liveState.clickable ? ' live-clickable' : '') : ctx.live ? 'live-none' : ''}"
               data-live=${liveState ? liveState.look : undefined}
               onPointerEnter=${() => setHoverId(device.id)} onPointerLeave=${() => setHoverId((h) => (h === device.id ? null : h))}
               onPointerDown=${(e) => onMarkerDown(e, { kind: 'device', key: device.id })}>
@@ -610,7 +640,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           const cx = c.x / pxPerUnit
           const cy = c.y / pxPerUnit
           return html`
-            <g key=${c.id} class="device-marker cluster-marker ${openCluster && openCluster.id === c.id ? 'open' : ''}" data-testid="cluster-marker"
+            <g key=${c.id} class="device-marker cluster-marker ${openCluster && openCluster.id === c.id ? 'open' : ''} ${focus ? 'faded' : ''}" data-testid="cluster-marker"
               onPointerDown=${(e) => e.stopPropagation()}
               onClick=${() => setOpenCluster(openCluster && openCluster.id === c.id ? null : { id: c.id, ids: c.ids, px: [cx, cy] })}>
               <rect class="cluster-box" x=${cx - unit * 1.5} y=${cy - unit * 1.5} width=${unit * 3} height=${unit * 3} rx=${unit * 1.5} />
@@ -730,6 +760,8 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
   const [conduitId, setConduitId] = useState(null)
   const [waypointIndex, setWaypointIndex] = useState(null)
   const [hint, setHint] = useState(null) // a short hint in the route panel
+  const [layers, setLayersState] = useState(loadLayers)
+  const setLayers = (next) => { setLayersState(next); saveLayers(next) }
   const undo = useUndo()
   const mounted = useRef(true)
   useEffect(() => () => { mounted.current = false }, [])
@@ -926,7 +958,13 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
     reload()
   }
 
+  // Focus: while something is selected the rest fades. Only in the tools that
+  // select; placing, connecting and live switching need everything at full strength.
+  const focus = tool === 'select' || tool === 'route'
+    ? focusSet({ deviceId, run: run && run.status !== 'removed' ? run : null, conduit, members }, wireRuns)
+    : null
   const ctx = {
+    layers, setLayers, focus,
     tool, deviceId, runId, conduitId, members, waypointIndex,
     run: run && run.status !== 'removed' ? run : null,
     connect: connecting ? connect : null,

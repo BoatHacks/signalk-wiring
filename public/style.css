@@ -831,3 +831,17 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-enclosure-link rect { fill: none; stroke: var(--link); stroke-width: 1.2; }
 .sch-enclosure-link path { fill: none; stroke: var(--link); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .schematic-inside { margin: 4px 0 8px; }
+
+/* Plan 0027: the Show menu and the focus fade. Faded things stay clickable. */
+.show-menu { position: relative; display: inline-block; }
+.show-menu summary { cursor: pointer; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); list-style: none; }
+.show-menu summary::-webkit-details-marker { display: none; }
+.show-menu summary.changed { border-color: var(--link); color: var(--link); }
+.show-menu-body {
+  position: absolute; z-index: 6; left: 0; top: calc(100% + 4px); min-width: 170px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+.show-roles { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
+.floorplan-canvas .faded { opacity: 0.2; }
