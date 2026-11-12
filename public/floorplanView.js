@@ -10,6 +10,7 @@ import {
 } from './floorplan.js'
 import { hashForState } from './router.js'
 import { isTypingTarget, wireLineStyle, scaledDash, isDoubleTap, deviceHash } from './schematic.js'
+import { pinchStep, pinchView, DEAD_ZONE_PX } from './touchGestures.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo } from './canvasRemoval.js'
 import { cableName } from './conduits.js'
@@ -223,6 +224,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const [flip, setFlip] = useState(false)
   const [ghost, setGhost] = useState(null) // a marker being dragged: { kind, key, px }
   const drag = useRef(null)
+  const touches = useRef(new Map()) // touch pointers down, by pointerId
+  const gesture = useRef(null) // a two-finger pan and zoom in progress (plan 0031)
   const lastTap = useRef(null) // the last tap on a device marker, for the double tap
   const [hoverId, setHoverId] = useState(null) // the device marker under the pointer
   const [openBundle, setOpenBundle] = useState(null) // the selected bundle: { kind, key, ids, px }
@@ -304,7 +307,56 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
   }
 
-  const onPointerDown = (e) => { setOpenCluster(null); setOpenBundle(null); startDrag(e, null) }
+  const onPointerDown = (e) => {
+    if (e.pointerType === 'touch' && touches.current.size >= 2) return
+    setOpenCluster(null); setOpenBundle(null); startDrag(e, null)
+  }
+
+  // Two fingers pan and pinch the view. A second finger first cancels the
+  // one-finger drag (a marker returns to where it was, nothing is saved).
+  // Lifting one finger ends the gesture; the finger left does nothing until it
+  // is lifted too.
+  const cancelDrag = () => { drag.current = null; setGhost(null) }
+  const onTouchDownCapture = (e) => {
+    if (e.pointerType !== 'touch') return
+    if (touches.current.size === 0) gesture.current = null
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touches.current.size < 2) return
+    e.stopPropagation()
+    try { svgRef.current.setPointerCapture(e.pointerId) } catch (_) { /* unsupported pointer */ }
+    if (gesture.current && !gesture.current.ended) return
+    cancelDrag()
+    const ids = [...touches.current.keys()].slice(0, 2)
+    const start = ids.map((id) => touches.current.get(id))
+    gesture.current = { ids, start, last: start, active: false, ended: false, view: { x: box.x, y: box.y, w: box.width, h: box.height } }
+  }
+  const touchMoved = (e) => {
+    if (e.pointerType !== 'touch' || !touches.current.has(e.pointerId)) return false
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const g = gesture.current
+    if (!g) return false
+    if (g.ended) return true
+    const pair = g.ids.map((id) => touches.current.get(id))
+    if (!pair[0] || !pair[1]) return true
+    const step = pinchStep(g.active ? g.last : g.start, pair, g.active ? 0 : DEAD_ZONE_PX)
+    if (!g.active) {
+      if (step.idle) return true
+      g.active = true
+    }
+    g.view = pinchView(g.view, svgRef.current.getBoundingClientRect(), step, { minW: size.width * MIN_ZOOM_SPAN, maxW: size.width * 4 })
+    g.last = pair
+    setBox({ x: g.view.x, y: g.view.y, width: g.view.w, height: g.view.h })
+    return true
+  }
+  const touchEnded = (e) => {
+    if (e.pointerType !== 'touch') return false
+    touches.current.delete(e.pointerId)
+    const g = gesture.current
+    if (!g) return false
+    g.ended = true
+    if (touches.current.size === 0) gesture.current = null
+    return true
+  }
 
   // A marker takes the press itself so dragging it moves the marker, not the view.
   const onMarkerDown = (e, target) => {
@@ -322,6 +374,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   }
 
   const onPointerMove = (e) => {
+    if (touchMoved(e)) return
     const d = drag.current
     if (!d) return
     if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > CLICK_SLOP_PX) d.moved = true
@@ -337,6 +390,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   }
 
   const onPointerUp = (e) => {
+    if (touchEnded(e)) return
     const d = drag.current
     drag.current = null
     setGhost(null)
@@ -617,7 +671,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       <svg ref=${svgRef} class="floorplan-canvas ${calibrating || ctx.tool !== 'select' ? 'crosshair' : ''}"
         viewBox="${box.x} ${box.y} ${box.width} ${box.height}"
         onWheel=${onWheel} onPointerDown=${onPointerDown} onPointerMove=${onPointerMove}
-        onPointerUp=${onPointerUp} onPointerCancel=${() => { drag.current = null; setGhost(null) }}>
+        onPointerUp=${onPointerUp} onPointerDownCapture=${onTouchDownCapture}
+        onPointerCancel=${(e) => { if (!touchEnded(e)) cancelDrag() }}>
         <image href=${imageUrl} x=${size.x} y=${size.y} width=${size.width} height=${size.height} />
 
         ${conduitLines.map((l, i) => uncoveredPieces(i, l.pts, conduitBundles.covered).map((piece, n) => html`

@@ -19,6 +19,7 @@ import { matchesRemoved, readShowRemoved, writeShowRemoved } from './zones.js'
 import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import * as Z from './zoneShapes.js'
 import * as N from './snapGrid.js'
+import * as TG from './touchGestures.js'
 import * as L from './schematicLayout.js'
 import { midpoints } from './polygon.js'
 import { pageModel, insideText } from './enclosures.js'
@@ -723,6 +724,26 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     })
   }
 
+  // Escape, or a second finger: the running drag is dropped, positions and
+  // routes go back to what is saved, and nothing is written.
+  const cancelDrag = () => {
+    drag.current = null
+    lastMove.current = null
+    setPreview(null)
+    const p = {}
+    const hp = {}
+    for (const d of schematic.devices) { p[d.deviceId] = { x: d.x, y: d.y }; if (d.handPlaced) hp[d.deviceId] = true }
+    const b = {}
+    for (const w of schematic.wires) b[w.wireRunId] = w.points
+    const sp = {}
+    for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
+    setPos(p)
+    setHand(hp)
+    setBends(b)
+    setStubPos(sp)
+    setShapes(schematic.zoneShapes || [])
+  }
+
   // ---- Keyboard ----
   // Attached for as long as the editor is mounted, so it is gone when another
   // tab is shown. Re-attached every render to see the latest state.
@@ -740,20 +761,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       if (!cmd) return
       e.preventDefault()
       if (cmd.kind === 'cancel-drag') {
-        drag.current = null
-        setPreview(null)
-        const p = {}
-        const hp = {}
-        for (const d of schematic.devices) { p[d.deviceId] = { x: d.x, y: d.y }; if (d.handPlaced) hp[d.deviceId] = true }
-        const b = {}
-        for (const w of schematic.wires) b[w.wireRunId] = w.points
-        const sp = {}
-        for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
-        setPos(p)
-        setHand(hp)
-        setBends(b)
-        setStubPos(sp)
-        setShapes(schematic.zoneShapes || [])
+        cancelDrag()
       } else if (cmd.kind === 'close-popover') setPopover(null)
       else if (cmd.kind === 'close-tabmenu') setTabMenu(null)
       else if (cmd.kind === 'clear-selection') setSelection(null)
@@ -780,8 +788,60 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     return () => { document.removeEventListener('keydown', onAlt); document.removeEventListener('keyup', onAlt) }
   })
 
+  // ---- Two-finger pan and pinch (plan 0031) ----
+  // Touch pointers are tracked by pointerId. A second finger cancels any
+  // one-finger drag and then pans and zooms the view; lifting one finger ends
+  // the gesture, and the finger left does nothing until it is lifted too.
+  const touches = useRef(new Map())
+  const gesture = useRef(null)
+  const onTouchDownCapture = (e) => {
+    if (e.pointerType !== 'touch') return
+    if (touches.current.size === 0) gesture.current = null
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touches.current.size < 2) return
+    e.stopPropagation()
+    try { svgRef.current.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointers cannot be captured */ }
+    if (gesture.current && !gesture.current.ended) return
+    cancelDrag()
+    const ids = [...touches.current.keys()].slice(0, 2)
+    const start = ids.map((id) => touches.current.get(id))
+    gesture.current = { ids, start, last: start, active: false, ended: false, view: { ...view } }
+  }
+  const moveGesture = () => {
+    const g = gesture.current
+    if (g.ended) return
+    const pair = g.ids.map((id) => touches.current.get(id))
+    if (!pair[0] || !pair[1]) return
+    const step = TG.pinchStep(g.active ? g.last : g.start, pair, g.active ? 0 : TG.DEAD_ZONE_PX)
+    if (!g.active) {
+      if (step.idle) return
+      g.active = true
+    }
+    g.view = TG.pinchView(g.view, svgRef.current.getBoundingClientRect(), step)
+    g.last = pair
+    setVb(g.view)
+  }
+  // Returns true when the event belonged to a gesture and is handled.
+  const touchMoved = (e) => {
+    if (e.pointerType !== 'touch' || !touches.current.has(e.pointerId)) return false
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (!gesture.current) return false
+    moveGesture()
+    return true
+  }
+  const touchEnded = (e) => {
+    if (e.pointerType !== 'touch') return false
+    touches.current.delete(e.pointerId)
+    const g = gesture.current
+    if (!g) return false
+    g.ended = true
+    if (touches.current.size === 0) gesture.current = null
+    return true
+  }
+
   // ---- Pointer handling ----
   const onPointerDown = (e) => {
+    if (e.pointerType === 'touch' && touches.current.size >= 2) return
     if (e.button !== 0 && e.pointerType === 'mouse') return
     const p = toCanvas(e)
     setTabMenu(null)
@@ -904,6 +964,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   }
 
   const onPointerMove = (e) => {
+    if (touchMoved(e)) return
     const d = drag.current
     if (!d) return
     if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > MOVE_SLOP_PX) d.moved = true
@@ -988,6 +1049,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   }
 
   const onPointerUp = (e) => {
+    if (touchEnded(e)) return
     const d = drag.current
     drag.current = null
     lastMove.current = null
@@ -1137,7 +1199,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <div class="schematic-canvas-wrap">
           <svg ref=${svgRef} class="schematic-canvas" data-testid="schematic-canvas"
             viewBox="${view.x} ${view.y} ${view.w} ${view.h}"
-            onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onDblClick=${onDblClick}
+            onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${(e) => { if (!touchEnded(e)) cancelDrag() }} onPointerDownCapture=${onTouchDownCapture} onDblClick=${onDblClick}
             onDragOver=${(e) => e.preventDefault()} onDrop=${onDrop}>
             ${snapOn && html`<${SnapGrid} view=${view} scale=${scaleX} />`}
             <${ZoneShapes} shapes=${shown} nameOf=${zoneName} selectedId=${selection && selection.type === 'zone' ? selection.id : null} />
