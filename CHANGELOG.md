@@ -5,6 +5,14 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- The floorplan Show menu has a "Group nearby devices" switch. With it off, overlapping devices are drawn as separate markers instead of numbered stacks, so each one can be dragged. It is on by default and remembered per browser.
+
+### Fixed
+
+- The Cables page looked shifted to the right: its table (now 13 columns with the Checks column) was wider than the 1000 px page column and made the whole page scroll sideways. The page now uses the full width for the Cables tab, and on a narrower screen the table scrolls inside its own frame.
+
 ### Changed
 
 - A cable that is part of more than three circuits (a battery negative, for example) shows the first three in the Cables table and the cable form and an "and N more ..." link that opens the rest, instead of listing every circuit.
