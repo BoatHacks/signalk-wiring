@@ -645,7 +645,11 @@ main:has(.cables-table) { max-width: none; }
 .axis-corner text { fill: var(--link); font-size: 9px; font-weight: 600; }
 .continuation line { stroke: var(--danger); stroke-linecap: round; }
 .continuation polygon { fill: var(--danger); stroke: none; }
-.continuation-label { fill: var(--link); text-decoration: underline; cursor: pointer; paint-order: stroke; stroke: var(--surface); stroke-width: 0.4px; }
+.continuation { opacity: 0.55; }
+.continuation:hover, .continuation.chosen { opacity: 1; }
+.continuation-hit { stroke: transparent; }
+.continuation-label { fill: var(--link); text-decoration: underline; cursor: pointer; paint-order: stroke; stroke: var(--surface); stroke-width: 0.4px; opacity: 0; pointer-events: none; }
+.continuation:hover .continuation-label, .continuation.chosen .continuation-label { opacity: 1; pointer-events: auto; }
 .route-hint { font-weight: 600; color: var(--warn); }
 
 .list-item-main { display: flex; align-items: center; gap: 10px; }

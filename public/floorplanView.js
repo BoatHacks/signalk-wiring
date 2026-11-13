@@ -552,7 +552,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const continuations = []
   const addContinuations = (ownerId, points) => {
     for (const m of continuationMarks(points, plan, data.plans || [])) {
-      continuations.push({ ...m, key: `${ownerId}:${m.index}:${m.dir.join(',')}` })
+      continuations.push({ ...m, owner: ownerId, key: `${ownerId}:${m.index}:${m.dir.join(',')}` })
     }
   }
   if (cal) {
@@ -855,20 +855,29 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         })}
 
         ${continuations.map((m) => {
-          const end = [m.at[0] + m.dir[0] * unit * 5, m.at[1] + m.dir[1] * unit * 5]
-          const head = arrowHeadPoints(m.at, end, unit * 1.6).map((p) => p.join(',')).join(' ')
+          // A short faint arrow where a route leaves the plan; its label shows only for the
+          // chosen cable or conduit, or while the pointer is on the arrow, so the labels do not
+          // cover the markers and routes of a crowded plan.
+          const end = [m.at[0] + m.dir[0] * unit * 3, m.at[1] + m.dir[1] * unit * 3]
+          const head = arrowHeadPoints(m.at, end, unit * 1.3).map((p) => p.join(',')).join(' ')
           const left = m.dir[0] < 0
           const label = m.target ? `continues on ${m.target.name}` : 'continues, not shown on any plan'
+          const chosen = m.owner === ctx.runId || m.owner === ctx.conduitId
           const text = html`<text x=${end[0] + (left ? -unit * 0.6 : unit * 0.6)} y=${end[1] + unit * 0.5}
             text-anchor=${left ? 'end' : 'start'} font-size=${unit * 1.6} class="continuation-label">${label}</text>`
+          const drawing = html`
+            <title>${label}</title>
+            <line class="continuation-hit" x1=${m.at[0]} y1=${m.at[1]} x2=${end[0]} y2=${end[1]} stroke-width=${unit * 2} />
+            <line x1=${m.at[0]} y1=${m.at[1]} x2=${end[0]} y2=${end[1]} stroke-width=${unit * 0.4} />
+            <polygon points=${head} />
+            ${text}
+          `
           return html`
-            <g key=${m.key} class="continuation" data-testid="continuation" onPointerDown=${(e) => e.stopPropagation()}>
-              <line x1=${m.at[0]} y1=${m.at[1]} x2=${end[0]} y2=${end[1]} stroke-width=${unit * 0.4} />
-              <polygon points=${head} />
+            <g key=${m.key} class="continuation ${chosen ? 'chosen' : ''}" data-testid="continuation" onPointerDown=${(e) => e.stopPropagation()}>
               ${m.target
                 ? html`<a href=${hashForState({ tab: 'floorplan', id: m.target.id })} data-testid="continuation-link"
-                    onClick=${(e) => { e.preventDefault(); actions.goToPlan(m.target.id) }}>${text}</a>`
-                : text}
+                    onClick=${(e) => { e.preventDefault(); actions.goToPlan(m.target.id) }}>${drawing}</a>`
+                : drawing}
             </g>
           `
         })}

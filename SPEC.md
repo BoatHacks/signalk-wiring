@@ -536,9 +536,11 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   route point and finishes the route (the run selection clears and the tool
   goes idle); clicking any other device only shows "This route ends at <To
   device>". Where a route leaves a plan (a point outside the plan's height
-  range) a short stub with an arrow and the link "continues on <plan name>"
-  is drawn at the last visible point; the link switches to the first plan,
-  by name, of the same view that shows the next point, and points without a
+  range) a short faint stub with an arrow is drawn at the last visible point.
+  The arrow is the link to the first plan, by name, of the same view that
+  shows the next point; its label "continues on <plan name>" shows while the
+  pointer is on the arrow and for the chosen cable or conduit, so labels do not
+  cover the markers of a crowded plan. Points without a
   height never produce one. The route panel names the chosen cable and has a
   "Delete wire run" button that works like deleting a wire on the schematic
   (no confirmation, Undo, permanent delete when the Undo window ends); there
