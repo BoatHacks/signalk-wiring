@@ -413,6 +413,33 @@ export function routeWithEnd (route, point) {
   return [...points, pointOf(point)]
 }
 
+// ---- Picking a drawn cable or conduit with a click -------------------------
+// The line nearest to `point` within `tolerance` (all in drawing units), from
+// lines of { id, kind, pts: [[x, y], ...] }. Null when none is that close; on a
+// tie a cable (kind 'run') is preferred over a conduit.
+function distanceToSegment (p, a, b) {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const len2 = dx * dx + dy * dy
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2))
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+}
+
+export function nearestLine (point, lines, tolerance) {
+  let best = null
+  for (const line of lines) {
+    const pts = line.pts || []
+    for (let i = 1; i < pts.length; i++) {
+      const distance = distanceToSegment(point, pts[i - 1], pts[i])
+      if (distance > tolerance) continue
+      if (!best || distance < best.distance - 1e-9 || (Math.abs(distance - best.distance) <= 1e-9 && line.kind === 'run' && best.kind !== 'run')) {
+        best = { id: line.id, kind: line.kind, distance }
+      }
+    }
+  }
+  return best
+}
+
 // ---- Routes follow a moved device ------------------------------------------
 // The To end of a route is a stored point (the device's position when the
 // route was finished) and the start is derived. When a device is moved, the

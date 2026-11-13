@@ -6,7 +6,7 @@ import {
   moveWaypoint, removeWaypoint, insertWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
   metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints, conduitRoutePoints, unroutedCables,
   conduitMembers, effectiveCableRoute, cornerArrows, routeEndAction, routeWithEnd, continuationMarks,
-  escapeStep, deleteStep, followDevice
+  escapeStep, deleteStep, followDevice, nearestLine
 } from './floorplan.js'
 import { hashForState } from './router.js'
 import { isTypingTarget, wireLineStyle, scaledDash, isDoubleTap, deviceHash } from './schematic.js'
@@ -496,6 +496,12 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       const [a, b] = metersAt(e)
       actions.placeDevice(plan.view, a, b)
     } else if (ctx.tool === 'route') {
+      // With no wire run or conduit chosen, the first cable or conduit clicked is chosen.
+      if (!ctx.runId && !ctx.conduitId) {
+        const lines = [...runLines.map((l) => ({ id: l.id, kind: 'run', pts: l.pts })), ...conduitLines.map((l) => ({ id: l.id, kind: 'conduit', pts: l.pts }))]
+        const hit = nearestLine(toDrawing(e), lines, (e.pointerType === 'touch' ? 22 : 8) / pxPerUnit)
+        if (hit) { if (hit.kind === 'run') actions.selectRun(hit.id); else actions.selectConduit(hit.id); return }
+      }
       const [a, b] = metersAt(e)
       actions.addWaypoint(plan.view, a, b)
     } else if (ctx.tool === 'connect') {
@@ -1090,7 +1096,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
       return saveDevicePosition(devicesById.get(id), view, a, b)
     },
     addWaypoint: (view, a, b) => {
-      if (!run && !conduit) { setError('Choose a wire run or a conduit to draw first.'); return }
+      if (!run && !conduit) { setError('Click a cable or a conduit on the plan to choose it, or pick one from the lists above.'); return }
       saveRoute([...currentRoute(), waypointFromClick(lastPoint(), view, a, b)])
       setWaypointIndex(null)
     },
