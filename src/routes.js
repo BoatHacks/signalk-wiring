@@ -145,6 +145,14 @@ function registerRoutes (router, getStore, dataDir) {
     next()
   }
 
+  // Every GET route is registered for read-only users (a logged-in user is
+  // enough, no admin needed); plugin routes default to admin-only. Writes
+  // (POST, DELETE, purge) stay on the plain router, which is admin-only. It
+  // goes through router.access where the server offers it (signalk-server
+  // >= 2.36); older servers keep the admin-only default, which is safe, just
+  // stricter.
+  const readOnlyRoutes = typeof router.access === 'function' ? router.access('readonly') : router
+
   router.post('/attachments', requireStore, (req, res) => {
     const { ownerType, ownerId, filename } = req.query
     if (!['wireRun', 'device', 'conduit'].includes(ownerType) || !ownerId || !filename) {
@@ -172,7 +180,7 @@ function registerRoutes (router, getStore, dataDir) {
     })
   })
 
-  router.get('/attachments', requireStore, (req, res) => {
+  readOnlyRoutes.get('/attachments', requireStore, (req, res) => {
     const { ownerType, ownerId } = req.query
     if (!ownerType || !ownerId) {
       res.status(400).json({ error: 'ownerType and ownerId query params are required' })
@@ -182,7 +190,7 @@ function registerRoutes (router, getStore, dataDir) {
     res.json(attachments.map(rowToResource))
   })
 
-  router.get('/attachments/:id', requireStore, (req, res) => {
+  readOnlyRoutes.get('/attachments/:id', requireStore, (req, res) => {
     const attachment = req.wiringStore.getAttachment(req.params.id)
     if (!attachment) {
       res.status(404).json({ error: `attachment not found: ${req.params.id}` })
@@ -265,11 +273,6 @@ function registerRoutes (router, getStore, dataDir) {
     })
   })
 
-  // Reading a plan only needs a logged-in user, not an admin. Plugin routes
-  // default to admin-only, so this one is registered through router.access
-  // where the server offers it (signalk-server >= 2.36); older servers keep
-  // the admin-only default, which is safe, just stricter.
-  const readOnlyRoutes = typeof router.access === 'function' ? router.access('readonly') : router
   // The plugin version, so an open page can tell it is out of date after an
   // update. It needs no database, so it answers even when the plugin is stopped.
   readOnlyRoutes.get('/version', (req, res) => {
@@ -303,8 +306,7 @@ function registerRoutes (router, getStore, dataDir) {
   })
 
   // The icon of a device, readable like the plans so drawings can show it
-  // to anyone who can see them. Only this one image is exposed this way;
-  // the rest of a device's attachments stay admin-only.
+  // to anyone who can see them.
   readOnlyRoutes.get('/devices/:id/icon', requireStore, (req, res) => {
     const device = req.wiringStore.get('device', req.params.id)
     const attachment = device && device.icon_attachment_id
@@ -328,7 +330,7 @@ function registerRoutes (router, getStore, dataDir) {
     res.json({ banks, warnings })
   })
 
-  router.get('/circuits/:id/diagram', requireStore, (req, res) => {
+  readOnlyRoutes.get('/circuits/:id/diagram', requireStore, (req, res) => {
     const diagram = buildCircuitDiagram(req.wiringStore, req.params.id)
     if (!diagram) {
       res.status(404).json({ error: `circuit not found: ${req.params.id}` })
@@ -339,7 +341,7 @@ function registerRoutes (router, getStore, dataDir) {
 
   // The change log across records, grouped by record (the Changes tab). Served
   // like the per-record log below, so the webapp reads it with the same login.
-  router.get('/changelog', requireStore, (req, res) => {
+  readOnlyRoutes.get('/changelog', requireStore, (req, res) => {
     const q = req.query || {}
     const kinds = [].concat(q.kind || []).join(',').split(',').filter(Boolean)
     const bad = kinds.find((k) => !CHANGE_LOG_KINDS.has(k))
@@ -367,7 +369,7 @@ function registerRoutes (router, getStore, dataDir) {
     })
   })
 
-  router.get('/changelog/:kind/:id', requireStore, (req, res) => {
+  readOnlyRoutes.get('/changelog/:kind/:id', requireStore, (req, res) => {
     const { kind, id } = req.params
     if (!CHANGE_LOG_KINDS.has(kind)) {
       res.status(400).json({ error: `kind must be one of: ${[...CHANGE_LOG_KINDS].join(', ')}` })

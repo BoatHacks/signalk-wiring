@@ -61,7 +61,7 @@ it leaves it alone. Deleting soft-deletes the page.
 
 A fourth, read-only type, `wiringSettings` (`src/settings.js`), serves
 the plugin configuration as a single `config` resource. The webapp loads
-anonymously and the plugin's routes are admin-gated, so the resource API
+anonymously and the plugin's routes may be admin-gated (older servers), so the resource API
 is the only way for it to read the settings (convention and default
 units). Writes and deletes are rejected; changing a setting means
 editing the plugin configuration.
@@ -81,9 +81,8 @@ Registered via `registerWithRouter(router)`. Owns:
   access): the battery banks and the warnings that belong to no circuit.
 - Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`), and
   across records for the Changes tab (`GET /plugins/signalk-wiring/changelog`,
-  plan 0033). Both are registered on the plain router, so they are admin-only
-  like attachments; the webapp reads them with the admin login it already
-  needs for writes. Query: `kind` (comma separated or repeated), `since` and
+  plan 0033). Both are registered with `router.access('readonly')` like every
+  GET route here. Query: `kind` (comma separated or repeated), `since` and
   `until` (ISO times), `q` (record name or entry summary, case-insensitive),
   `id` (one record only, used by "Show N more"), `limit` (groups, default 20,
   at most 100), `cursor` and `entries` (entries per group, default 5, at most
@@ -103,22 +102,29 @@ Registered via `registerWithRouter(router)`. Owns:
   reads the route above.
 - Live view, switching and calibration routes live in `src/liveRoutes.js`
   (see §2.2.1), registered from `index.js` beside these.
-- Device icons (`GET /plugins/signalk-wiring/devices/:id/icon`), registered
-  with `router.access('readonly')` like the plan download so drawings can
-  show them to any logged-in user. It serves only the one image marked as
-  the icon, with `nosniff` and a restrictive Content-Security-Policy; the
-  device's other attachments stay behind the admin-only routes above.
+- Device icons (`GET /plugins/signalk-wiring/devices/:id/icon`) serve only
+  the one image marked as the icon, with `nosniff` and a restrictive
+  Content-Security-Policy.
 - Plan drawings (`POST` and `GET /plugins/signalk-wiring/plans/:id/image`).
   Upload accepts SVG, PNG, JPEG and WebP, caps size at 15MB, checks the
   bytes against the declared type, and stores the file as `<id>.<ext>`
   under `plans/` in the data directory (a new format replaces the old
   file). Download sets the type from the extension, `nosniff` and a
   restrictive Content-Security-Policy. It is registered with
-  `router.access('readonly')` when the router offers it, so any
-  logged-in user can read a plan; everything else stays admin-only.
+  restrictive Content-Security-Policy.
 
-Except for that download, these are admin-gated by SignalK itself (see §6), which is acceptable
-since they're only ever called by this plugin's own authoring UI. The
+Access (plan 0035): every GET route in `registerRoutes` (attachment list and
+download, circuit diagram, both change log reads, plan image, device icon,
+`derived`, `version`) goes through one `readOnlyRoutes` registrar, which is
+`router.access('readonly')` when the server offers it (signalk-server 2.36
+and later) and the plain router otherwise. Every POST and DELETE (uploads,
+purges, zone merge) stays on the plain router, which SignalK gates to admins
+(see §6). Reviewed GET by GET: none needs to stay admin-only, since they
+return what the webapp already shows read-only users through the resource
+API; attachments are the one judgement call (photos and manuals), decided as
+readable so a read-only demo shows them. `liveRoutes.js` already followed the
+same rule, with `switch` and calibration steering at read-write access.
+`test/routes.test.js` records the access level per route to pin this. The
 webapp's static assets are *not* served from here — see §2.4.
 
 ### 2.2.1 Live view, switching and calibration (plan 0017)

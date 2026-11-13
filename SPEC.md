@@ -394,20 +394,19 @@ import is a deferred feature (see 10.2), not an MVP input source.
   supports it) returns the battery banks and the warnings of the derivation
   that belong to no single circuit, such as a cable that ends on a missing
   device.
-- Attachment upload/download and the diagram-rendering data endpoint are
-  served under the plugin's own admin-gated routes
-  (`/plugins/signalk-wiring/...`), since they're only ever used by the
-  plugin's own UI.
-- `GET /plugins/signalk-wiring/devices/:id/icon` serves a device's icon to
-  any logged-in user where the server supports per-route access levels
-  (admin only otherwise), so drawings can show it. Only the icon is
-  exposed this way; a device's other attachments stay admin-only.
+- Who can read what: every `GET` route under `/plugins/signalk-wiring/`
+  (attachment list and download, the circuit diagram, the change log, the
+  plan drawings, device icons, `derived`, `live`, calibration status and runs,
+  `version`) is readable by any logged-in user, a read-only user included,
+  where the server supports per-route access levels (signalk-server 2.36 and
+  later), and by admins only otherwise. Every write (uploads, deletes,
+  purges, zone merge, plan upload) stays admin-only; switching and
+  calibration need a read-write login. No plugin option changes this.
 - `POST /plugins/signalk-wiring/zones/:id/merge?into=<zone id>` (admin)
   merges one zone into another.
 - Plan drawings: `POST /plugins/signalk-wiring/plans/:id/image` (admin)
   uploads one, `GET .../plans/:id/image` serves it to any logged-in user
-  where the server supports per-route access levels (signalk-server
-  2.36 and later), and to admins only otherwise.
+  (see above).
 
 ### 6.2 Events / Streaming
 
@@ -508,8 +507,8 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   time with "Show more records". Circuit entries are hidden unless the
   Circuits kind is picked, because circuits follow the cables by
   themselves. Device groups use the shared device label (icon and name). It
-  reads `GET /plugins/signalk-wiring/changelog` (admin login, like the
-  per-record log). Positions and layout changes on schematics and plans are
+  reads `GET /plugins/signalk-wiring/changelog` (readable by read-only
+  users, like every GET route). Positions and layout changes on schematics and plans are
   not logged, so they do not appear.
 - A settings panel for the installation's convention
   (ABYC E-11 / DIN EN ISO 13297 / freestyle), used only to drive UI

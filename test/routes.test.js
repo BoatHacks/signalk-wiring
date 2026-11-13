@@ -8,6 +8,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { Store } = require('../src/store')
+const { registerLiveRoutes } = require('../src/liveRoutes')
 const { registerRoutes } = require('../src/routes')
 
 function createFakeRouter () {
@@ -468,30 +469,60 @@ test('the plan routes return 503 while the plugin is disabled', () => {
   cleanup()
 })
 
-test('the SVG download is registered readonly when the server supports router.access, everything else stays admin-only', () => {
-  const store = new Store(':memory:')
+// A router that records the access level of every route. Routes registered
+// straight on the router (not through access) count as the admin default.
+function recordingRouter (withAccess) {
   const registered = []
-  const router = createFakeRouter()
-  router.access = (level) => {
-    const registrar = {}
-    for (const method of ['get', 'post', 'delete']) {
-      registrar[method] = (routePath, ...handlers) => {
-        registered.push({ level, method, routePath })
-        router[method](routePath, ...handlers)
-        return registrar
-      }
+  const router = {}
+  const registrar = (level) => {
+    const r = {}
+    for (const method of ['get', 'put', 'post', 'delete']) {
+      r[method] = (routePath) => { registered.push({ level, method, routePath }); return r }
     }
-    return registrar
+    return r
   }
+  Object.assign(router, registrar('admin'))
+  if (withAccess) router.access = (level) => registrar(level)
+  return { router, registered }
+}
 
+test('every GET route is registered readonly when the server supports router.access, every write stays admin-only', () => {
+  const store = new Store(':memory:')
+  const { router, registered } = recordingRouter(true)
   registerRoutes(router, () => store, os.tmpdir())
 
-  assert.deepEqual(registered, [
-    { level: 'readonly', method: 'get', routePath: '/version' },
-    { level: 'readonly', method: 'get', routePath: '/plans/:id/image' },
-    { level: 'readonly', method: 'get', routePath: '/devices/:id/icon' },
-    { level: 'readonly', method: 'get', routePath: '/derived' }
+  const gets = registered.filter((r) => r.method === 'get')
+  const writes = registered.filter((r) => r.method !== 'get')
+  assert.ok(gets.length >= 9)
+  assert.ok(writes.length >= 6)
+  assert.deepEqual(gets.filter((r) => r.level !== 'readonly'), [])
+  assert.deepEqual(writes.filter((r) => r.level !== 'admin'), [])
+  assert.deepEqual(gets.map((r) => r.routePath).sort(), [
+    '/attachments', '/attachments/:id', '/changelog', '/changelog/:kind/:id',
+    '/circuits/:id/diagram', '/derived', '/devices/:id/icon', '/plans/:id/image', '/version'
   ])
+  store.close()
+})
+
+test('the live routes read as readonly and write as readwrite', () => {
+  const store = new Store(':memory:')
+  const { router, registered } = recordingRouter(true)
+  registerLiveRoutes(router, () => store, { app: {} })
+  for (const r of registered) {
+    assert.equal(r.level, r.method === 'get' ? 'readonly' : 'readwrite', `${r.method} ${r.routePath}`)
+  }
+  store.close()
+})
+
+test('a server without router.access still registers every route', () => {
+  const store = new Store(':memory:')
+  const withAccess = recordingRouter(true)
+  const without = recordingRouter(false)
+  registerRoutes(withAccess.router, () => store, os.tmpdir())
+  registerRoutes(without.router, () => store, os.tmpdir())
+  const key = (r) => `${r.method} ${r.routePath}`
+  assert.deepEqual(without.registered.map(key).sort(), withAccess.registered.map(key).sort())
+  assert.ok(without.registered.every((r) => r.level === 'admin'))
   store.close()
 })
 
