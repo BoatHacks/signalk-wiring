@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-11-13
+
 ### Changed
 
 - Every `GET` route of the plugin (attachment list and download, circuit diagram, change log, plan drawings, device icons, derived warnings) is now registered with read-only access where the server supports it (signalk-server 2.36 and later), so a read-only user can browse everything. Writes, purges and uploads stay admin-only; switching and calibration stay read-write. Older servers keep the admin-only default.
