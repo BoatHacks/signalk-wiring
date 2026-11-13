@@ -1394,6 +1394,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
           ${run && html`
             <div class="route-info" data-testid="route-panel">
               <span>Cable: <strong>${cableName(run, deviceNameById)}</strong></span>
+              <span data-testid="route-ends">Connects: <strong>${(run.fromDeviceId && deviceNameById.get(run.fromDeviceId)) || '?'}</strong> to <strong>${(run.toDeviceId && deviceNameById.get(run.toDeviceId)) || '?'}</strong></span>
               ${hint && html`<span class="route-hint" data-testid="route-hint" role="status">${hint}</span>`}
               <span>Measured route: <strong>${measured.length.toFixed(2)} m</strong>${measured.complete ? '' : ' (incomplete, some heights unset or a conduit has no route)'}${effective.source === 'conduits' ? ', following its conduits' : ''}</span>
               <span>Recorded length: ${run.length != null ? `${run.length} ${run.lengthUnit || ''}` : 'none'}</span>
