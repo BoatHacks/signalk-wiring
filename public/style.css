@@ -602,6 +602,9 @@ main:has(.cables-table) { max-width: none; }
   font-size: 13px;
 }
 .cluster-list ul { margin: 6px 0; padding-left: 18px; }
+.cluster-list.dragging { opacity: 0.25; pointer-events: none; }
+.cluster-list li { list-style: none; margin-left: -18px; }
+.drag-grip { display: inline-block; width: 16px; height: 16px; margin-right: 6px; vertical-align: middle; cursor: grab; touch-action: none; background: radial-gradient(circle, var(--text-muted) 1.3px, transparent 1.8px) 0 0 / 5px 5px; }
 
 .filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
 .filter-bar .form-field { min-width: 180px; }

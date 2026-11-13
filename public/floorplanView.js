@@ -232,6 +232,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const [hoverId, setHoverId] = useState(null) // the device marker under the pointer
   const [openBundle, setOpenBundle] = useState(null) // the selected bundle: { kind, key, ids, px }
   const [openCluster, setOpenCluster] = useState(null) // the cluster whose device list is open: { id, ids, px }
+  const [listDrag, setListDrag] = useState(null) // a device being dragged out of the cluster list: its id
   const [viewPx, setViewPx] = useState({ width: 900, height: 400 }) // the canvas on screen, for clusters
   const ready = !!size
   useEffect(() => {
@@ -323,6 +324,37 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
     if (hit) { onMarkerDown(e, hit.target); return }
     setOpenCluster(null); setOpenBundle(null); startDrag(e, null)
+  }
+
+  // A device is dragged out of a cluster list by its grip: the device follows the
+  // pointer over the plan (out of its cluster while it moves) and is saved where
+  // it is dropped on the plan. Released anywhere else, nothing changes.
+  const startListDrag = (e, id) => {
+    e.preventDefault(); e.stopPropagation()
+    const startX = e.clientX; const startY = e.clientY
+    let moved = false
+    const move = (ev) => {
+      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) <= CLICK_SLOP_PX) return
+      if (!moved) { moved = true; setListDrag(id) }
+      setGhost({ kind: 'device', key: id, px: toDrawing(ev) })
+    }
+    const end = (ev, drop) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      setGhost(null); setListDrag(null)
+      if (!drop || !moved || !svgRef.current) return
+      const r = svgRef.current.getBoundingClientRect()
+      if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) return
+      const [a, b] = metersAt(ev)
+      actions.moveDevice(id, plan.view, a, b)
+      setOpenCluster(null)
+    }
+    const up = (ev) => end(ev, true)
+    const cancel = (ev) => end(ev, false)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
   }
 
   // Where a list opened at a drawing point goes: fully inside the canvas and
@@ -843,12 +875,14 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         `)}
       </svg>
       ${openCluster && html`
-        <div class="cluster-list" data-testid="cluster-list"
+        <div class="cluster-list ${listDrag ? 'dragging' : ''}" data-testid="cluster-list"
           style=${listStyle(openCluster.px, openCluster.ids.length)}>
           <strong>${openCluster.ids.length} devices here</strong>
+          <span class="meta">Drag a grip onto the plan to move that device.</span>
           <ul>
             ${openCluster.ids.map((id) => html`
-              <li key=${id}><a href=${hashForState({ tab: 'devices', id })} data-testid="cluster-device-link">${(data.devicesById.get(id) || {}).name || id}</a></li>
+              <li key=${id}><span class="drag-grip" data-testid="cluster-drag" title="Drag onto the plan to move this device"
+                onPointerDown=${(e) => startListDrag(e, id)}></span><a href=${hashForState({ tab: 'devices', id })} data-testid="cluster-device-link">${(data.devicesById.get(id) || {}).name || id}</a></li>
             `)}
           </ul>
           <button onClick=${() => setOpenCluster(null)}>Close</button>

@@ -7,6 +7,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- A device can be dragged out of a numbered stack on the floorplan. Open the stack and drag the grip in front of a device onto the plan; the device leaves the stack, follows the pointer and is saved where it is dropped on the plan. The list fades while you drag, and releasing outside the plan changes nothing.
 - The floorplan Show menu has a "Group nearby devices" switch. With it off, overlapping devices are drawn as separate markers instead of numbered stacks, so each one can be dragged. It is on by default and remembered per browser.
 
 ### Fixed
