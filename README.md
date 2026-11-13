@@ -180,6 +180,25 @@ full reasoning. **Switching and calibration** need a read-write login: the
 plugin sends the switch command, so it can refuse a never-remote device, ask
 for confirmation and log each action.
 
+## API discovery
+
+Signal K serves the plugin's OpenAPI 3.0 document at
+`GET /skServer/openapi/plugins/signalk-wiring`. It describes 22 JSON or
+no-content operations under `/plugins/signalk-wiring`, including attachment
+metadata, diagrams, purge, zone merge, switching and calibration. Clients must
+still authenticate and meet each route's native permissions. Discovery does
+not grant access or bypass switching confirmation and safety flags.
+
+Binary attachment/image uploads and downloads are excluded. Wiring collections
+remain available through the native `/signalk/v2/api/resources` API; they are
+not duplicated in the plugin document.
+
+The document is built by `src/openapi.js` with reusable JavaScript helpers and
+shared runtime constants, without dependencies or a generated JSON file to
+maintain. When changing a route, update its contract there and run `npm test`;
+route coverage tests catch undocumented JSON routes. Schemas describe supported
+client inputs; the existing handlers remain responsible for validation.
+
 ## Why Node ≥ 22.13
 
 The plugin stores its data with Node's built-in `node:sqlite`, so there is

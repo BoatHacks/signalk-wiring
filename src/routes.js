@@ -377,4 +377,4 @@ function registerRoutes (router, getStore, dataDir) {
   })
 }
 
-module.exports = { registerRoutes, buildCircuitDiagram }
+module.exports = { registerRoutes, buildCircuitDiagram, CHANGE_LOG_KINDS }

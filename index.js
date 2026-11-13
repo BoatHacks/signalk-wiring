@@ -6,9 +6,12 @@ const { createResourceProvider } = require('./src/resources')
 const { resolveSettings, createSettingsProvider } = require('./src/settings')
 const { registerRoutes } = require('./src/routes')
 const { registerLiveRoutes } = require('./src/liveRoutes')
+const { getOpenApi } = require('./src/openapi')
 
 module.exports = function (app) {
   const plugin = {}
+
+  plugin.getOpenApi = getOpenApi
 
   plugin.id = 'signalk-wiring'
   plugin.name = 'Wiring Documentation'
