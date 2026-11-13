@@ -876,6 +876,7 @@ main:has(.schematic-editor) { max-width: none; }
 .bundle.chosen .bundle-count-bg { stroke: var(--accent); }
 .bundle-count { fill: var(--text); font-weight: 600; pointer-events: none; }
 .conduit-line.chosen { stroke: var(--accent); stroke-opacity: 0.5; }
+.more-link { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; }
 .bundle-list .link-button { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; text-align: left; }
 .bundle-list ul { list-style: none; padding-left: 0; }
 .bundle-list li { margin: 4px 0; }

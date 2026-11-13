@@ -1,4 +1,5 @@
 import { html, render, useState, useEffect } from './vendor/preact-standalone.module.js'
+import { splitMore, moreLabel } from './moreList.js'
 import { newId } from './ids.js'
 import { PathCombobox } from './signalkPaths.js'
 import { ROLES, roleLabel } from './roles.js'
@@ -136,6 +137,15 @@ function ErrorBanner ({ message }) {
 // clickable list row around a link.
 function RouteLink ({ tab, id, children }) {
   return html`<a class="route-link" href=${hashForState({ tab, id })} onClick=${(e) => e.stopPropagation()}>${children}</a>`
+}
+
+// The first few items of a long list and an "and N more ..." link that opens the
+// rest (plan 0036). `render` draws the items shown; the link toggles.
+function MoreList ({ items, render: draw, separator = null, limit }) {
+  const [open, setOpen] = useState(false)
+  const split = splitMore(items, open, limit)
+  const label = moreLabel(split)
+  return html`<span class="more-items">${split.shown.map((item, i) => html`<span key=${i}>${i > 0 && separator}${draw(item, i)}</span>`)}</span>${label && html` <button type="button" class="more-link" data-testid="more-link" onClick=${() => setOpen(!open)}>${label}</button>`}`
 }
 
 // A device name that links to the device, or "?" when the device is unknown.
@@ -1436,11 +1446,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
         <strong>Circuit</strong>
         ${!cable && html`<div class="meta">Worked out from the cables when you save. It needs no setup.</div>`}
         ${cable && here.length === 0 && html`<div class="meta">This cable is not part of a circuit yet (check both ends are set).</div>`}
-        ${here.map(({ circuit, via }) => html`
-          <div key=${circuit.id} class="meta">
-            ${circuitSummaryLine(circuit)}${via === 'return' ? ' (this cable is its negative return)' : ''}
-          </div>
-        `)}
+        ${here.length > 0 && html`<${CircuitLines} here=${here} />`}
       </div>
 
       <div class="form-actions">
@@ -1703,7 +1709,7 @@ function CablesList () {
                   <td>${formatGauge(cable.gauge, cable.gaugeUnit)}</td>
                   <td>${cable.length ? `${cable.length} ${cable.lengthUnit || ''}` : '-'}</td>
                   <td>${cable.zone || '-'}${(cable.tags || []).length ? html`<div class="meta">${cable.tags.join(', ')}</div>` : ''}</td>
-                  <td>${here.length ? here.map(({ circuit }) => circuit.name).join(', ') : '-'}</td>
+                  <td>${here.length ? html`<${MoreList} items=${here} separator=${', '} render=${({ circuit }) => circuit.name} />` : '-'}</td>
                   <td class="check-cell"><${CheckBadges} result=${checks.get(cable.id)} onOpen=${(anchor) => setCheckOpen({ id: cable.id, anchor })} /></td>
                   <td><${StatusBadge} status=${cable.status} /></td>
                   <td class="actions-cell"><div class="row-actions">
@@ -1740,6 +1746,18 @@ function CablesList () {
 }
 
 // "Lamp fuse: 10 A, 12 V DC" for a circuit resource.
+// The circuits of a cable, one line each; more than three are cut to "and N more ...".
+function CircuitLines ({ here }) {
+  const [open, setOpen] = useState(false)
+  const split = splitMore(here, open)
+  const label = moreLabel(split)
+  return html`<div class="circuit-lines">${split.shown.map(({ circuit, via }) => html`
+    <div key=${circuit.id} class="meta">
+      ${circuitSummaryLine(circuit)}${via === 'return' ? ' (this cable is its negative return)' : ''}
+    </div>
+  `)}</div>${label && html`<div class="meta"><button type="button" class="more-link" data-testid="more-link" onClick=${() => setOpen(!open)}>${label}</button></div>`}`
+}
+
 function circuitSummaryLine (circuit) {
   return `${circuit.name}: ${circuitFacts(circuit)}`
 }

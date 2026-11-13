@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- A cable that is part of more than three circuits (a battery negative, for example) shows the first three in the Cables table and the cable form and an "and N more ..." link that opens the rest, instead of listing every circuit.
+
 ## [0.7.4] - 2026-11-13
 
 ### Changed
