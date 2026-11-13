@@ -13,12 +13,16 @@ export function uniqueCopyName (name, existingNames) {
 }
 
 // What a copy of a device keeps: what the device is and how it is rated and
-// wired (type, role, ratings, terminals, paths, nominal voltage, zone, tags,
-// notes). Not copied: the position, the icon, attachments, the calibration
-// (a measurement belongs to the one device) and the history.
+// wired (type, role, ratings, terminals, paths, battery details, schematic
+// colors, zone, tags, notes). Not copied: the ID, position, enclosure, icon,
+// attachments, history and calibration (a measurement belongs to one device).
 const DEVICE_COPY_KEYS = [
-  'role', 'type', 'zoneId', 'tags', 'ratedPowerW', 'tripRatingA', 'nominalVoltage', 'powerFactor',
-  'terminals', 'signalkPath', 'switchPath', 'confirmSwitching', 'neverRemote', 'meterPath', 'meterUnit', 'notes'
+  'role', 'type', 'zoneId', 'tags', 'current', 'ratedPowerW', 'tripRatingA',
+  'ratedAcA', 'ratedAcV', 'ratedDcA', 'ratedDcV', 'nominalVoltage', 'powerFactor',
+  'terminals', 'signalkPath', 'switchPath', 'confirmSwitching', 'neverRemote', 'meterPath', 'meterUnit',
+  'chemistry', 'purpose', 'capacityAh', 'usableFraction', 'makeModel', 'installedOn', 'monitorDeviceId',
+  'voltagePath', 'currentPath', 'socPath', 'timeRemainingPath',
+  'schematicBoxColor', 'schematicIconColor', 'notes'
 ]
 
 export function duplicateDevicePayload (device, existingNames) {

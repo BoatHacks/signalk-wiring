@@ -12,6 +12,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Duplicating a device now keeps its battery details and monitoring paths, explicit AC/DC setting, AC/DC ratings and schematic colors.
 - The Cables page looked shifted to the right: its table (now 13 columns with the Checks column) was wider than the 1000 px page column and made the whole page scroll sideways. The page now uses the full width for the Cables tab, and on a narrower screen the table scrolls inside its own frame.
 
 ### Changed

@@ -471,8 +471,12 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   toggle, off by default and remembered per list in the browser. Device names
   in the cable table and on a circuit page link to the device, a load summary
   row links to its circuit, and a circuit's cable rows link to the Cables tab.
-  A device or a cable can be duplicated; a cable copy opens in the cable form
-  prefilled so its ends can be changed before saving.
+  A device or a cable can be duplicated. A device copy keeps its type, role,
+  AC/DC setting and ratings, terminals, paths, battery details (including its
+  monitor), schematic colors, zone, tags and notes. It gets a new ID and a
+  unique name with "copy" and a counter if needed; position, enclosure membership, attached icon,
+  attachments, history and measured calibration are not copied. A cable copy
+  opens in the cable form prefilled so its ends can be changed before saving.
 - Photo/file attachment upload and viewing per wire run or device: any
   number of photos, and PDF schematics or other files alongside them.
   Images open full size; PDFs and other files show as labelled tiles. On a
