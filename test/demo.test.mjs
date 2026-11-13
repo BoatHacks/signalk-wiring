@@ -113,6 +113,7 @@ test('the relay channels light up in the live view: each consumer is switchable 
     const entry = live.consumers[device.id]
     assert.ok(entry.switchable, `${consumer} is switchable`)
     assert.equal(nameOf.get(entry.switchDeviceId).switch_path, path_, consumer)
+    assert.equal(device.switch_path, path_, `${consumer} carries its channel's switch path`)
     assert.deepEqual(entry.sharedWith, [], `${consumer} has its own switch`)
     assert.equal(entry.reason, null, consumer)
   }

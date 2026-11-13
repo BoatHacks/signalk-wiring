@@ -170,7 +170,11 @@ function buildDemo (outFile = DEFAULT_OUT) {
 
 function populate (store, spec, positions, plansDir) {
   const banks = expandBanks(spec)
-  const devices = [...spec.devices, ...banks.devices]
+  // A consumer fed through a remotely controlled relay channel carries that
+  // channel's switch path too, so its page shows how it is switched.
+  const channelPath = new Map()
+  for (const b of spec.relayBanks) for (const c of b.channels) channelPath.set(c.consumer, `electrical.switches.bank.${b.bank}.${c.ch}.state`)
+  const devices = [...spec.devices.map((d) => (channelPath.has(d.name) && !d.switch ? { ...d, switch: channelPath.get(d.name) } : d)), ...banks.devices]
   const cables = [...spec.cables, ...banks.cables]
   const negBus = spec.negativeBus
 
