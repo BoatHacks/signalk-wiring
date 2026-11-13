@@ -1691,7 +1691,8 @@ function CablesList () {
       `}
       ${cables.length > 0 && visible.length === 0 && html`<div class="empty-state">No cables match.</div>`}
       ${visible.length > 0 && html`
-        <table>
+        <div class="table-scroll">
+        <table class="cables-table">
           <thead>
             <tr><th><input type="checkbox" class="checkbox-input" title="Select all shown" checked=${allVisiblePicked} onChange=${toggleAllVisible} /></th><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Conduits</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Checks</th><th>Status</th><th></th></tr>
           </thead>
@@ -1735,6 +1736,7 @@ function CablesList () {
             })}
           </tbody>
         </table>
+        </div>
       `}
       ${checkOpen && checks.get(checkOpen.id) && html`
         <${CheckPopover} result=${checks.get(checkOpen.id)} anchor=${checkOpen.anchor}

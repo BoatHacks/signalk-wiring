@@ -568,6 +568,9 @@ label.inline {
 .waypoint-mid:hover { fill-opacity: 1; stroke-opacity: 1; }
 
 main:has(.floorplan-pair) { max-width: none; }
+/* The cables table has many columns: the page uses the full width for it and a narrower screen scrolls the table itself, not the page. */
+main:has(.cables-table) { max-width: none; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
 
 
 
