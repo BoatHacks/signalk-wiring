@@ -903,3 +903,18 @@ a zone shape around each block). It needs Node 22.13 or newer.
 committed one, and checks the SignalK paths, the live switching of the relay
 channels, the deliberate cable check findings, the enclosure inside pages and
 the npm file list. `demo/README.md` says how to install and rebuild it.
+
+Floorplans and positions (step 3): `demo/source/drawings/` holds the four
+supplied SVG drawings byte for byte; the builder copies each into the plans
+folder as `<planId>.svg` and creates the plan row (id from the name, the
+calibration object the app stores: origin at the stern end of the hull outline,
+`pxPerMeter` from the drawn hull length against `hullLengthM`, direction
+`[1, 0]`, no flip, and the height range). `demo/source/positions.json` (device
+name to x, y, z) is applied to the devices; an unknown name or an entry for a
+device inside an enclosure fails the build, and it overrides nothing else.
+`scripts/place-demo.js` generates it from zone boxes (an even grid per zone with
+a few fixed places) and verifies every point against the hull outline of the
+drawing, using `scripts/demo-geometry.js`; `scripts/read-positions.js` writes it
+from a running server's `wiringDevices` resource so manual adjustments can be
+captured. The tests check the plans with the app's own `floorplan.js` functions
+(`pxToMeters`, `metersToPx`, `pointToPx`, `planShowsPoint`).

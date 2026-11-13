@@ -5,11 +5,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
+import { execFileSync } from 'node:child_process'
 import { checkAll, countVerdicts } from '../public/cableChecks.js'
+import { axesForView, calibrationFromClicks, metersToPx, pointToPx, pxToMeters, planShowsPoint } from '../public/floorplan.js'
 
 const require = createRequire(import.meta.url)
 const { buildDemo, SPEC_PATH, DEFAULT_OUT } = require('../scripts/build-demo.js')
 const { Store } = require('../src/store')
+const { pointInPolygon, readHull } = require('../scripts/demo-geometry.js')
+const { nameUuid } = require('../scripts/build-demo.js')
 const { createResourceProvider } = require('../src/resources')
 
 const spec = JSON.parse(fs.readFileSync(SPEC_PATH, 'utf8'))
@@ -177,6 +181,179 @@ test('the change log is a short history over the previous four weeks', () => {
 test('nothing from demo/ is in the npm package', () => {
   const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   assert.deepEqual(pkg.files, ['index.js', 'src', 'public'])
+})
+
+// ---- Floorplans and positions (plan 0035 step 3)
+
+const demoDir = path.join(path.dirname(DEFAULT_OUT))
+const positions = JSON.parse(fs.readFileSync(path.join(demoDir, 'source', 'positions.json'), 'utf8'))
+const planRows = () => {
+  const p = path.join(tmp, `plans-${Math.random().toString(36).slice(2)}.db`)
+  fs.copyFileSync(rebuilt, p)
+  const store = new Store(p)
+  const out = { plans: store.list('plan'), devices: store.list('device'), zones: store.list('zone'), store }
+  return out
+}
+const asPlan = (row) => ({ view: row.view, zMin: row.z_min, zMax: row.z_max })
+const drawingSize = (file) => {
+  const m = /viewBox="0 0 (\d+) (\d+)"/.exec(fs.readFileSync(file, 'utf8'))
+  return { width: Number(m[1]), height: Number(m[2]) }
+}
+
+test('the four plans exist with their drawings, calibrations and height ranges', () => {
+  const { plans, store } = planRows()
+  store.close()
+  assert.deepEqual(plans.map((p) => [p.name, p.view]).sort((a, b) => a[0].localeCompare(b[0])), [['Deck', 'top'], ['Interior', 'top'], ['Interior profile', 'side'], ['Side profile', 'side']])
+  for (const p of plans) {
+    assert.equal(p.id, nameUuid(`plan:${p.name}`))
+    assert.equal(p.filename, `${p.id}.svg`)
+    const file = path.join(demoDir, 'plans', p.filename)
+    assert.ok(fs.existsSync(file), p.filename)
+    const source = spec.plans.find((x) => x.name === p.name)
+    assert.ok(fs.readFileSync(file).equals(fs.readFileSync(path.join(demoDir, 'source', 'drawings', source.drawing))), `${p.name}: drawing is byte for byte the supplied one`)
+    const cal = JSON.parse(p.calibration)
+    assert.ok(cal.pxPerMeter > 10 && cal.pxPerMeter < 500, p.name)
+    assert.deepEqual(cal.dir, [1, 0], `${p.name}: the bow points to the right`)
+    assert.equal(cal.flip, false)
+    assert.ok(p.z_min < p.z_max, p.name)
+    assert.ok(axesForView(p.view))
+  }
+  const byName = Object.fromEntries(plans.map((p) => [p.name, p]))
+  assert.deepEqual([byName.Deck.z_min, byName.Deck.z_max], [1, 15])
+  assert.deepEqual([byName.Interior.z_min, byName.Interior.z_max], [-1.5, 1])
+})
+
+test('a drawing point maps to the expected meters and back with the app functions', () => {
+  const { plans, store } = planRows()
+  store.close()
+  for (const p of plans) {
+    const cal = JSON.parse(p.calibration)
+    const source = spec.plans.find((x) => x.name === p.name)
+    // The stern end of the hull outline is the origin, the bow end is the hull length.
+    const stern = pxToMeters(cal, source.originPx)
+    const bow = pxToMeters(cal, source.bowPx)
+    assert.ok(Math.abs(stern[0]) < 1e-6 && Math.abs(stern[1]) < 1e-6, `${p.name} origin`)
+    assert.ok(Math.abs(bow[0] - spec.hullLengthM) < 1e-4 && Math.abs(bow[1]) < 1e-6, `${p.name} bow ${bow}`)
+    // The same numbers the app derives from the two clicks.
+    const clicked = calibrationFromClicks(source.originPx, source.bowPx, spec.hullLengthM)
+    assert.ok(Math.abs(clicked.pxPerMeter - cal.pxPerMeter) < 1e-4)
+    assert.deepEqual(clicked.dir, cal.dir)
+    // One meter up (port on a top view, higher on a side view) is up the drawing.
+    const up = metersToPx(cal, 0, 1)
+    assert.ok(up[1] < source.originPx[1] && Math.abs(up[0] - source.originPx[0]) < 1e-9, p.name)
+    // 5 m from the stern and 0.5 m up: and back.
+    const px = metersToPx(cal, 5, 0.5)
+    const back = pxToMeters(cal, px)
+    assert.ok(Math.abs(back[0] - 5) < 1e-9 && Math.abs(back[1] - 0.5) < 1e-9, p.name)
+    const view = p.view
+    const at = view === 'top' ? { x: 5, y: 0.5, z: 0.5 } : { x: 5, y: 0, z: 0.5 }
+    assert.deepEqual(pointToPx(cal, view, at), px)
+  }
+  // A known deck point: the end of the centerline of the deck drawing at the bow.
+  const deck = plans.find((p) => p.name === 'Deck')
+  const [x, y] = pxToMeters(JSON.parse(deck.calibration), [1388, 329])
+  assert.ok(Math.abs(x - 10.9) < 1e-4 && Math.abs(y) < 1e-9)
+})
+
+test('every device that is not in an enclosure has a position, and enclosure contents have none', () => {
+  const { devices, store } = planRows()
+  store.close()
+  for (const d of devices) {
+    const placed = d.pos_x != null && d.pos_y != null && d.pos_z != null
+    if (d.parent_id) assert.ok(d.pos_x == null && d.pos_y == null && d.pos_z == null, `${d.name} is inside an enclosure and stays unplaced`)
+    else assert.ok(placed, `${d.name} has a position`)
+    if (!d.parent_id) assert.deepEqual({ x: d.pos_x, y: d.pos_y, z: d.pos_z }, positions[d.name], d.name)
+  }
+  assert.equal(Object.keys(positions).length, devices.filter((d) => !d.parent_id).length)
+  assert.ok(devices.filter((d) => d.role === 'enclosure').every((d) => d.pos_x != null), 'enclosure markers are placed')
+})
+
+test('no two devices share a position', () => {
+  const seen = new Map()
+  for (const [name, p] of Object.entries(positions)) {
+    const key = `${p.x},${p.y},${p.z}`
+    assert.ok(!seen.has(key), `${name} and ${seen.get(key)} at ${key}`)
+    seen.set(key, name)
+  }
+  // Nor two on the same spot of a top view (centimeter apart or less).
+  const flat = Object.entries(positions)
+  for (let i = 0; i < flat.length; i++) {
+    for (let j = i + 1; j < flat.length; j++) {
+      const a = flat[i][1]
+      const b = flat[j][1]
+      if (Math.hypot(a.x - b.x, a.y - b.y) < 0.02) assert.ok(Math.abs(a.z - b.z) >= 0.2, `${flat[i][0]} and ${flat[j][0]} stacked`)
+    }
+  }
+})
+
+test('every device shows inside the hull of at least one plan, and every plan has devices', () => {
+  const { plans, devices, store } = planRows()
+  store.close()
+  const shown = new Map(plans.map((p) => [p.name, 0]))
+  const hulls = new Map()
+  for (const p of plans) hulls.set(p.name, readHull(path.join(demoDir, 'plans', p.filename)))
+  for (const d of devices.filter((x) => !x.parent_id)) {
+    const point = { x: d.pos_x, y: d.pos_y, z: d.pos_z }
+    assert.ok(point.x > 0 && point.x < spec.hullLengthM, `${d.name} x ${point.x}`)
+    let inHull = false
+    for (const p of plans) {
+      const cal = JSON.parse(p.calibration)
+      if (!planShowsPoint(asPlan(p), point)) continue
+      const px = pointToPx(cal, p.view, point)
+      const size = drawingSize(path.join(demoDir, 'plans', p.filename))
+      const inView = px[0] >= 0 && px[0] <= size.width && px[1] >= 0 && px[1] <= size.height
+      if (p.view === 'top' && pointInPolygon(hulls.get(p.name), px)) { inHull = true; shown.set(p.name, shown.get(p.name) + 1) }
+      // Below the deck it also lies in the hull of the interior profile.
+      if (p.name === 'Interior profile' && point.z <= 1.0) assert.ok(pointInPolygon(hulls.get(p.name), px), `${d.name} is outside the interior profile`)
+      if (p.view === 'side' && point.z > 1.0 && p.name === 'Side profile') assert.ok(inView, `${d.name} is off the side profile`)
+    }
+    assert.ok(inHull, `${d.name} at ${JSON.stringify(point)} is on no top plan hull`)
+  }
+  for (const [name, n] of shown) if (name === 'Deck' || name === 'Interior') assert.ok(n >= 10, `${name} shows ${n} devices`)
+  // Where it belongs: below the deck on the interior plan, at and above it on the deck plan.
+  const interior = plans.find((p) => p.name === 'Interior')
+  const deck = plans.find((p) => p.name === 'Deck')
+  for (const d of devices.filter((x) => !x.parent_id)) {
+    const point = { x: d.pos_x, y: d.pos_y, z: d.pos_z }
+    if (point.z < 1) assert.ok(planShowsPoint(asPlan(interior), point) && !planShowsPoint(asPlan(deck), point), d.name)
+    else assert.ok(planShowsPoint(asPlan(deck), point) && !planShowsPoint(asPlan(interior), point), d.name)
+  }
+})
+
+test('positions.json is consumed by the builder and the zone devices lie in their zones', () => {
+  const place = require('../scripts/place-demo.js')
+  const again = place.place(spec)
+  assert.deepEqual(Object.fromEntries(Object.entries(again).map(([n, [x, y, z]]) => [n, { x, y, z }])), positions, 'positions.json is what place-demo.js produces')
+  for (const d of spec.devices.filter((x) => !x.parent)) {
+    const box = place.ZONES[d.zone]
+    if (!box) continue
+    const p = positions[d.name]
+    assert.ok(p.x >= box.x[0] && p.x <= box.x[1] && p.y >= box.y[0] && p.y <= box.y[1], `${d.name} is in ${d.zone}`)
+  }
+  assert.throws(() => place.place({ devices: [{ name: 'X', zone: 'Nowhere' }] }), /no box/)
+})
+
+test('read-positions turns a server listing into positions.json entries', () => {
+  const { positionsOf } = require('../scripts/read-positions.js')
+  const listing = {
+    a: { name: 'B', posX: 1, posY: 0, posZ: 2 },
+    b: { name: 'A', posX: 3.5, posY: null, posZ: null },
+    c: { name: 'Inside', parentId: 'x', posX: 1 },
+    d: { name: 'Gone', status: 'removed', posX: 1 },
+    e: { name: 'Unplaced' }
+  }
+  assert.deepEqual(positionsOf(listing), { A: { x: 3.5 }, B: { x: 1, y: 0, z: 2 } })
+  assert.deepEqual(Object.keys(positionsOf(listing)), ['A', 'B'])
+})
+
+test('npm pack leaves out demo/ and the files list is unchanged', () => {
+  const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..')
+  const out = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: root, encoding: 'utf8' })
+  const parsed = JSON.parse(out)
+  const files = (Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0]).files.map((f) => f.path)
+  assert.ok(files.length > 10)
+  assert.deepEqual(files.filter((f) => f.startsWith('demo/') || f.startsWith('scripts/')), [])
+  assert.ok(files.includes('index.js'))
 })
 
 test('cleanup', () => { fs.rmSync(tmp, { recursive: true, force: true }) })

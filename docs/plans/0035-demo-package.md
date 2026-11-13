@@ -131,7 +131,7 @@ gets read access for read-only visitors, which the demo needs first.
 
 - [x] Read access for visitors, with tests.
 - [x] The boat spec and the builder, with tests.
-- [ ] The floorplans and positions (waits for the user's drawings).
+- [x] The floorplans and positions (four drawings, calibrations, first-pass positions).
 - [ ] The package checks, `demo/README.md`, docs, and a comment on issue #20.
 
 ## Files to Create/Modify

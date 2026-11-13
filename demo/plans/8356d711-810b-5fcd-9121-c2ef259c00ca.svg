@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 660" width="1420" height="660">
+  <style>
+    .hull { fill: #ffffff; stroke: #111111; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .line-main { fill: none; stroke: #111111; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .line-thin { fill: none; stroke: #111111; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+    .hardware { fill: #ffffff; stroke: #111111; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+    .dark-fill { fill: #111111; stroke: none; }
+  </style>
+
+  <!-- Rumpf-Außenkontur (symmetrisch um y=329) -->
+  <path class="hull" d="M 43,329
+    C 43,270 72,202 145,170
+    C 265,142 465,109 655,109
+    C 845,109 1135,205 1388,329
+    C 1135,453 845,549 655,549
+    C 465,549 265,516 145,488
+    C 72,456 43,388 43,329 Z" />
+
+  <!-- Heckspiegel & Badeplattform-Linien -->
+  <path class="line-main" d="M 145,170 C 102,218 102,440 145,488" />
+  <line class="line-main" x1="172" y1="165" x2="172" y2="493" />
+  <path class="line-thin" d="M 45,288 C 75,274 105,270 116,270" />
+  <path class="line-thin" d="M 45,370 C 75,384 105,388 116,388" />
+
+  <!-- Süllrand / Scheuerleiste & Vordeck-Kante -->
+  <path class="line-main" d="M 185,193 C 420,176 820,176 1235,263" />
+  <path class="line-main" d="M 185,465 C 420,482 820,482 1235,395" />
+
+  <!-- Ankerkasten / Bugbeschlag (Plage Avant) -->
+  <path class="line-main" d="M 1255,272 L 1255,386 L 1388,329 Z" />
+  <path class="hardware" d="M 1344,321 L 1388,324 L 1388,334 L 1344,337 Z" />
+  <circle class="line-main" cx="1272" cy="364" r="5" />
+  <circle class="line-main" cx="1315" cy="353" r="4" />
+  <line class="line-main" x1="1272" y1="364" x2="1325" y2="352" />
+  <line class="line-main" x1="1268" y1="348" x2="1276" y2="376" />
+
+  <!-- Festmacherklampen (Taquets d'amarrage) -->
+  <!-- Bug -->
+  <rect class="hardware" x="1152" y="246" width="38" height="6" rx="3" transform="rotate(14 1171 249)" />
+  <rect class="hardware" x="1152" y="406" width="38" height="6" rx="3" transform="rotate(-14 1171 409)" />
+  <!-- Heck -->
+  <rect class="hardware" x="195" y="172" width="36" height="6" rx="3" transform="rotate(-11 213 175)" />
+  <rect class="hardware" x="195" y="480" width="36" height="6" rx="3" transform="rotate(11 213 483)" />
+
+  <!-- Relingstützen / Püttinge (kleine Kreise an Deck) -->
+  <circle class="line-thin" cx="256" cy="160" r="3" />
+  <circle class="line-thin" cx="456" cy="127" r="3" />
+  <circle class="line-thin" cx="656" cy="115" r="3" />
+  <circle class="line-thin" cx="757" cy="131" r="4.5" />
+  <circle class="line-thin" cx="858" cy="137" r="3" />
+  <circle class="line-thin" cx="1055" cy="189" r="3" />
+  <circle class="line-thin" cx="1252" cy="268" r="3" />
+  <circle class="line-thin" cx="1348" cy="312" r="3" />
+
+  <circle class="line-thin" cx="256" cy="498" r="3" />
+  <circle class="line-thin" cx="456" cy="531" r="3" />
+  <circle class="line-thin" cx="656" cy="543" r="3" />
+  <circle class="line-thin" cx="757" cy="527" r="4.5" />
+  <circle class="line-thin" cx="858" cy="521" r="3" />
+  <circle class="line-thin" cx="1055" cy="469" r="3" />
+  <circle class="line-thin" cx="1252" cy="390" r="3" />
+  <circle class="line-thin" cx="1348" cy="346" r="3" />
+
+  <!-- Genuaschienen (Rails d'écoute de génois) -->
+  <g>
+    <rect class="hardware" x="362" y="170" width="392" height="4" rx="2" />
+    <circle class="hardware" cx="362" cy="172" r="3.5" />
+    <circle class="hardware" cx="754" cy="172" r="3.5" />
+    <rect class="hardware" x="362" y="484" width="392" height="4" rx="2" />
+    <circle class="hardware" cx="362" cy="486" r="3.5" />
+    <circle class="hardware" cx="754" cy="486" r="3.5" />
+  </g>
+
+  <!-- Beschläge / Püttinge auf dem Seitendeck -->
+  <rect class="hardware" x="803" y="174" width="3" height="12" rx="1" />
+  <rect class="hardware" x="871" y="182" width="3" height="14" rx="1" />
+  <rect class="hardware" x="803" y="472" width="3" height="12" rx="1" />
+  <rect class="hardware" x="871" y="462" width="3" height="14" rx="1" />
+
+  <!-- Vordere Decksluke (Capot ouvrant) -->
+  <g>
+    <rect class="hardware" x="998" y="298" width="46" height="62" rx="8" />
+    <rect class="hardware" x="993" y="313" width="5" height="32" rx="2" />
+  </g>
+
+  <!-- Kajütaufbau (Coachroof) -->
+  <path class="line-main" d="M 575,205
+    C 665,205 745,212 795,218
+    C 832,223 852,255 858,315
+    L 882,315
+    C 896,315 902,320 902,329
+    C 902,338 896,343 882,343
+    L 858,343
+    C 852,403 832,435 795,440
+    C 745,446 665,453 575,453" />
+
+  <!-- Innere Kajütaufbau-Kontur -->
+  <path class="line-thin" d="M 575,220
+    C 660,220 735,226 775,233
+    C 805,240 822,272 825,318
+    L 852,318 L 852,340 L 825,340
+    C 822,386 805,418 775,425
+    C 735,432 660,438 575,438" />
+
+  <!-- Mastfuß-Kreis -->
+  <circle class="hardware" cx="878" cy="329" r="12" />
+
+  <!-- Seitliche Kajütfenster & Öffnungsfenster (Hublots ouvrants) -->
+  <!-- Steuerbord (oben) -->
+  <path class="hardware" d="M 588,204 L 626,204 L 626,214 L 588,214 Z" />
+  <path class="hardware" d="M 636,205 C 685,207 732,211 765,216 C 768,220 766,227 761,227 C 728,222 683,218 636,216 Z" />
+  <path class="hardware" d="M 792,250 C 815,240 832,242 838,262 C 844,282 846,298 846,312 L 806,312 C 804,288 798,266 792,250 Z" />
+
+  <!-- Backbord (unten) -->
+  <path class="hardware" d="M 588,444 L 626,444 L 626,454 L 588,454 Z" />
+  <path class="hardware" d="M 636,442 C 683,440 728,436 761,431 C 766,431 768,438 765,442 C 732,447 685,451 636,453 Z" />
+  <path class="hardware" d="M 792,408 C 798,392 804,370 806,346 L 846,346 C 846,360 844,376 838,396 C 832,416 815,418 792,408 Z" />
+
+  <!-- Mittlere Kajütluke (Capot ouvrant) -->
+  <g>
+    <rect class="hardware" x="714" y="298" width="46" height="62" rx="8" />
+    <rect class="hardware" x="709" y="313" width="5" height="32" rx="2" />
+  </g>
+
+  <!-- Schiebeluk-Garage & Niedergang -->
+  <path class="line-main" d="M 455,288 L 625,288 C 633,288 638,293 638,301 L 638,357 C 638,365 633,370 625,370 L 455,370" />
+  <path class="line-thin" d="M 476,294 L 618,294 C 624,294 628,298 628,304 L 628,354 C 628,360 624,364 618,364 L 476,364" />
+  <rect class="hardware" x="454" y="296" width="24" height="66" />
+  <line class="line-main" x1="572" y1="288" x2="572" y2="370" />
+
+  <!-- Brückendeck-Bereich & Seitliche Luken (Capots ouvrants) -->
+  <line class="line-main" x1="575" y1="220" x2="575" y2="288" />
+  <line class="line-main" x1="575" y1="370" x2="575" y2="438" />
+  <line class="line-main" x1="530" y1="216" x2="530" y2="288" />
+  <line class="line-main" x1="530" y1="370" x2="530" y2="442" />
+
+  <!-- Kleine Luken neben dem Niedergang -->
+  <rect class="hardware" x="486" y="226" width="32" height="50" rx="5" />
+  <rect class="hardware" x="486" y="382" width="32" height="50" rx="5" />
+
+  <!-- Fallenstopper / Umlenkblöcke am Niedergang -->
+  <g>
+    <path class="line-main" d="M 458,191 L 525,191 L 532,218 L 470,218 Z" />
+    <rect class="hardware" x="478" y="195" width="40" height="6" rx="3" />
+    <rect class="hardware" x="480" y="205" width="40" height="6" rx="3" />
+
+    <path class="line-main" d="M 458,467 L 525,467 L 532,440 L 470,440 Z" />
+    <rect class="hardware" x="478" y="457" width="40" height="6" rx="3" />
+    <rect class="hardware" x="480" y="447" width="40" height="6" rx="3" />
+  </g>
+
+  <!-- Cockpit-Süll & Sitzbänke -->
+  <path class="line-main" d="M 185,193 L 458,191 L 472,226 L 472,288" />
+  <path class="line-main" d="M 185,465 L 458,467 L 472,432 L 472,370" />
+
+  <!-- Innere Cockpit-Wannenlinie -->
+  <path class="line-main" d="M 185,193 L 198,228 L 464,228 L 454,250 L 454,408 L 464,430 L 198,430 L 185,465" />
+  <line class="line-main" x1="198" y1="234" x2="462" y2="234" />
+  <line class="line-main" x1="198" y1="424" x2="462" y2="424" />
+
+  <!-- Cockpitboden & Backskisten -->
+  <rect class="line-main" x="215" y="242" width="218" height="174" />
+  <rect class="line-main" x="261" y="288" width="161" height="82" />
+  <line class="line-thin" x1="261" y1="358" x2="422" y2="358" />
+  <!-- Schattierung im Cockpitboden -->
+  <polygon class="dark-fill" points="261,358 345,358 261,368" />
+  <rect class="dark-fill" x="427" y="244" width="5" height="170" />
+
+  <!-- Achterliche Sitzbänke / Luken -->
+  <rect class="hardware" x="176" y="252" width="39" height="60" />
+  <rect class="hardware" x="176" y="346" width="39" height="60" />
+  <line class="line-main" x1="176" y1="210" x2="192" y2="210" />
+  <line class="line-main" x1="176" y1="448" x2="192" y2="448" />
+
+  <!-- Winschen auf dem Cockpitsüll -->
+  <!-- Rollfock-Winsch (oben links) -->
+  <g transform="translate(239, 207)">
+    <circle class="hardware" cx="0" cy="0" r="10" />
+    <circle class="line-thin" cx="0" cy="0" r="5" />
+  </g>
+  <!-- Genuawinschen (oben & unten) -->
+  <g transform="translate(340, 211)">
+    <circle class="hardware" cx="0" cy="0" r="13.5" />
+    <circle class="line-main" cx="0" cy="0" r="8.5" />
+    <circle class="line-thin" cx="0" cy="0" r="2.5" />
+  </g>
+  <g transform="translate(344, 446)">
+    <circle class="hardware" cx="0" cy="0" r="13.5" />
+    <circle class="line-main" cx="0" cy="0" r="8.5" />
+    <circle class="line-thin" cx="0" cy="0" r="2.5" />
+  </g>
+</svg>

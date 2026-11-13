@@ -9,11 +9,14 @@ not part of the npm package (`package.json` `files` is `index.js`, `src` and
 ## What is here
 
 - `wiring.db`: the plugin's SQLite database with the whole boat.
-- `plans/` and `attachments/`: the plugin's drawing and attachment folders,
-  empty for now (a `.gitkeep` each). The floorplan drawings and the device
-  positions are added later.
+- `plans/`: the four floorplan drawings, named `<planId>.svg` the way the
+  plugin stores an uploaded drawing. `attachments/` is empty (a `.gitkeep`).
 - `source/boat.json`: the human-readable description of the boat the database
   is built from. Edit this, never the database.
+- `source/drawings/`: the four supplied drawings under their own names, kept
+  byte for byte; the builder copies them into `plans/`.
+- `source/positions.json`: device name to `x`, `y`, `z` in meters, read by the
+  builder (see "Floorplans and positions").
 
 ## Use it
 
@@ -34,7 +37,7 @@ node scripts/build-demo.js            # writes demo/wiring.db
 node scripts/build-demo.js out.db     # or somewhere else
 ```
 
-The builder uses the plugin's own `Store`, so the schema, migrations and
+The builder (which also copies the drawings into `plans/` and applies `source/positions.json`) uses the plugin's own `Store`, so the schema, migrations and
 validation are the real ones. It needs Node 22.13 or newer (`node:sqlite`); on a
 host with an older Node, run it in the SignalK server container, the way the
 tests run there, and copy the file back. The output is deterministic (ids come
@@ -99,3 +102,73 @@ ask for confirmation before switching, as the app does for those types.
 
 Every other power cable passes (107 checked), and the data bus cables are
 exempt. These two are for demonstrating the checks, not examples to copy.
+
+## Floorplans and positions
+
+Four plans, from four SVG drawings of a 36 foot sailboat (bow to the right in
+all of them). The hull outline is taken to be 10.9 m long (`hullLengthM` in
+`source/boat.json`; the supplied figure, change it there and rebuild if it is
+not right). Boat coordinates are meters: x from the stern toward the bow, y
+athwartships with 0 on the centerline and positive to port (the top of a top
+view), z above the waterline.
+
+| Plan | View | Drawing | Origin (px) | Scale (px/m) | Heights (z) |
+| --- | --- | --- | --- | --- | --- |
+| Deck | top | deck, 1420x660 | 43, 329 (stern, centerline) | 123.39 | 1.0 to 15 |
+| Interior | top | interior from above, 970x370 | 29, 187 (stern, centerline) | 84.04 | -1.5 to 1.0 |
+| Side profile | side | exterior with rig, 740x1025 | 26, 885 (stern, waterline) | 62.57 | 1.0 to 15 |
+| Interior profile | side | interior section, 1000x265 | 38, 170 (stern, waterline) | 84.77 | -1.5 to 1.0 |
+
+Every calibration has the direction vector `[1, 0]` and no flip, so the bow is
++x and up the drawing is +y (top views) or +z (side views). The scale is the
+drawn length of the hull outline divided by 10.9 m, so it differs per drawing.
+
+Heights: z = 0 is the waterline, the deck is about 1.0 m above it and the
+coachroof top about 1.6 m. The Interior plans cover everything below the deck
+(down to the bilge, -1.5 m), the Deck and exterior side plans cover deck level
+and above, up to the masthead (about 13.9 m). The app applies a height range to
+top views only (a side view shows every device), so the side plans' ranges are
+for information. The exterior drawing puts its deck line at about 1.4 m by its
+own waterline, a little above the 1.0 m of the interior drawing: devices at deck
+level sit a little low on it.
+
+Positions come from `scripts/place-demo.js`: each zone has a box in boat meters
+and its devices (the ones not inside an enclosure; the enclosure itself is
+placed) are spread in an even grid in the order of the spec, with a usual height
+per zone and a few fixed places or heights (batteries low, the mast items aloft
+at x 6.75, lights at their usual places). The script checks that every position
+is inside the hull outline of the drawing it shows on and that no two share a
+spot, and is deterministic:
+
+```sh
+node scripts/place-demo.js            # rewrites source/positions.json
+```
+
+| Zone | x (m) | y (m) | usual z (m) |
+| --- | --- | --- | --- |
+| Lazarette | 1.5 to 3.0 | -0.4 to 0.4 | 0.55 |
+| Aft cabin | 2.2 to 3.0 | 0.6 to 1.1 | 0.5 |
+| Engine room | 3.35 to 4.85 | -0.45 to 0.45 | 0.2 |
+| Galley (port) | 4.0 to 5.5 | 0.55 to 1.3 | 0.7 |
+| Nav station (starboard) | 4.0 to 5.5 | -1.3 to -0.55 | 0.8 |
+| Saloon | 5.75 to 7.45 | -1.2 to 1.2 | 0.75 |
+| Forward cabin | 8.3 to 9.2 | -0.5 to 0.5 | 0.7 |
+| Forepeak (anchor locker) | 9.3 to 10.3 | -0.2 to 0.2 | 0.2 |
+| Cockpit, Deck, Mast | fixed places | | 1.1 to 13.7 |
+
+72 devices are placed (56 below the deck on the Interior plans, 16 at or above
+deck level on the Deck plan); the devices inside an enclosure have no position.
+Zones themselves have no position in the plugin's model.
+
+Adjusting on a server and reading back: load the demo into a test server,
+move devices on the floorplan, then capture them (the resources are readable by
+any logged in user, so a token of any user works):
+
+```sh
+node scripts/read-positions.js [token] [baseUrl]    # default http://localhost:3000
+```
+
+This writes `source/positions.json` from `GET /signalk/v2/api/resources/wiringDevices`
+(devices with a position, by name). Run `node scripts/build-demo.js` in the
+container afterwards, and commit the file, the database and `plans/`. Note that
+`place-demo.js` overwrites the file again: use one or the other.

@@ -217,6 +217,17 @@
     {"name": "230 V AC", "page": "ac", "notes": "Shore power, the AC panel and the inverter/charger."}
   ],
 
+  "hullLengthM": 10.9,
+  "plans": [
+    {"name": "Deck", "view": "top", "drawing": "legende36-deck.svg", "originPx": [43, 329], "bowPx": [1388, 329], "zMin": 1.0, "zMax": 15,
+      "notes": "Deck and cockpit, seen from above. Shows what is at deck level and above, up to the masthead."},
+    {"name": "Interior", "view": "top", "drawing": "legende36-inside-topdown.svg", "originPx": [29, 187], "bowPx": [945, 187], "zMin": -1.5, "zMax": 1.0,
+      "notes": "Accommodation, seen from above. Shows what is below the deck, down to the bilge."},
+    {"name": "Side profile", "view": "side", "drawing": "legende36-sideview.svg", "originPx": [26, 885], "bowPx": [708, 885], "zMin": 1.0, "zMax": 15,
+      "notes": "Exterior profile with rig. Origin at the stern end of the hull outline on the construction waterline."},
+    {"name": "Interior profile", "view": "side", "drawing": "legende36-inside-sideview.svg", "originPx": [38, 170], "bowPx": [962, 170], "zMin": -1.5, "zMax": 1.0,
+      "notes": "Accommodation in section. Origin at the stern end of the hull outline on the waterline."}
+  ],
   "history": [
     {"daysAgo": 27, "at": "18:42", "kind": "schematic", "ref": "12 V DC", "created": true},
     {"daysAgo": 27, "at": "19:10", "kind": "schematic", "ref": "230 V AC", "created": true},

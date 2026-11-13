@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 1025" width="740" height="1025">
+  <style>
+    .hull-outline { fill: #ffffff; stroke: #111111; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+    .sail-main { fill: #ffffff; stroke: #111111; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+    .sail-genoa { fill: none; stroke: #111111; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+    .hull-sub { fill: #ffffff; stroke: #111111; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .line-main { fill: none; stroke: #111111; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .line-thin { fill: none; stroke: #111111; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+    .rigging { fill: none; stroke: #111111; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+    .window-hull { fill: #ffffff; stroke: #111111; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+    .dark-fill { fill: #111111; stroke: none; }
+    .dashed { fill: none; stroke: #111111; stroke-width: 1.2; stroke-dasharray: 6, 5; stroke-linecap: round; }
+  </style>
+
+  <!-- ================= RIGG & SEGEL ================= -->
+
+  <!-- Großsegel (links vom Mast – kräftige Außenkontur) -->
+  <path class="sail-main" d="M 436,16 L 444,16 L 444,704 L 179,704 C 242,462 325,222 436,16 Z" />
+
+  <!-- Segellatten & Reffreihen im Großsegel -->
+  <line class="line-thin" x1="412" y1="65" x2="444" y2="74" />
+  <line class="line-thin" x1="388" y1="120" x2="444" y2="136" />
+  <line class="line-thin" x1="364" y1="176" x2="444" y2="198" />
+  <line class="line-thin" x1="340" y1="234" x2="444" y2="262" />
+  <line class="line-thin" x1="316" y1="293" x2="444" y2="327" />
+  <line class="line-thin" x1="292" y1="354" x2="444" y2="392" />
+
+  <!-- Reffreihe 1 (oben) -->
+  <line class="line-main" x1="269" y1="412" x2="444" y2="412" />
+  <line class="line-thin" x1="269" y1="416" x2="348" y2="437" />
+  <line class="line-thin" x1="258" y1="448" x2="318" y2="464" />
+  <line class="line-thin" x1="246" y1="482" x2="294" y2="495" />
+
+  <!-- Reffreihe 2 (mitte) -->
+  <line class="line-main" x1="234" y1="517" x2="444" y2="517" />
+  <line class="line-thin" x1="234" y1="521" x2="278" y2="533" />
+  <line class="line-thin" x1="222" y1="553" x2="262" y2="564" />
+  <line class="line-thin" x1="210" y1="589" x2="246" y2="599" />
+
+  <!-- Reffreihe 3 (unten) -->
+  <line class="line-main" x1="198" y1="624" x2="444" y2="624" />
+  <line class="line-thin" x1="198" y1="628" x2="232" y2="637" />
+  <line class="line-thin" x1="186" y1="660" x2="216" y2="668" />
+  <line class="line-thin" x1="176" y1="695" x2="202" y2="702" />
+
+  <!-- Großbaum -->
+  <rect class="hull-sub" x="176" y="711" width="268" height="7" />
+
+  <!-- Vorsegel / Genua (transparent zurückgestellt, kräftige Außenkontur) -->
+  <path class="sail-genoa" d="M 453,16 L 704,782 L 264,764 L 276,718 C 325,480 385,240 453,16 Z" />
+
+  <!-- Reff-/Stag-Markierungslinien im Vorsegel -->
+  <line class="line-thin" x1="453" y1="68" x2="473" y2="79" />
+  <line class="line-thin" x1="453" y1="126" x2="493" y2="146" />
+  <line class="line-thin" x1="453" y1="184" x2="508" y2="213" />
+  <line class="line-thin" x1="453" y1="242" x2="517" y2="276" />
+  <line class="line-thin" x1="453" y1="300" x2="522" y2="337" />
+  <line class="line-thin" x1="453" y1="358" x2="518" y2="393" />
+  <line class="line-thin" x1="453" y1="416" x2="510" y2="447" />
+  <line class="line-thin" x1="453" y1="474" x2="498" y2="498" />
+  <line class="line-thin" x1="453" y1="532" x2="482" y2="548" />
+  <line class="line-thin" x1="453" y1="590" x2="468" y2="598" />
+
+  <!-- Mast & Toppbeschlag -->
+  <rect class="hull-sub" x="444" y="16" width="9" height="785" />
+  <path class="line-main" d="M 432,16 L 463,16 L 463,24 L 444,24 L 444,32 L 432,32 Z" />
+
+  <!-- Stehendes Gut, Großschot & Baumniederholer -->
+  <!-- Achterstag -->
+  <line class="rigging" x1="433" y1="18" x2="78" y2="795" />
+  <!-- Vorstag -->
+  <line class="rigging" x1="462" y1="18" x2="706" y2="782" />
+  <!-- Dirk / Baumstütze -->
+  <line class="rigging" x1="222" y1="718" x2="222" y2="758" />
+  <!-- Großschot -->
+  <line class="rigging" x1="321" y1="718" x2="330" y2="768" />
+  <!-- Baumniederholer (Vang) -->
+  <line class="rigging" x1="346" y1="718" x2="361" y2="741" />
+  <line class="rigging" x1="364" y1="718" x2="368" y2="735" />
+  <line class="rigging" x1="417" y1="780" x2="434" y2="796" />
+  <!-- Schot- und Unterliek-Linien im Bereich unter dem Baum -->
+  <line class="line-thin" x1="272" y1="734" x2="326" y2="756" />
+  <line class="line-thin" x1="268" y1="749" x2="321" y2="770" />
+
+  <!-- ================= UNTERWASSERSCHIFF ================= -->
+
+  <!-- Ruderblatt (achtern) -->
+  <path class="hull-sub" d="M 65,882 L 94,882 L 92,944 L 68,944 Z" />
+  <line class="line-thin" x1="66" y1="924" x2="93" y2="924" />
+
+  <!-- Skeg / Kielstummel & Propeller -->
+  <path class="hull-sub" d="M 111,886 L 114,929 C 165,929 225,919 266,912" />
+  <line class="line-main" x1="104" y1="904" x2="104" y2="924" />
+  <line class="line-main" x1="104" y1="914" x2="112" y2="914" />
+
+  <!-- Schwenkschwert (Dérive pivotante) & Schwenkradius -->
+  <path class="hull-sub" d="M 384,918 L 362,985 C 362,1004 388,1016 408,1012 L 448,918 Z" />
+  <!-- Gestrichelter Schwenkpfeil -->
+  <path class="dashed" d="M 358,988 C 340,972 330,948 327,924" />
+  <polygon class="dark-fill" points="327,920 324,928 330,928" />
+
+  <!-- ================= RUMPF & AUFBAU ================= -->
+
+  <!-- Rumpf-Außenkontur (kräftige Außenkontur) -->
+  <path class="hull-outline" d="M 78,795
+    L 62,818
+    L 26,862
+    L 56,876
+    C 145,905 265,918 395,918
+    C 495,918 585,910 658,895
+    L 708,795
+    L 695,786
+    L 453,801
+    L 415,801
+    C 405,786 392,778 378,777
+    L 285,772
+    L 282,764
+    L 206,762
+    L 194,795
+    Z" />
+
+  <!-- Kajütaufbau (Steuerbord-Seitenansicht) -->
+  <!-- Schiebeluk & Aufbau-Stufe -->
+  <line class="line-main" x1="203" y1="770" x2="283" y2="772" />
+  <line class="line-main" x1="200" y1="778" x2="378" y2="784" />
+  <line class="line-main" x1="227" y1="763" x2="227" y2="795" />
+  <!-- Schwarze Lüftungs-/Stufenstreifen achtern am Niedergang -->
+  <rect class="dark-fill" x="206" y="781" width="14" height="5" rx="2" />
+  <rect class="dark-fill" x="203" y="790" width="14" height="5" rx="2" />
+
+  <!-- Großes Fensterband im Kajütaufbau -->
+  <path class="dark-fill" d="M 251,785 L 368,789 C 382,790 393,795 402,803 L 253,799 Z" />
+  <!-- Kleines weißes Öffnungsfenster darin -->
+  <rect class="hull-sub" x="266" y="789" width="12" height="6" rx="1.5" />
+
+  <!-- Decks- und Rumpfseitenlinien -->
+  <line class="line-main" x1="78" y1="795" x2="708" y2="795" />
+  <line class="line-main" x1="69" y1="806" x2="704" y2="801" />
+
+  <!-- Bugbeschlag / Ankerrolle -->
+  <path class="hull-sub" d="M 686,784 L 708,779 L 708,787 L 694,792 Z" />
+  <line class="line-main" x1="686" y1="780" x2="695" y2="795" />
+
+  <!-- Rumpffenster -->
+  <rect class="window-hull" x="180" y="825" width="23" height="6" rx="1.5" />
+  <rect class="window-hull" x="399" y="826" width="22" height="6" rx="1.5" />
+  <rect class="window-hull" x="459" y="826" width="23" height="6" rx="1.5" />
+
+  <!-- Konstruktionswasserlinie -->
+  <line class="line-main" x1="16" y1="885" x2="725" y2="885" />
+  <!-- Kleine Wellen-Markierung an der Wasserlinie (Bug & Heck) -->
+  <path class="line-thin" d="M 22,885 C 24,881 26,881 28,885" />
+  <path class="line-thin" d="M 684,885 C 686,881 688,881 690,885" />
+</svg>

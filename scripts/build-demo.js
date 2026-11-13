@@ -16,9 +16,12 @@
 const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
+const { calibrationFor } = require('./demo-geometry')
 
 const SPEC_PATH = path.join(__dirname, '..', 'demo', 'source', 'boat.json')
 const DEFAULT_OUT = path.join(__dirname, '..', 'demo', 'wiring.db')
+const POSITIONS_PATH = path.join(__dirname, '..', 'demo', 'source', 'positions.json')
+const DRAWINGS_DIR = path.join(__dirname, '..', 'demo', 'source', 'drawings')
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -142,6 +145,7 @@ function layoutPage (devices, cables, zoneBlocks) {
 
 function buildDemo (outFile = DEFAULT_OUT) {
   const spec = JSON.parse(fs.readFileSync(SPEC_PATH, 'utf8'))
+  const positions = fs.existsSync(POSITIONS_PATH) ? JSON.parse(fs.readFileSync(POSITIONS_PATH, 'utf8')) : {}
   const { Store } = require('../src/store')
 
   fs.mkdirSync(path.dirname(outFile), { recursive: true })
@@ -157,14 +161,14 @@ function buildDemo (outFile = DEFAULT_OUT) {
 
   const store = new Store(outFile)
   try {
-    return populate(store, spec)
+    return populate(store, spec, positions, path.join(path.dirname(outFile), 'plans'))
   } finally {
     Store.prototype._logChange = realLog
     crypto.randomUUID = realRandomUuid
   }
 }
 
-function populate (store, spec) {
+function populate (store, spec, positions, plansDir) {
   const banks = expandBanks(spec)
   const devices = [...spec.devices, ...banks.devices]
   const cables = [...spec.cables, ...banks.cables]
@@ -178,9 +182,32 @@ function populate (store, spec) {
     zoneId.set(name, id)
   }
 
+  // ---- Plans: the drawings go into the plans folder as <planId>.svg.
+  fs.mkdirSync(plansDir, { recursive: true })
+  for (const p of spec.plans) {
+    const id = nameUuid(`plan:${p.name}`)
+    const filename = `${id}${path.extname(p.drawing)}`
+    fs.copyFileSync(path.join(DRAWINGS_DIR, p.drawing), path.join(plansDir, filename))
+    store.create('plan', {
+      id,
+      name: p.name,
+      view: p.view,
+      filename,
+      z_min: p.zMin,
+      z_max: p.zMax,
+      calibration: JSON.stringify(calibrationFor(p.originPx, p.bowPx, spec.hullLengthM)),
+      notes: p.notes
+    })
+  }
+
   // ---- Devices: enclosures first so what they hold can point at them.
   const deviceId = new Map(devices.map((d) => [d.name, nameUuid(`device:${d.name}`)]))
   const byName = new Map(devices.map((d) => [d.name, d]))
+  for (const name of Object.keys(positions)) {
+    const d = byName.get(name)
+    if (!d) throw new Error(`positions: unknown device ${name}`)
+    if (d.parent) throw new Error(`positions: ${name} is inside an enclosure and is not placed`)
+  }
   const ordered = [...devices.filter((d) => d.role === 'enclosure'), ...devices.filter((d) => d.role !== 'enclosure')]
   for (const d of ordered) {
     const row = { id: deviceId.get(d.name), name: d.name }
@@ -188,6 +215,8 @@ function populate (store, spec) {
     if (d.zone) row.zone_id = zoneId.get(d.zone)
     delete row.zone
     if (d.parent) row.parent_id = deviceId.get(d.parent)
+    const at = positions[d.name]
+    if (at) for (const axis of ['x', 'y', 'z']) if (at[axis] !== undefined && at[axis] !== null) row[`pos_${axis}`] = at[axis]
     if (d.terminals) {
       row.terminals = d.terminals.map(([name, conductor, voltage, port]) => ({ name, conductor, voltage, port }))
     }

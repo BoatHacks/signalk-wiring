@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 265" width="1000" height="265">
+  <style>
+    .hull { fill: #ffffff; stroke: #111111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .line-main { fill: none; stroke: #111111; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .line-thin { fill: none; stroke: #111111; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+    .waterline { fill: none; stroke: #111111; stroke-width: 0.9; stroke-linecap: round; }
+    .dark-fill { fill: #111111; stroke: none; }
+  </style>
+
+  <!-- Rumpf-Außenkontur & Kajütaufbau (Steuerbord-Schnitt) -->
+  <path class="hull" d="M 38,150
+    L 102,91
+    L 114,70
+    L 140,62
+    L 317,60
+    L 333,24
+    L 436,26
+    L 439,34
+    L 548,38
+    C 562,40 578,50 589,64
+    L 962,75
+    L 892,186
+    C 825,204 715,213 585,217
+    C 415,221 215,205 38,150 Z" />
+
+  <!-- Heckspiegel & Badeplattform-Stufe -->
+  <line class="line-main" x1="102" y1="91" x2="102" y2="168" />
+  <line class="line-main" x1="114" y1="70" x2="114" y2="171" />
+  <line class="line-main" x1="140" y1="62" x2="140" y2="177" />
+
+  <!-- Decks- und Rumpfseitenlinien (Scheuerleiste / Rumpf-Deck-Übergang) -->
+  <line class="line-main" x1="114" y1="81" x2="323" y2="81" />
+  <line class="line-main" x1="367" y1="76" x2="958" y2="82" />
+  <line class="line-thin" x1="367" y1="82" x2="954" y2="88" />
+
+  <!-- Kajütaufbau-Dachlinien & Schiebeluk -->
+  <line class="line-main" x1="331" y1="31" x2="438" y2="34" />
+  <line class="line-main" x1="328" y1="40" x2="548" y2="45" />
+  <line class="line-thin" x1="325" y1="53" x2="367" y2="54" />
+  <line class="line-thin" x1="322" y1="67" x2="367" y2="68" />
+
+  <!-- Kajütfenster (Steuerbord) -->
+  <!-- Kleines hinteres Fenster -->
+  <rect class="line-main" x="403" y="48" width="14" height="7" rx="2" />
+  <!-- Mittleres Fenster 1 -->
+  <path class="line-main" d="M 426,45 L 474,46 L 478,61 L 429,60 Z" />
+  <!-- Mittleres Fenster 2 -->
+  <path class="line-main" d="M 483,46 L 516,47 L 522,62 L 487,61 Z" />
+  <!-- Vorderes schräges Fenster -->
+  <path class="line-main" d="M 526,47 C 542,48 556,52 567,63 L 531,62 Z" />
+
+  <!-- Niedergang, Schrank (Penderie achtern) & Schotten -->
+  <line class="line-main" x1="367" y1="40" x2="367" y2="180" />
+  <path class="line-main" d="M 317,60 L 328,113 L 352,152" />
+  <line class="line-main" x1="328" y1="113" x2="367" y2="113" />
+  <line class="line-main" x1="336" y1="127" x2="355" y2="127" />
+
+  <!-- Achterkoje (Couchette arrière) & Backskiste (Coffre) -->
+  <line class="line-main" x1="152" y1="81" x2="152" y2="180" />
+  <line class="line-main" x1="152" y1="127" x2="292" y2="127" />
+  <line class="line-thin" x1="292" y1="81" x2="292" y2="127" />
+  <line class="line-main" x1="152" y1="152" x2="352" y2="152" />
+  <line class="line-main" x1="152" y1="159" x2="348" y2="159" />
+  <line class="line-main" x1="152" y1="168" x2="342" y2="168" />
+  <!-- Doppelte Polster-/Kojenlinie achtern -->
+  <rect class="dark-fill" x="152" y="166" width="166" height="3.5" />
+
+  <!-- Motorraum & Niedergangsstufe (Moteur / Equipet) -->
+  <path class="line-main" d="M 304,202 L 333,152 L 405,152 L 405,211" />
+  <line class="line-thin" x1="352" y1="152" x2="352" y2="182" />
+  <line class="line-main" x1="352" y1="182" x2="405" y2="182" />
+  <line class="line-main" x1="378" y1="182" x2="378" y2="195" />
+  <line class="line-main" x1="378" y1="195" x2="405" y2="195" />
+
+  <!-- Motorblock-Symbol -->
+  <rect class="line-main" x="357" y="156" width="38" height="22" />
+  <rect class="dark-fill" x="369" y="160" width="16" height="14" />
+  <line class="line-main" x1="290" y1="163" x2="369" y2="163" />
+
+  <!-- Pantry / Kombüse (Cuisine) -->
+  <line class="line-main" x1="511" y1="76" x2="511" y2="171" />
+  <line class="line-main" x1="367" y1="104" x2="511" y2="106" />
+  <line class="line-main" x1="367" y1="109" x2="511" y2="111" />
+  <line class="line-main" x1="367" y1="129" x2="511" y2="131" />
+  <line class="line-main" x1="367" y1="138" x2="452" y2="139" />
+
+  <!-- Salon (Carré) & Maststütze -->
+  <line class="line-main" x1="588" y1="76" x2="588" y2="140" />
+  <line class="line-main" x1="593" y1="76" x2="593" y2="140" />
+  <line class="line-main" x1="511" y1="95" x2="682" y2="96" />
+  <line class="line-main" x1="511" y1="135" x2="682" y2="136" />
+  <line class="line-main" x1="511" y1="140" x2="682" y2="141" />
+
+  <!-- Schwalbennester / Ablagen im Salon -->
+  <rect class="line-main" x="556" y="106" width="26" height="11" rx="4" />
+  <rect class="line-main" x="603" y="106" width="26" height="11" rx="4" />
+  <rect class="line-main" x="641" y="106" width="26" height="11" rx="4" />
+
+  <!-- Schwertkasten (Puits de dérive) -->
+  <path class="line-main" d="M 436,214 L 452,153 L 646,154 L 646,214" />
+  <line class="line-thin" x1="444" y1="183" x2="646" y2="183" />
+
+  <!-- Hauptschott & Vorderer Schrank (Penderie) -->
+  <line class="line-main" x1="682" y1="77" x2="682" y2="213" />
+  <line class="line-main" x1="725" y1="78" x2="725" y2="209" />
+  <rect class="line-thin" x="687" y="85" width="33" height="84" />
+
+  <!-- Vorschiffskoje (Couchette avant) & Stauraum (Coffre) -->
+  <line class="line-main" x1="725" y1="140" x2="880" y2="141" />
+  <line class="line-main" x1="725" y1="146" x2="880" y2="147" />
+  <line class="line-main" x1="725" y1="173" x2="900" y2="173" />
+  <line class="line-main" x1="725" y1="180" x2="895" y2="180" />
+  <line class="line-main" x1="766" y1="146" x2="766" y2="180" />
+  <line class="line-main" x1="813" y1="146" x2="813" y2="180" />
+
+  <!-- Ablagen / Ausschnitte im Vorschiff -->
+  <rect class="line-main" x="729" y="123" width="38" height="12" rx="4" />
+  <circle class="line-main" cx="786" cy="129" r="5" />
+  <rect class="line-main" x="798" y="123" width="24" height="12" rx="5" />
+
+  <!-- Ankerkasten (Baille à mouillage) -->
+  <path class="line-main" d="M 852,82 L 852,110 L 892,118 L 916,118 L 935,84" />
+
+  <!-- Konstruktionswasserlinie (KWL) -->
+  <line class="waterline" x1="20" y1="167" x2="980" y2="173" />
+</svg>
