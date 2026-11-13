@@ -34,6 +34,7 @@ const TABLES = {
       'trip_rating_a', 'rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
       'meter_path', 'meter_unit', 'chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
       'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path',
+      'schematic_box_color', 'schematic_icon_color',
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'parent_id', 'tags', 'status', 'notes'
     ]
   },
@@ -465,6 +466,23 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices (parent_id)')
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_schematics_enclosure ON schematics (enclosure_id) WHERE enclosure_id IS NOT NULL')
     }
+  },
+  {
+    version: 16,
+    description: 'plan 0028: schematic_devices + hand_placed (1 when the user dragged or dropped the device; old rows read as free)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      if (!has('schematic_devices', 'hand_placed')) db.exec('ALTER TABLE schematic_devices ADD COLUMN hand_placed INTEGER NOT NULL DEFAULT 0')
+    }
+  },
+  {
+    version: 17,
+    description: 'plan 0030: devices + schematic_box_color and schematic_icon_color (hex text, null means the theme color)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      if (!has('devices', 'schematic_box_color')) db.exec('ALTER TABLE devices ADD COLUMN schematic_box_color TEXT')
+      if (!has('devices', 'schematic_icon_color')) db.exec('ALTER TABLE devices ADD COLUMN schematic_icon_color TEXT')
+    }
   }
 ]
 
@@ -570,6 +588,32 @@ function changeSummary (existing, updated) {
   return 'updated'
 }
 
+// The name of a record that no longer exists, from its newest logged entry
+// that carries one (the permanent deletion entry, a deleted zone, a creation).
+function loggedName (rows) {
+  for (const row of rows) {
+    let diff
+    try { diff = JSON.parse(row.diff_json) } catch (e) { continue }
+    if (!diff) continue
+    const name = (typeof diff.name === 'string' && diff.name) ||
+      (diff.before && diff.before.name) || (diff.after && diff.after.name)
+    if (name) return name
+  }
+  return null
+}
+
+// The units a record's numbers are in, so an entry that changed only a number
+// can still say "6 to 10 mm2".
+function unitsOf (record) {
+  const units = {}
+  if (record) {
+    for (const f of ['gauge_unit', 'length_unit', 'diameter_unit']) if (record[f]) units[f] = record[f]
+  }
+  return units
+}
+
+const PURGED_SUMMARY = 'permanently deleted'
+
 class Store {
   constructor (dbPath) {
     this.db = new Database(dbPath)
@@ -598,7 +642,7 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
-    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null)), true)))
+    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true)))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null); row = this._checkGauge(row, null) }
     if (kind === 'schematic') { row.name = this._checkSchematicName(row.name); row = this._checkEnclosureId(row, null) }
@@ -659,7 +703,7 @@ class Store {
       }
       return by
     }
-    const dByS = group(devices, (r) => ({ deviceId: r.device_id, x: r.x, y: r.y }))
+    const dByS = group(devices, (r) => ({ deviceId: r.device_id, x: r.x, y: r.y, ...(r.hand_placed ? { handPlaced: true } : {}) }))
     const wByS = group(wires, (r) => ({ wireRunId: r.wire_run_id, points: r.points ? JSON.parse(r.points) : [] }))
     const sByS = group(stubs, (r) => ({ wireRunId: r.wire_run_id, x: r.x, y: r.y }))
     const zByS = group(zoneShapes, (r) => {
@@ -704,7 +748,7 @@ class Store {
         if (!had.has(deviceId) && device.parent_id && device.parent_id !== insideOf) {
           throw new Error(`${device.name} is inside an enclosure: place it on that enclosure's inside page`)
         }
-        return { deviceId, x: finite(item.x, 'x'), y: finite(item.y, 'y') }
+        return { deviceId, x: finite(item.x, 'x'), y: finite(item.y, 'y'), ...(item.handPlaced === true ? { handPlaced: true } : {}) }
       })
     }
     if (fields.wires !== undefined) {
@@ -772,8 +816,8 @@ class Store {
     if (lists.devices) {
       this.db.prepare('DELETE FROM schematic_devices WHERE schematic_id = ?').run(id)
       const insert = this.db.prepare(
-        'INSERT INTO schematic_devices (id, schematic_id, position, device_id, x, y) VALUES (?, ?, ?, ?, ?, ?)')
-      lists.devices.forEach((d, i) => insert.run(crypto.randomUUID(), id, i, d.deviceId, d.x, d.y))
+        'INSERT INTO schematic_devices (id, schematic_id, position, device_id, x, y, hand_placed) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      lists.devices.forEach((d, i) => insert.run(crypto.randomUUID(), id, i, d.deviceId, d.x, d.y, d.handPlaced ? 1 : 0))
     }
     if (lists.wires) {
       this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
@@ -1051,7 +1095,7 @@ class Store {
     }
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing)), false)))
+    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing))), false)))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
     if (kind === 'wireRun') {
@@ -1348,6 +1392,26 @@ class Store {
       throw new Error('icon must be a JPEG, PNG or WebP image attached to this device')
     }
     return fields
+  }
+
+  // Plan 0030: a device color is empty (the theme color), `#rrggbb` or `#rgb`
+  // (expanded); it is stored lower case.
+  _checkColors (fields) {
+    let out = fields
+    for (const key of ['schematic_box_color', 'schematic_icon_color']) {
+      if (!(key in fields)) continue
+      const v = fields[key]
+      if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) {
+        out = { ...out, [key]: null }
+        continue
+      }
+      const m = typeof v === 'string' ? /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(v.trim()) : null
+      if (!m) throw new Error(`${key === 'schematic_box_color' ? 'box color' : 'icon color'} must be a hex color like #1a2b3c, or empty for the theme color`)
+      let hex = m[1].toLowerCase()
+      if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('')
+      out = { ...out, [key]: '#' + hex }
+    }
+    return out
   }
 
   // An absent role stays absent (the column default applies); a cleared one
@@ -1693,7 +1757,7 @@ class Store {
         this.db.prepare(`DELETE FROM ${table} WHERE wire_run_id = ?`).run(id)
       }
       this.db.prepare("DELETE FROM attachments WHERE owner_type = 'wireRun' AND owner_id = ?").run(id)
-      this.db.prepare("DELETE FROM change_log WHERE record_type = 'wireRun' AND record_id = ?").run(id)
+      this._eraseHistory('wireRun', id, cable)
       this.db.prepare('DELETE FROM wire_runs WHERE id = ?').run(id)
     })()
     this._afterWrite('wireRun')
@@ -1713,8 +1777,26 @@ class Store {
   _purgeOwned (kind, id) {
     const attachments = this.listAttachmentsByOwner(kind, id)
     this.db.prepare('DELETE FROM attachments WHERE owner_type = ? AND owner_id = ?').run(kind, id)
-    this.db.prepare('DELETE FROM change_log WHERE record_type = ? AND record_id = ?').run(kind, id)
+    this._eraseHistory(kind, id, this.get(kind, id))
     return attachments
+  }
+
+  // The name a record goes by in the change log: a cable has no name of its
+  // own, so it is its label or the two devices it joins.
+  recordName (kind, record) {
+    if (!record) return null
+    if (kind !== 'wireRun') return record.name || null
+    if (record.cable_label) return record.cable_label
+    const name = (id) => (this.get('device', id) || {}).name || '?'
+    return `${name(record.from_device_id)} to ${name(record.to_device_id)}`
+  }
+
+  // Erases a purged record's history and leaves one short entry in its place
+  // naming it, so the Changes tab can show what disappeared.
+  _eraseHistory (kind, id, record) {
+    const name = this.recordName(kind, record)
+    this.db.prepare('DELETE FROM change_log WHERE record_type = ? AND record_id = ?').run(kind, id)
+    this._logChange(kind, id, PURGED_SUMMARY, { name, kind })
   }
 
   // The cables, live or removed, that end on a device: as the cable's own ends
@@ -1793,6 +1875,75 @@ class Store {
       .all(kind, id)
   }
 
+  // The change log across records for the Changes tab: one group per record
+  // with its entries in the range, newest first. Groups are ordered by their
+  // latest entry (newest first) and paged with a cursor made of that entry's
+  // time and rowid. Circuits, whose records the app keeps in step with the
+  // cables by itself, are left out unless the circuit kind is asked for.
+  // Options: kinds, since, until (ISO times), q, id (one record only),
+  // limit (groups), cursor, entries (cap per group).
+  changeGroups ({ kinds, since, until, q, id, limit = 20, cursor, entries = 5 } = {}) {
+    const wanted = kinds && kinds.length > 0 ? kinds : Object.keys(TABLES).filter((k) => k !== 'circuit')
+    const where = [`record_type IN (${wanted.map(() => '?').join(', ')})`]
+    const args = [...wanted]
+    if (since) { where.push('timestamp >= ?'); args.push(since) }
+    if (until) { where.push('timestamp <= ?'); args.push(until) }
+    if (id) { where.push('record_id = ?'); args.push(id) }
+    const rows = this.db
+      .prepare(`SELECT rowid AS seq, * FROM change_log WHERE ${where.join(' AND ')} ORDER BY timestamp DESC, rowid DESC`)
+      .all(...args)
+    const needle = q ? String(q).trim().toLowerCase() : ''
+    const byRecord = new Map()
+    for (const row of rows) {
+      const key = `${row.record_type}\n${row.record_id}`
+      if (!byRecord.has(key)) byRecord.set(key, { kind: row.record_type, id: row.record_id, rows: [] })
+      byRecord.get(key).rows.push(row)
+    }
+    const groups = []
+    for (const g of byRecord.values()) {
+      const record = this.get(g.kind, g.id)
+      const name = this.recordName(g.kind, record) || loggedName(g.rows)
+      let list = g.rows
+      if (needle && !(name || '').toLowerCase().includes(needle)) {
+        list = list.filter((r) => r.summary.toLowerCase().includes(needle))
+        if (list.length === 0) continue
+      }
+      groups.push({
+        record,
+        kind: g.kind,
+        id: g.id,
+        name,
+        status: !record ? 'purged' : record.status === REMOVED_STATUS ? 'removed' : 'active',
+        latest: list[0].timestamp,
+        seq: list[0].seq,
+        total: list.length,
+        list
+      })
+    }
+    groups.sort((a, b) => (a.latest < b.latest ? 1 : a.latest > b.latest ? -1 : b.seq - a.seq))
+    let start = 0
+    if (cursor) {
+      const [time, seq] = String(cursor).split('|')
+      const at = groups.findIndex((g) => g.latest < time || (g.latest === time && g.seq < Number(seq)))
+      start = at < 0 ? groups.length : at
+    }
+    const page = groups.slice(start, start + limit)
+    const last = page[page.length - 1]
+    return {
+      groups: page.map((g) => ({
+        kind: g.kind,
+        id: g.id,
+        name: g.name,
+        status: g.status,
+        latest: g.latest,
+        units: unitsOf(g.record),
+        entries: g.list.slice(0, entries),
+        more: Math.max(0, g.total - entries)
+      })),
+      nextCursor: start + limit < groups.length && last ? `${last.latest}|${last.seq}` : null
+    }
+  }
+
   // Attachments aren't part of the removed-but-kept lifecycle (SPEC.md
   // §3.1 is about wiring records, not their photos) and have no `status`
   // column, so they get their own methods instead of the TABLES-driven
@@ -1840,4 +1991,4 @@ class Store {
   }
 }
 
-module.exports = { Store, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES, METER_UNITS }
+module.exports = { Store, PURGED_SUMMARY, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES, METER_UNITS }

@@ -309,3 +309,13 @@ test('a negative that never reaches a battery warns, and the return wire stays o
   assert.ok(result.warnings.some((w) => w.code === 'return-incomplete' && w.deviceId === 'lamp'))
   assert.deepEqual(result.circuits[0].returnCableIds, [])
 })
+
+test('a cable between two terminals of one device does not change or break the circuits', () => {
+  const devices = [battery('bat'), fuse('f1', 10), lamp('lamp')]
+  const plain = deriveCircuits({ devices, cables: [cable('c1', 'bat', 'f1'), cable('c2', 'f1', 'lamp')] })
+  const withJumper = deriveCircuits({
+    devices,
+    cables: [cable('c1', 'bat', 'f1'), cable('c2', 'f1', 'lamp'), cable('j', 'lamp', 'lamp', [{ conductor: 'signal', fromTerminal: 'A', toTerminal: 'B' }])]
+  })
+  assert.deepEqual(withJumper.circuits.map((c) => c.key), plain.circuits.map((c) => c.key))
+})

@@ -1,0 +1,479 @@
+{
+ "note": "Snapshot of the boat for the icon tests: device names, types, and the terminals recorded on them and used by cables.",
+ "devices": [
+  {
+   "name": "Main 48V",
+   "type": "Battery",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "House Battery",
+   "type": "Battery",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Windlass Battery",
+   "type": "Battery",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "JK BMS (Main 48V)",
+   "type": "BMS",
+   "terminals": [
+    "Battery +",
+    "B-",
+    "Output +",
+    "P-",
+    "CAN"
+   ],
+   "used": [
+    "B-",
+    "Battery +",
+    "CAN",
+    "Output +",
+    "P-"
+   ]
+  },
+  {
+   "name": "Victron SmartShunt (House)",
+   "type": "Shunt",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Victron SmartShunt (Windlass)",
+   "type": "Shunt",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Shore power inlet",
+   "type": "Shore power inlet",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "FI/LS 16 A",
+   "type": "Breaker",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Isolation transformer",
+   "type": "Isolation transformer",
+   "terminals": [
+    "AC in L",
+    "AC in N",
+    "AC in PE",
+    "AC out L",
+    "AC out N",
+    "AC out PE"
+   ],
+   "used": [
+    "AC in L",
+    "AC in N",
+    "AC in PE",
+    "AC out L",
+    "AC out N",
+    "AC out PE"
+   ]
+  },
+  {
+   "name": "Automatic transfer switch",
+   "type": "Transfer switch",
+   "terminals": [
+    "Input 1 (gen) L",
+    "Input 1 (gen) N",
+    "Input 1 (gen) PE",
+    "Input 2 (shore) L",
+    "Input 2 (shore) N",
+    "Input 2 (shore) PE",
+    "Output L",
+    "Output N",
+    "Output PE",
+    "Aux contact 1",
+    "Aux contact 2"
+   ],
+   "used": [
+    "Aux contact 1",
+    "Aux contact 2",
+    "Input 2 (shore) L",
+    "Input 2 (shore) N",
+    "Input 2 (shore) PE",
+    "Output L",
+    "Output N",
+    "Output PE"
+   ]
+  },
+  {
+   "name": "MultiPlus-II 48/3000/35-32",
+   "type": "Inverter/charger",
+   "terminals": [
+    "DC in +",
+    "DC in -",
+    "AC in L",
+    "AC in N",
+    "AC in PE",
+    "AC out 1 L",
+    "AC out 1 N",
+    "AC out 1 PE",
+    "AC out 2 L",
+    "AC out 2 N",
+    "AC out 2 PE",
+    "VE.Bus 1",
+    "VE.Bus 2",
+    "Remote on/off",
+    "AUX I/O 1",
+    "AUX I/O 2",
+    "Aux relay",
+    "Current sense"
+   ],
+   "used": [
+    "AC in L",
+    "AC in N",
+    "AC in PE",
+    "AC out 1 L",
+    "AC out 1 N",
+    "AC out 1 PE",
+    "AC out 2 L",
+    "AC out 2 N",
+    "AC out 2 PE",
+    "AUX I/O 1",
+    "AUX I/O 2",
+    "DC in +",
+    "DC in -",
+    "VE.Bus 1"
+   ]
+  },
+  {
+   "name": "AC1 breaker 16 A",
+   "type": "Breaker",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC1 live bar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC1 neutral bar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC1 ground bar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "RCBO 16 A: Kitchen outlets",
+   "type": "RCBO",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "RCBO 16 A: Bow cabin",
+   "type": "RCBO",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "RCBO 16 A: Spare",
+   "type": "RCBO",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC2 breaker 16 A",
+   "type": "Breaker",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC2 live bar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC2 neutral bar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC2 ground bar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "AC2 outlet breaker 16 A",
+   "type": "Breaker",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Schuko outlet (breaker box)",
+   "type": "Outlet",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Galley: 2x Schuko",
+   "type": "Outlet",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Galley: 1x Schuko",
+   "type": "Outlet",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Galley: 3x Schuko",
+   "type": "Outlet",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Bow cabin outlet: double Schuko (waterproof)",
+   "type": "Outlet",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Main fuse (MEGA 250 A)",
+   "type": "Fuse",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "DC main switch",
+   "type": "Battery switch",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Positive busbar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Negative busbar",
+   "type": "Bus bar",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "Curtis motor controller",
+   "type": "Motor controller",
+   "terminals": [
+    "CAN"
+   ],
+   "used": [
+    "CAN"
+   ]
+  },
+  {
+   "name": "Solar MPPT charger",
+   "type": "MPPT charger",
+   "terminals": [
+    "PV in +",
+    "PV in -",
+    "Battery +",
+    "Battery -",
+    "VE.Direct"
+   ],
+   "used": [
+    "Battery +",
+    "Battery -",
+    "PV in +",
+    "PV in -",
+    "VE.Direct"
+   ]
+  },
+  {
+   "name": "Victron Cerbo GX",
+   "type": "GX device",
+   "terminals": [
+    "DC supply +",
+    "DC supply -",
+    "VE.Bus 1",
+    "VE.Bus 2",
+    "VE.Direct 1",
+    "VE.Can",
+    "BMS-Can",
+    "USB 1",
+    "USB 2",
+    "HDMI",
+    "Relay 1",
+    "Relay 2"
+   ],
+   "used": [
+    "BMS-Can",
+    "DC supply +",
+    "DC supply -",
+    "HDMI",
+    "USB 1",
+    "USB 2",
+    "VE.Bus 1",
+    "VE.Can",
+    "VE.Direct 1"
+   ]
+  },
+  {
+   "name": "Orion-Tr Smart 48/12-30A (house)",
+   "type": "DC-DC converter",
+   "terminals": [
+    "DC in +",
+    "DC in -",
+    "DC out +",
+    "DC out -",
+    "Remote on/off"
+   ],
+   "used": [
+    "DC in +",
+    "DC in -",
+    "DC out +",
+    "DC out -"
+   ]
+  },
+  {
+   "name": "Orion-Tr Smart 48/12-30A (windlass)",
+   "type": "DC-DC converter",
+   "terminals": [
+    "DC in +",
+    "DC in -",
+    "DC out +",
+    "DC out -",
+    "Remote on/off"
+   ],
+   "used": [
+    "DC in +",
+    "DC in -",
+    "DC out +",
+    "DC out -"
+   ]
+  },
+  {
+   "name": "Cerbo fuse (5 A)",
+   "type": "Fuse",
+   "terminals": [],
+   "used": []
+  },
+  {
+   "name": "CAN-USB dongle",
+   "type": "CAN adapter",
+   "terminals": [
+    "USB",
+    "CAN"
+   ],
+   "used": [
+    "CAN",
+    "USB"
+   ]
+  },
+  {
+   "name": "N2K bus",
+   "type": "NMEA 2000 bus",
+   "terminals": [
+    "N2K"
+   ],
+   "used": [
+    "N2K"
+   ]
+  },
+  {
+   "name": "Cerbo touchscreen",
+   "type": "Touchscreen",
+   "terminals": [
+    "USB",
+    "HDMI"
+   ],
+   "used": [
+    "HDMI",
+    "USB"
+   ]
+  },
+  {
+   "name": "Solar panel (port)",
+   "type": "Solar panel",
+   "terminals": [
+    "Panel +",
+    "Panel -"
+   ],
+   "used": [
+    "Panel +",
+    "Panel -"
+   ]
+  },
+  {
+   "name": "Solar panel (middle)",
+   "type": "Solar panel",
+   "terminals": [
+    "Panel +",
+    "Panel -"
+   ],
+   "used": [
+    "Panel +",
+    "Panel -"
+   ]
+  },
+  {
+   "name": "Solar panel (starboard)",
+   "type": "Solar panel",
+   "terminals": [
+    "Panel +",
+    "Panel -"
+   ],
+   "used": [
+    "Panel +",
+    "Panel -"
+   ]
+  },
+  {
+   "name": "PV breaker 2P (10 A)",
+   "type": "Breaker",
+   "terminals": [
+    "In +",
+    "In -",
+    "Out +",
+    "Out -"
+   ],
+   "used": [
+    "In +",
+    "In -",
+    "Out +",
+    "Out -"
+   ]
+  },
+  {
+   "name": "CAN connector (motor controller)",
+   "type": "Connector",
+   "terminals": [
+    "Plug (Cerbo side)",
+    "Socket (Curtis side)"
+   ],
+   "used": [
+    "Plug (Cerbo side)",
+    "Socket (Curtis side)"
+   ]
+  },
+  {
+   "name": "AC Distribution Box",
+   "type": "AC panel",
+   "terminals": [],
+   "used": []
+  }
+ ]
+}

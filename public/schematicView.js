@@ -4,25 +4,35 @@ import dagre from './vendor/dagre.esm.js'
 import { newId } from './ids.js'
 import { TYPE_SUGGESTIONS } from './deviceTypes.js'
 import { roleLabel } from './roles.js'
+import { DeviceIcon } from './deviceIcon.js'
 import * as G from './schematic.js'
 import { startValues } from './quickCable.js'
+import { boxColors } from './colorTone.js'
 import { CablePopover } from './cablePopover.js'
 import { circuitsOfCable, cableTitle, CONDUCTOR_LABELS } from './cableForm.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
+import { checkAll, liveAmpsByCircuit, wireMark, pathMidpoint } from './cableChecks.js'
+import { limitsFrom, CheckBadges, CheckPopover } from './cableCheckView.js'
 import { PortBlocks } from './ports.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo, toast } from './canvasRemoval.js'
 import { matchesRemoved, readShowRemoved, writeShowRemoved } from './zones.js'
 import { purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import * as Z from './zoneShapes.js'
+import * as N from './snapGrid.js'
+import * as TG from './touchGestures.js'
+import * as TT from './touchTargets.js'
+import { placePopover } from './popoverPlace.js'
+import * as L from './schematicLayout.js'
 import { midpoints } from './polygon.js'
 import { pageModel, insideText } from './enclosures.js'
 import { ensureInsidePage } from './insidePage.js'
 
 const RESOURCE_BASE = '/signalk/v2/api/resources'
 const ZOOM_STEP = 1.25
+const POPOVER_SIZE = { width: 250, height: 260 } // the quick cable popover, for placing it
 const MOVE_SLOP_PX = 3
 const ROUTE_INTERVAL_MS = 66 // live routing while dragging: at most about 15 routes per second (plan 0026)
 const DOUBLE_CLICK_MS = 400
@@ -245,6 +255,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const autoRoutedAt = useRef(0)
   const lastCornerDown = useRef(null)
   const [pos, setPos] = useState({})
+  const [hand, setHand] = useState({}) // device id -> true: placed by hand (dragged or dropped), kept by the first Auto-arrange click (plan 0028)
   const [bends, setBends] = useState({})
   const [stubPos, setStubPos] = useState({}) // cable id -> { x, y }: tabs the user placed
   const [shapes, setShapes] = useState([]) // zone shapes: { zoneId, kind, x, y, width, height, points? }
@@ -259,6 +270,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const [armed, setArmed] = useState(false) // Auto-arrange has run and nothing was edited since
   const armedPending = useRef(null) // the edit key at the click, until the saved layout has come back
   const armedKey = useRef(null)
+  const [snapOn, setSnapOn] = useState(() => N.readSnap()) // snap to the 16 unit grid (plan 0028)
+  const lastMove = useRef(null) // the last pointer position of a drag, replayed when Alt is pressed or released
   const [preview, setPreview] = useState(null) // a wire being dragged: { a: {x,y}, b: {x,y}, targetId }
   const [popover, setPopover] = useState(null) // { start, at }
   const [moreForm, setMoreForm] = useState(null) // { cable?, prefill? }
@@ -283,18 +296,30 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     onError(null)
     try { await live.toggle(id) } catch (err) { onError(err.message) }
   }
+  // The cable checks (plan 0034). The live values are used only while Live is
+  // on and only to raise the current; otherwise rated values stand.
+  const checks = checkAll({
+    cables,
+    circuits,
+    devices,
+    conduits,
+    limits: limitsFrom(settings),
+    liveAmps: liveOn ? liveAmpsByCircuit(circuits.filter((c) => c.status === 'active' && c.derived), live.live, live.values) : undefined
+  })
 
   // Layout lives in local state while it is being dragged and is written
   // when the drag ends. It is reset from the record whenever that changes.
   const recordKey = JSON.stringify([schematic.devices, schematic.wires, schematic.stubs || [], schematic.zoneShapes || []])
   useEffect(() => {
     const p = {}
-    for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
+    const hp = {}
+    for (const d of schematic.devices) { p[d.deviceId] = { x: d.x, y: d.y }; if (d.handPlaced) hp[d.deviceId] = true }
     const b = {}
     for (const w of schematic.wires) b[w.wireRunId] = w.points
     const sp = {}
     for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
     setPos(p)
+    setHand(hp)
     setBends(b)
     setStubPos(sp)
     setShapes(schematic.zoneShapes || [])
@@ -408,6 +433,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   // while a bend point or a stretch is dragged, the viewBox stays as it was: the cheap routes drawn meanwhile must not rescale the page under the pointer
   const view = (drag.current && drag.current.frozen) || vb || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
   const fitNow = () => setVb(null)
+  const toggleSnap = () => { const v = !snapOn; setSnapOn(v); N.writeSnap(v) }
+  // one place decides: the toggle, flipped by the Alt key of this very event
+  const snapping = (e) => N.snapActive(snapOn, e && e.altKey)
 
   // ---- Coordinates ----
   const toCanvas = (e) => {
@@ -451,11 +479,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
 
   // ---- Persisting ----
-  const save = async (nextPos, nextBends, order, nextStubs = stubPos, nextShapes = shapes) => {
+  const save = async (nextPos, nextBends, order, nextStubs = stubPos, nextShapes = shapes, nextHand = hand) => {
     const ids = order || schematic.devices.map((d) => d.deviceId)
     try {
       await putResource('wiringSchematics', schematic.id, {
-        devices: ids.filter((id) => nextPos[id]).map((id) => ({ deviceId: id, x: Math.round(nextPos[id].x), y: Math.round(nextPos[id].y) })),
+        devices: ids.filter((id) => nextPos[id]).map((id) => ({ deviceId: id, x: Math.round(nextPos[id].x), y: Math.round(nextPos[id].y), ...(nextHand[id] ? { handPlaced: true } : {}) })),
         wires: Object.entries(nextBends)
           .filter(([id, pts]) => pts && pts.length > 0 && liveCables.some((c) => c.id === id))
           .map(([wireRunId, points]) => ({ wireRunId, points })),
@@ -521,15 +549,19 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     for (let i = 2; ; i++) if (!taken.has(`${type} ${i}`.toLowerCase())) return `${type} ${i}`
   }
 
-  const createDevice = async (item, at) => {
+  const createDevice = async (item, at, snap = false) => {
     const c = at || centre()
     const id = newId()
     try {
       // A device made on an inside page goes into that enclosure.
       await putResource('wiringDevices', id, { name: uniqueName(item.type), type: item.type, role: item.role, ...(schematic.enclosureId ? { parentId: schematic.enclosureId } : {}) })
-      const next = tidied({ ...pos, [id]: { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) } }, [id])
+      const corner = { x: Math.round(c.x - G.BOX_W / 2), y: Math.round(c.y - 23) }
+      const next = tidied({ ...pos, [id]: snap ? N.snapPoint(corner) : corner }, [id])
       setPos(next)
-      await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id])
+      // dropped at a chosen spot: placed by hand; made by a click, it is free
+      const nextHand = at ? { ...hand, [id]: true } : hand
+      setHand(nextHand)
+      await save(next, bends, [...schematic.devices.map((d) => d.deviceId), id], undefined, undefined, nextHand)
       setSelection({ type: 'device', id })
       setRenaming({ id, text: uniqueName(item.type), fresh: true })
     } catch (err) { onError(err.message) }
@@ -552,13 +584,17 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const name = deviceName(id) || 'Device'
     const next = { ...pos }
     delete next[id]
+    const wasHand = !!hand[id]
+    const nextHand = { ...hand }
+    delete nextHand[id]
+    setHand(nextHand)
     setSelection(null)
-    await save(next, bends, schematic.devices.map((d) => d.deviceId).filter((x) => x !== id))
+    await save(next, bends, schematic.devices.map((d) => d.deviceId).filter((x) => x !== id), undefined, undefined, nextHand)
     if (!old) return
     undo.offer({
       message: `"${name}" taken off this page.`,
       onUndo: () => patchStored((s) => ({
-        devices: G.withDevicePlaced(s.devices || [], { deviceId: id, x: Math.round(old.x), y: Math.round(old.y) }, index)
+        devices: G.withDevicePlaced(s.devices || [], { deviceId: id, x: Math.round(old.x), y: Math.round(old.y), ...(wasHand ? { handPlaced: true } : {}) }, index)
       }))
     })
   }
@@ -571,12 +607,16 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     armedPending.current = null
     setBusy(true)
     const before = { devices: schematic.devices, wires: schematic.wires, stubs: schematic.stubs || [] }
-    const layout = tidied(G.autoLayout(dagre, pageDevices, onPage), null, !step.clear.tabs)
+    // stage one keeps the hand-placed devices where they are; the full arrange moves everything and clears the marks
+    const fixed = step.full ? [] : pageDevices.map((d) => d.id).filter((id) => hand[id])
+    const auto = G.autoLayout(dagre, pageDevices, onPage)
+    const layout = tidied(fixed.length ? L.arrangeFree(auto, pos, fixed) : auto, fixed.length ? pageDevices.map((d) => d.id).filter((id) => !hand[id]) : null, !step.clear.tabs)
     setPos(layout)
     if (step.full) {
       setBends({})
       setStubPos({})
-      await save(layout, {}, undefined, {})
+      setHand({})
+      await save(layout, {}, undefined, {}, undefined, {})
       undo.offer({
         message: 'Everything on this page arranged.',
         onUndo: () => patchStored(() => ({ devices: before.devices, wires: before.wires, stubs: before.stubs }))
@@ -606,9 +646,12 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   // ---- Drawing wires ----
   // Where a dragged wire would land: a terminal, else any other device box.
-  const wireTarget = (p, fromId) => {
+  // A wire may end on another terminal of its own device (a jumper between two
+  // ports of one module); a bare box or the same terminal of that device is not
+  // a target, since the ports to connect would be unclear.
+  const wireTarget = (p, fromId, fromTerminal = '') => {
     const t = G.hitTerminal(wireBoxes, p.x, p.y)
-    if (t && t.deviceId !== fromId) return t
+    if (t && (t.deviceId !== fromId || (t.terminal && t.terminal !== fromTerminal))) return t
     const b = G.hitDevice(wireBoxes, p.x, p.y)
     return b && b.id !== fromId ? { deviceId: b.id, terminal: '', x: p.x, y: p.y } : null
   }
@@ -620,7 +663,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     })
     const at = toScreen(p)
     const wrap = svgRef.current.parentElement.getBoundingClientRect()
-    setPopover({ start, at: { x: Math.max(4, Math.min(at.x, wrap.width - 250)), y: Math.max(4, Math.min(at.y, wrap.height - 260)) } })
+    // fully on screen, and clear of the finger that just lifted (plan 0031)
+    setPopover({ start, at: placePopover(at, { width: POPOVER_SIZE.width, height: POPOVER_SIZE.height }, { width: wrap.width, height: wrap.height }, 8) })
   }
 
   const createCable = async (payload, id) => {
@@ -700,6 +744,26 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     })
   }
 
+  // Escape, or a second finger: the running drag is dropped, positions and
+  // routes go back to what is saved, and nothing is written.
+  const cancelDrag = () => {
+    drag.current = null
+    lastMove.current = null
+    setPreview(null)
+    const p = {}
+    const hp = {}
+    for (const d of schematic.devices) { p[d.deviceId] = { x: d.x, y: d.y }; if (d.handPlaced) hp[d.deviceId] = true }
+    const b = {}
+    for (const w of schematic.wires) b[w.wireRunId] = w.points
+    const sp = {}
+    for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
+    setPos(p)
+    setHand(hp)
+    setBends(b)
+    setStubPos(sp)
+    setShapes(schematic.zoneShapes || [])
+  }
+
   // ---- Keyboard ----
   // Attached for as long as the editor is mounted, so it is gone when another
   // tab is shown. Re-attached every render to see the latest state.
@@ -717,18 +781,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       if (!cmd) return
       e.preventDefault()
       if (cmd.kind === 'cancel-drag') {
-        drag.current = null
-        setPreview(null)
-        const p = {}
-        for (const d of schematic.devices) p[d.deviceId] = { x: d.x, y: d.y }
-        const b = {}
-        for (const w of schematic.wires) b[w.wireRunId] = w.points
-        const sp = {}
-        for (const st of schematic.stubs || []) sp[st.wireRunId] = { x: st.x, y: st.y }
-        setPos(p)
-        setBends(b)
-        setStubPos(sp)
-        setShapes(schematic.zoneShapes || [])
+        cancelDrag()
       } else if (cmd.kind === 'close-popover') setPopover(null)
       else if (cmd.kind === 'close-tabmenu') setTabMenu(null)
       else if (cmd.kind === 'clear-selection') setSelection(null)
@@ -742,14 +795,85 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     return () => document.removeEventListener('keydown', onKey)
   })
 
+  // Pressing or releasing Alt in the middle of a drag changes the snap at once,
+  // without the pointer having to move.
+  useEffect(() => {
+    const onAlt = (e) => {
+      if (e.key !== 'Alt' || !drag.current || !drag.current.moved || !lastMove.current) return
+      e.preventDefault()
+      onPointerMove({ ...lastMove.current, altKey: e.type === 'keydown' })
+    }
+    document.addEventListener('keydown', onAlt)
+    document.addEventListener('keyup', onAlt)
+    return () => { document.removeEventListener('keydown', onAlt); document.removeEventListener('keyup', onAlt) }
+  })
+
+  // ---- Two-finger pan and pinch (plan 0031) ----
+  // Touch pointers are tracked by pointerId. A second finger cancels any
+  // one-finger drag and then pans and zooms the view; lifting one finger ends
+  // the gesture, and the finger left does nothing until it is lifted too.
+  const touches = useRef(new Map())
+  const gesture = useRef(null)
+  const onTouchDownCapture = (e) => {
+    if (e.pointerType !== 'touch') return
+    if (touches.current.size === 0) gesture.current = null
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touches.current.size < 2) return
+    e.stopPropagation()
+    try { svgRef.current.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointers cannot be captured */ }
+    if (gesture.current && !gesture.current.ended) return
+    cancelDrag()
+    const ids = [...touches.current.keys()].slice(0, 2)
+    const start = ids.map((id) => touches.current.get(id))
+    gesture.current = { ids, start, last: start, active: false, ended: false, view: { ...view } }
+  }
+  const moveGesture = () => {
+    const g = gesture.current
+    if (g.ended) return
+    const pair = g.ids.map((id) => touches.current.get(id))
+    if (!pair[0] || !pair[1]) return
+    const step = TG.pinchStep(g.active ? g.last : g.start, pair, g.active ? 0 : TG.DEAD_ZONE_PX)
+    if (!g.active) {
+      if (step.idle) return
+      g.active = true
+    }
+    g.view = TG.pinchView(g.view, svgRef.current.getBoundingClientRect(), step)
+    g.last = pair
+    setVb(g.view)
+  }
+  // Returns true when the event belonged to a gesture and is handled.
+  const touchMoved = (e) => {
+    if (e.pointerType !== 'touch' || !touches.current.has(e.pointerId)) return false
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (!gesture.current) return false
+    moveGesture()
+    return true
+  }
+  const touchEnded = (e) => {
+    if (e.pointerType !== 'touch') return false
+    touches.current.delete(e.pointerId)
+    const g = gesture.current
+    if (!g) return false
+    g.ended = true
+    if (touches.current.size === 0) gesture.current = null
+    return true
+  }
+
   // ---- Pointer handling ----
   const onPointerDown = (e) => {
+    if (e.pointerType === 'touch' && touches.current.size >= 2) return
     if (e.button !== 0 && e.pointerType === 'mouse') return
     const p = toCanvas(e)
     setTabMenu(null)
     try { svgRef.current.setPointerCapture(e.pointerId) } catch (err) { /* synthetic pointers cannot be captured */ }
+    // A finger gets larger invisible hit areas than a mouse (plan 0031); the
+    // pointer type of this press decides.
+    const touchPress = e.pointerType === 'touch'
+    const zoom = 1 / TG.viewScale(view, svgRef.current.getBoundingClientRect())
     // A tab: a click opens its menu, a drag moves it (not in live mode).
-    const tab = stubs.find((s) => p.x >= s.tab.x && p.x <= s.tab.x + s.tab.w && p.y >= s.tab.y && p.y <= s.tab.y + s.tab.h)
+    const tabPad = (s) => TT.rectPad(TT.hitRadius('tab', e.pointerType, zoom), s.tab.w, s.tab.h)
+    const tabDist = (s) => Math.hypot(s.tab.x + s.tab.w / 2 - p.x, s.tab.y + s.tab.h / 2 - p.y)
+    const tab = stubs.filter((s) => TT.insideRect(s.tab, p.x, p.y, tabPad(s))).sort((a, b) => tabDist(a) - tabDist(b))[0]
     if (tab) { drag.current = { kind: 'stub', stub: tab, dx: p.x - tab.tab.x, dy: p.y - tab.tab.y, sx: e.clientX, sy: e.clientY, moved: false }; return }
     if (liveOn) {
       const hit = G.hitDevice(boxes, p.x, p.y)
@@ -761,7 +885,20 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const sel = selectedWireId && wires.find((w) => w.id === selectedWireId)
     if (sel) {
       const cur = bends[sel.id] || []
-      const bi = G.hitBend(cur, p.x, p.y)
+      const mids = midHandles(sel.path)
+      let bi
+      let mi
+      if (touchPress) {
+        const hit = TT.pickTarget(p, [
+          ...cur.map((q, i) => ({ kind: 'bend', index: i, x: q.x, y: q.y })),
+          ...mids.map((m, i) => ({ kind: 'midpoint', index: i, x: m.x, y: m.y }))
+        ], e.pointerType, zoom)
+        bi = hit && hit.kind === 'bend' ? hit.index : -1
+        mi = hit && hit.kind === 'midpoint' ? hit.index : -1
+      } else {
+        bi = G.hitBend(cur, p.x, p.y)
+        mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
+      }
       if (bi >= 0) {
         const now = Date.now()
         const last = lastBendDown.current
@@ -776,8 +913,6 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         drag.current = { kind: 'bend', frozen: { ...view }, wireId: sel.id, index: bi, sx: e.clientX, sy: e.clientY, moved: false }
         return
       }
-      const mids = midHandles(sel.path)
-      const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
       if (mi >= 0 && (sel.path[mi].x === sel.path[mi + 1].x || sel.path[mi].y === sel.path[mi + 1].y)) {
         // the handle of a horizontal or vertical segment moves that segment, perpendicular to itself
         drag.current = { kind: 'seg', frozen: { ...view }, wireId: sel.id, index: mi, path: sel.path, mid: mids[mi], sx: e.clientX, sy: e.clientY, moved: false }
@@ -795,7 +930,20 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const selShape = selection && selection.type === 'zone' ? shapes.find((sh) => sh.zoneId === selection.id) : null
     if (selShape && selShape.kind === 'polygon') {
       const pts = selShape.points
-      const ci = pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 9)
+      const mids = midpoints(pts)
+      let ci
+      let mi
+      if (touchPress) {
+        const hit = TT.pickTarget(p, [
+          ...pts.map((q, i) => ({ kind: 'corner', index: i, x: q.x, y: q.y })),
+          ...mids.map((m, i) => ({ kind: 'midpoint', index: i, x: m.x, y: m.y }))
+        ], e.pointerType, zoom)
+        ci = hit && hit.kind === 'corner' ? hit.index : -1
+        mi = hit && hit.kind === 'midpoint' ? hit.index : -1
+      } else {
+        ci = pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) <= 9)
+        mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
+      }
       if (ci >= 0) {
         const now = Date.now()
         const last = lastCornerDown.current
@@ -813,8 +961,6 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         drag.current = { kind: 'corner', orig: selShape, index: ci, sx: e.clientX, sy: e.clientY, moved: false }
         return
       }
-      const mids = midpoints(pts)
-      const mi = mids.findIndex((m) => Math.hypot(m.x - p.x, m.y - p.y) <= 8)
       if (mi >= 0) {
         const added = Z.addCorner(selShape, mi, { x: Math.round(mids[mi].x), y: Math.round(mids[mi].y) })
         setShapes(Z.withShape(shapes, added.shape))
@@ -822,11 +968,28 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         return
       }
     } else if (selShape) {
-      const h = Z.hitHandle(selShape, p.x, p.y)
+      const hit = touchPress ? TT.pickTarget(p, Z.handlePositions(selShape).map((q) => ({ kind: 'corner', id: q.id, x: q.x, y: q.y })), e.pointerType, zoom) : null
+      const h = touchPress ? (hit && hit.id) : Z.hitHandle(selShape, p.x, p.y)
       if (h) { drag.current = { kind: 'shape-resize', orig: selShape, handle: h, sx: e.clientX, sy: e.clientY, moved: false }; return }
     }
-    const term = G.hitTerminal(wireBoxes, p.x, p.y)
-    const handle = !term && wireBoxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
+    let term
+    let handle
+    if (touchPress) {
+      // terminal dots and connect handles compete; the nearest centre wins
+      const cands = []
+      for (const b of wireBoxes) {
+        for (const t of b.terminals) cands.push({ kind: 'terminal', box: b, t, x: t.x, y: t.y })
+        cands.push({ kind: 'handle', box: b, x: b.x + b.w / 2, y: b.bottomPorts ? b.y : b.y + b.h })
+      }
+      let hit = TT.pickTarget(p, cands, e.pointerType, zoom)
+      // the larger area reaches outside the box; over the body itself the box (a move) wins beyond the usual radius
+      if (hit && TT.insideRect(hit.box, p.x, p.y) && Math.hypot(hit.x - p.x, hit.y - p.y) > TT.BASE_RADIUS[hit.kind]) hit = null
+      term = hit && hit.kind === 'terminal' ? { deviceId: hit.box.id, terminal: hit.t.name } : null
+      handle = hit && hit.kind === 'handle' ? hit.box : null
+    } else {
+      term = G.hitTerminal(wireBoxes, p.x, p.y)
+      handle = !term && wireBoxes.find((b) => Math.hypot(b.x + b.w / 2 - p.x, (b.bottomPorts ? b.y : b.y + b.h) - p.y) <= 9)
+    }
     if (term || handle) {
       const id = term ? term.deviceId : handle.id
       drag.current = { kind: 'wire', fromId: id, fromTerminal: term ? term.terminal : '', sx: e.clientX, sy: e.clientY, moved: false }
@@ -866,43 +1029,53 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   }
 
   const onPointerMove = (e) => {
+    if (touchMoved(e)) return
     const d = drag.current
     if (!d) return
     if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > MOVE_SLOP_PX) d.moved = true
+    lastMove.current = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey }
     if (!d.moved) return
     if (d.kind === 'move') {
       const p = toCanvas(e)
-      setPos((cur) => ({ ...cur, [d.id]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
+      const at = snapping(e) ? N.snapCorner(p, d.dx, d.dy) : { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) }
+      setPos((cur) => ({ ...cur, [d.id]: at }))
     } else if (d.kind === 'stub') {
       const p = toCanvas(e)
-      setStubPos((cur) => ({ ...cur, [d.stub.cableId]: { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) } }))
+      const at = snapping(e) ? N.snapCorner(p, d.dx, d.dy) : { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) }
+      setStubPos((cur) => ({ ...cur, [d.stub.cableId]: at }))
     } else if (d.kind === 'shape-move') {
       const p = toCanvas(e)
-      setShapes((cur) => Z.withShape(cur, Z.moveShape(d.orig, Math.round(p.x - d.px), Math.round(p.y - d.py))))
+      const dx = Math.round(p.x - d.px)
+      const dy = Math.round(p.y - d.py)
+      setShapes((cur) => Z.withShape(cur, snapping(e) ? N.snapMoveShape(d.orig, dx, dy) : Z.moveShape(d.orig, dx, dy)))
     } else if (d.kind === 'shape-resize') {
       const p = toCanvas(e)
-      setShapes((cur) => Z.withShape(cur, Z.resizeShape(d.orig, d.handle, p.x, p.y, e.shiftKey)))
+      setShapes((cur) => Z.withShape(cur, snapping(e) ? N.snapResizeShape(d.orig, d.handle, p.x, p.y, e.shiftKey) : Z.resizeShape(d.orig, d.handle, p.x, p.y, e.shiftKey)))
     } else if (d.kind === 'corner') {
       const p = toCanvas(e)
-      const points = d.orig.points.map((q, i) => (i === d.index ? { x: Math.round(p.x), y: Math.round(p.y) } : q))
+      const at = snapping(e) ? N.snapPoint(p) : { x: Math.round(p.x), y: Math.round(p.y) }
+      const points = d.orig.points.map((q, i) => (i === d.index ? at : q))
       setShapes((cur) => Z.withShape(cur, Z.withPoints(d.orig, points)))
     } else if (d.kind === 'seg') {
       const p = toCanvas(e)
       const a = d.path[d.index]
       const horiz = a.y === d.path[d.index + 1].y
-      const moved = G.moveSegment(d.path, d.index, Math.round(horiz ? p.y - d.mid.y : p.x - d.mid.x))
+      const raw = Math.round(horiz ? p.y - d.mid.y : p.x - d.mid.x)
+      const delta = snapping(e) ? N.snapSegmentDelta(horiz ? a.y : a.x, raw) : raw
+      const moved = G.moveSegment(d.path, d.index, delta)
       d.result = moved.slice(1, -1)
       setBends((cur) => ({ ...cur, [d.wireId]: d.result }))
     } else if (d.kind === 'bend') {
       const p = toCanvas(e)
+      const at = snapping(e) ? N.snapPoint(p) : { x: Math.round(p.x), y: Math.round(p.y) }
       setBends((cur) => {
         const list = [...(cur[d.wireId] || [])]
-        list[d.index] = { x: Math.round(p.x), y: Math.round(p.y) }
+        list[d.index] = at
         return { ...cur, [d.wireId]: list }
       })
     } else if (d.kind === 'wire') {
       const p = toCanvas(e)
-      const target = wireTarget(p, d.fromId)
+      const target = wireTarget(p, d.fromId, d.fromTerminal)
       const fromBox = boxById.get(d.fromId)
       setPreview({ a: G.anchorOf(fromBox, d.fromTerminal, p), b: target ? { x: target.x, y: target.y } : p, targetId: target ? target.deviceId : null })
     } else if (d.kind === 'pan') {
@@ -941,14 +1114,18 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   }
 
   const onPointerUp = (e) => {
+    if (touchEnded(e)) return
     const d = drag.current
     drag.current = null
+    lastMove.current = null
     if (!d) return
     if (d.kind === 'move' && !d.moved) lastTap.current = { id: d.id, t: Date.now(), x: e.clientX, y: e.clientY }
     if (d.kind === 'move' && d.moved) {
       const next = tidied(pos, [d.id])
       if (next !== pos) setPos(next)
-      save(next, bends)
+      const nextHand = { ...hand, [d.id]: true } // dragged: placed by hand
+      setHand(nextHand)
+      save(next, bends, undefined, undefined, undefined, nextHand)
     }
     if (d.kind === 'bend' && d.moved) save(pos, bends)
     if (d.kind === 'seg' && d.moved && d.result) save(pos, { ...bends, [d.wireId]: d.result })
@@ -963,7 +1140,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     if (d.kind === 'wire') {
       setPreview(null)
       const p = toCanvas(e)
-      const target = d.moved ? wireTarget(p, d.fromId) : null
+      const target = d.moved ? wireTarget(p, d.fromId, d.fromTerminal) : null
       if (target) openPopover(d.fromId, d.fromTerminal, target.deviceId, target.terminal || '', p)
     }
     if (d.kind === 'pan' && !d.moved) setSelection(null)
@@ -973,7 +1150,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     e.preventDefault()
     let item
     try { item = JSON.parse(e.dataTransfer.getData('text/plain')) } catch (err) { return }
-    if (item && item.type && item.role) createDevice(item, toCanvas(e))
+    if (item && item.type && item.role) createDevice(item, toCanvas(e), snapping(e))
   }
 
   // ---- Highlighting ----
@@ -1041,6 +1218,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${Z.addableZones(zones, shapes).map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
         </select>
         <button type="button" class=${liveOn ? 'active' : ''} data-testid="schematic-live" onClick=${() => { setLiveOn((v) => !v); onError(null) }}>${liveOn ? 'Live: on' : 'Live'}</button>
+        <button type="button" class=${snapOn ? 'active' : ''} data-testid="snap-toggle" aria-pressed=${snapOn ? 'true' : 'false'} title="Snap to a 16 unit grid. Hold Alt while dragging to flip it." onClick=${toggleSnap}>${snapOn ? 'Snap: on' : 'Snap'}</button>
         <button type="button" data-testid="auto-arrange" onClick=${autoArrange} disabled=${busy || boxes.length === 0}>${armed ? G.ARRANGE_ALL_LABEL : G.ARRANGE_LABEL}</button>
         <button type="button" onClick=${() => zoomAt(ZOOM_STEP)}>＋</button>
         <button type="button" onClick=${() => zoomAt(1 / ZOOM_STEP)}>－</button>
@@ -1078,7 +1256,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
                 <button type="button" key=${item.role + item.type} class="palette-item" draggable="true"
                   data-testid="palette-item"
                   onDragStart=${(e) => e.dataTransfer.setData('text/plain', JSON.stringify(item))}
-                  onClick=${() => createDevice(item)}>${item.type}</button>
+                  onClick=${() => createDevice(item)}><${DeviceIcon} bare=${item} size=${20} /><span>${item.type}</span></button>
               `)}
             </div>
           `)}
@@ -1086,14 +1264,15 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <div class="schematic-canvas-wrap">
           <svg ref=${svgRef} class="schematic-canvas" data-testid="schematic-canvas"
             viewBox="${view.x} ${view.y} ${view.w} ${view.h}"
-            onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onDblClick=${onDblClick}
+            onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${(e) => { if (!touchEnded(e)) cancelDrag() }} onPointerDownCapture=${onTouchDownCapture} onDblClick=${onDblClick}
             onDragOver=${(e) => e.preventDefault()} onDrop=${onDrop}>
+            ${snapOn && html`<${SnapGrid} view=${view} scale=${scaleX} />`}
             <${ZoneShapes} shapes=${shown} nameOf=${zoneName} selectedId=${selection && selection.type === 'zone' ? selection.id : null} />
             ${bands.map((b) => html`<${ConduitBand} key=${b.conduitId} band=${b} />`)}
-            ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName}
+            ${wires.map((w) => html`<${WireShape} key=${w.id} wire=${w} deviceName=${deviceName} mark=${wireMark(checks.get(w.id))}
               selected=${!!selection && selection.type === 'wire' && selection.id === w.id}
               dim=${dimming && !hl.cableIds.has(w.id)} lit=${dimming && hl.cableIds.has(w.id)} />`)}
-            ${stubs.map((s) => html`<${StubShape} key=${s.cableId} stub=${s} />`)}
+            ${stubs.map((s) => html`<${StubShape} key=${s.cableId} stub=${s} mark=${wireMark(checks.get(s.cableId))} />`)}
             ${selectedWireId && html`<${BendHandles} wire=${wires.find((w) => w.id === selectedWireId)} bends=${bends[selectedWireId] || []} />`}
             ${boxes.map((b) => html`<${DeviceShape} key=${b.id} box=${b} device=${drawnById.get(b.id)}
               selected=${!!selection && selection.type === 'device' && selection.id === b.id}
@@ -1104,7 +1283,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
             ${preview && html`<path class="sch-preview" d=${G.pathToD([preview.a, preview.b])} />`}
           </svg>
           ${popover && html`<${CablePopover} start=${popover.start}
-            style=${`left:${popover.at.x}px;top:${popover.at.y}px`}
+            style=${`left:${popover.at.left}px;top:${popover.at.top}px;max-width:${popover.at.maxWidth}px;max-height:${popover.at.maxHeight}px;overflow-y:auto`}
             onCreate=${(payload) => createCable(payload)}
             onMore=${(values) => { setMoreForm({ prefill: values }); setPopover(null) }}
             onCancel=${() => setPopover(null)} />`}
@@ -1127,6 +1306,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         <div class="schematic-inspector" data-testid="wire-inspector">
           <strong>${cableTitle(selectedWire.stored, new Map(devices.map((d) => [d.id, d.name])))}</strong>
           <span class="meta">${selectedWire.cable.conductors.length ? selectedWire.cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] || c.conductor).join(' + ') : 'Positive'}${selectedWire.cable.gauge != null ? ', ' + formatGauge(selectedWire.cable.gauge, selectedWire.cable.gaugeUnit) : ''}${selectedWire.cable.length != null ? ', ' + selectedWire.cable.length + ' ' + (selectedWire.cable.lengthUnit || '') : ''}</span>
+          ${checks.get(selectedWire.id) && html`<${InspectorCheck} result=${checks.get(selectedWire.id)} />`}
           <span class="meta" data-testid="wire-circuits">${wireCircuits.length ? wireCircuits.map(circuitLine).join('; ') : 'Not part of a circuit yet.'}</span>
           <button type="button" class="link-btn" onClick=${() => setMoreForm({ cable: selectedWire.stored })}>Edit cable</button>
           ${(bends[selectedWire.id] || []).length > 0 && html`<button type="button" class="link-btn" onClick=${() => straighten(selectedWire.id)}>Straighten</button>`}
@@ -1158,6 +1338,25 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
 // Zone shapes on the background layer: they never take pointer events, the
 // canvas hit-tests their outline and label itself.
+// The faint dot grid shown while snapping is on. The dots sit on the multiples
+// of the grid (the pattern tile is shifted half a cell so a whole dot fits in
+// it) and keep their size on screen when zooming; too dense to be useful, the
+// grid is left out.
+function SnapGrid ({ view, scale }) {
+  const g = N.GRID
+  if (g * scale < 6) return null
+  const r = Math.max(0.5, 1.1 / scale)
+  return html`
+    <g class="sch-grid" data-testid="snap-grid" pointer-events="none">
+      <defs>
+        <pattern id="sch-grid-dots" x=${-g / 2} y=${-g / 2} width=${g} height=${g} patternUnits="userSpaceOnUse">
+          <circle cx=${g / 2} cy=${g / 2} r=${r} class="sch-grid-dot" />
+        </pattern>
+      </defs>
+      <rect x=${view.x} y=${view.y} width=${view.w} height=${view.h} fill="url(#sch-grid-dots)" />
+    </g>`
+}
+
 function ZoneShapes ({ shapes, nameOf, selectedId }) {
   return html`
     <g class="sch-zones">
@@ -1194,10 +1393,16 @@ function ZoneHandles ({ shape }) {
 }
 
 function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
+  // A device color (plan 0030) sets the outline and a tint fill through
+  // variables; the stylesheet picks the day or the night pair.
+  const colors = boxColors(device.schematicBoxColor)
+  const colorStyle = colors
+    ? `--box-stroke:${colors.stroke};--box-fill:${colors.fill};--box-stroke-night:${colors.nightStroke};--box-fill-night:${colors.nightFill}`
+    : undefined
   const liveClass = live ? ` live-${live.look}${live.clickable ? ' live-clickable' : ''}` : ''
-  const cls = `sch-device role-${device.role || 'consumer'}${device.isEnclosure ? ' sch-enclosure' : ''}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}${liveClass}`
+  const cls = `sch-device role-${device.role || 'consumer'}${device.isEnclosure ? ' sch-enclosure' : ''}${colors ? ' has-color' : ''}${target ? ' sch-connect-target' : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}${liveClass}`
   return html`
-    <g class=${cls} transform="translate(${box.x}, ${box.y})" data-device=${box.id} data-live=${live ? live.look : undefined}>
+    <g class=${cls} transform="translate(${box.x}, ${box.y})" style=${colorStyle} data-device=${box.id} data-live=${live ? live.look : undefined}>
       ${live && live.title && html`<title>${live.title}</title>`}
       <rect width=${box.w} height=${box.h} rx="5" class="sch-device-box" />
       <text x=${box.w / 2} y="14" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
@@ -1213,6 +1418,18 @@ function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
   `
 }
 
+// The check of the selected wire in the inspector: its badges, each opening
+// the reasoning on tap, so a touch screen has what hover gives a mouse.
+function InspectorCheck ({ result }) {
+  const [open, setOpen] = useState(null)
+  return html`
+    <span class="inspector-check">
+      <${CheckBadges} result=${result} onOpen=${(anchor) => setOpen(anchor)} />
+      ${open && html`<${CheckPopover} result=${result} anchor=${open} title="Cable check" onClose=${() => setOpen(null)} />`}
+    </span>
+  `
+}
+
 function cableLine (cable, deviceName) {
   const parts = [cable.cableLabel || `${deviceName(cable.fromDeviceId) || '?'} to ${deviceName(cable.toDeviceId) || '?'}`]
   if (cable.gauge != null) parts.push(formatGauge(cable.gauge, cable.gaugeUnit))
@@ -1220,7 +1437,23 @@ function cableLine (cable, deviceName) {
   return parts.join(', ')
 }
 
-function WireShape ({ wire, deviceName, selected, dim, lit }) {
+// The warning mark of the cable checks: a small triangle with an exclamation
+// mark where a path is half way. It takes no pointer events, so wire and stub
+// selection and every touch hit area work as before; the reason is the title
+// of the wire or stub line it belongs to.
+function CheckMark ({ path, mark }) {
+  const at = mark && pathMidpoint(path)
+  if (!at) return null
+  return html`
+    <g class=${'sch-check-mark check-' + mark.verdict} transform=${`translate(${at.x}, ${at.y})`} data-testid="check-mark" data-verdict=${mark.verdict}>
+      <path d="M0 -9 L9 6 L-9 6 Z" class="sch-check-tri" />
+      <path d="M0 -4 L0 1" class="sch-check-bang" />
+      <circle cx="0" cy="3.6" r="0.9" class="sch-check-dot" />
+    </g>
+  `
+}
+
+function WireShape ({ wire, deviceName, selected, dim, lit, mark }) {
   const types = G.conductorTypes(wire.cable)
   const style = G.wireLineStyle(wire.cable)
   const d = G.pathToDWithBridges(wire.path, wire.bridges)
@@ -1228,8 +1461,11 @@ function WireShape ({ wire, deviceName, selected, dim, lit }) {
   const cls = `sch-wire${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
   return html`
     <g class=${cls} data-wire=${wire.id} data-current=${style.current || ''}>
-      <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.stored || wire.cable, deviceName)}</title></path>
+      ${style.dasharray && html`<path d=${d} class="sch-wire-line sch-wire-gap c-${types[0]}" />`}
+      <path d=${d} class="sch-wire-line c-${types[0]}" stroke-dasharray=${style.dasharray || undefined}><title>${cableLine(wire.stored || wire.cable, deviceName)}${mark ? '\n' + mark.text : ''}</title></path>
+      ${paired && style.dasharray && html`<path d=${paired} class="sch-wire-pair sch-wire-gap c-${types[1]}" />`}
       ${paired && html`<path d=${paired} class="sch-wire-pair c-${types[1]}" stroke-dasharray=${style.dasharray || undefined} />`}
+      <${CheckMark} path=${wire.path} mark=${mark} />
     </g>
   `
 }
@@ -1254,14 +1490,17 @@ function ConduitBand ({ band }) {
 // The line to a tab is drawn like the wire it stands for (conductor colours,
 // a second conductor line, DC solid or AC dashed); the tab
 // stays the off-page marker.
-function StubShape ({ stub }) {
+function StubShape ({ stub, mark }) {
   const types = G.conductorTypes(stub.cable)
   const style = G.wireLineStyle(stub.cable)
   const paired = types.length > 1 ? G.pathToD(G.offsetPath(stub.path, 4)) : null
   return html`
     <g class="sch-stub" data-stub=${stub.cableId} data-current=${style.current || ''}>
-      <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line c-' + types[0]} stroke-dasharray=${style.dasharray || undefined} />
+      ${style.dasharray && html`<path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line sch-wire-gap c-' + types[0]} />`}
+      <path d=${G.pathToDWithBridges(stub.path, stub.bridges || [])} class=${'sch-wire-line sch-stub-line c-' + types[0]} stroke-dasharray=${style.dasharray || undefined}>${mark && html`<title>${mark.text}</title>`}</path>
+      ${paired && style.dasharray && html`<path d=${paired} class=${'sch-wire-pair sch-wire-gap c-' + types[1]} />`}
       ${paired && html`<path d=${paired} class=${'sch-wire-pair c-' + types[1]} stroke-dasharray=${style.dasharray || undefined} />`}
+      ${stub.path && html`<${CheckMark} path=${stub.path} mark=${mark} />`}
       <rect x=${stub.tab.x} y=${stub.tab.y} width=${stub.tab.w} height=${stub.tab.h} rx="3" class="sch-tab" />
       <text x=${stub.tab.x + stub.tab.w / 2} y=${stub.tab.y + 14} text-anchor="middle" class="sch-tab-label">${shorten(stub.label, 20)}</text>
     </g>

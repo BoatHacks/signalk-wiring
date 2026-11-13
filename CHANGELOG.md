@@ -5,12 +5,51 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-12
+
 ### Added
 
-- Native Signal K OpenAPI discovery for the 22 JSON/no-content plugin
-  operations, including inputs, responses, access requirements and switching,
-  calibration and purge effects. Built with reusable JavaScript helpers and
-  shared runtime constants; no new dependencies or route behavior changes.
+- Cable checks (issue #10, plan 0034), advisory only. Every cable that carries current (signal, data, antenna and earth-only cables are exempt) is checked for size against the fuse or breaker that protects it and against its load, and for voltage drop over its round trip length. Warning badges ("cable too small", "voltage drop high", a muted "cannot check: needs length") on the Cables tab open a popover with every number and where it came from, the Load Summary counts the results, and a mark on the schematic wire and its stub shows the reason on hover, with the badges again in the wire inspector. Two plugin options set the voltage drop limits for critical and other loads (3 and 10 percent, 0.5 to 20). The ampacity table is our own and conservative, with its sources in `docs/cable-checks.md`, and is awaiting review before a release.
+- Floorplan routes get midpoint handles. With a wire run or a conduit chosen, a small circle sits in the middle of every stretch of its route; dragging it adds a point there, so a bend can be added between two existing points without redrawing the end of the route. Dragging shows a dashed preview. The new point takes its height from the point before it.
+- Touch polish (issue #12, plan 0031). Two-finger pan and pinch zoom on the schematic canvas and the floorplan (a second finger cancels a one-finger drag, nothing is saved), invisible hit areas of about 44 px for fingers on terminal dots, bend and midpoint handles, the connect handle, off-page tabs, floorplan markers and clusters (a mouse sees no change), the quick cable popover and the cluster and bundle lists kept on screen, and guards against the browser's own pinch zoom, pull-to-refresh and text selection on the canvases.
+- Device colors (plan 0030). A device has a schematic box color and a schematic icon color (new columns `devices.schematic_box_color` and `schematic_icon_color`, migration 17), edited in the device form with a hex field, a color picker and a Clear button, and shown with swatches on the device page. A colored device box on the schematic gets that outline and a light tint fill, enclosure boxes included, and the red night theme dims it. The icon color is stored only; nothing draws it yet.
+- A built-in library of simple 24 by 24 line icons, one per device type with role fallbacks and a generic one, and a pure `iconFor(device)` that picks the icon from type and model text.
+- Device icons are shown (plan 0032). A device's icon now comes before its name in the Devices list, the circuits list and circuit page, both From and To of the cables tables, the circuit diagram nodes, the schematic New device palette, beside the type and device pickers, and on the device page title. A device with its own attached icon image keeps showing that image. Icons follow the day and night themes, rows keep their height, and long names still truncate.
+- Changes tab (issue #13, plan 0033). A new tab lists what changed lately across the whole system, grouped by record (device, cable, conduit, zone, plan, circuit or schematic), newest activity first, with each entry in words ("gauge: 6 to 10 mm2", "terminals added: B+") and its local time. The group header links to the record. Filters for date range (today, 7 days, 30 days by default, custom), kind (several) and text; a group shows its latest 5 entries with "Show N more", and groups load 20 at a time. Circuit entries stay hidden unless the Circuits kind is picked. New route `GET /plugins/signalk-wiring/changelog` (admin login, like the per-record log).
+- Deleting a record permanently now leaves one entry "permanently deleted" in the change log, with its name and kind, for cables, devices, conduits and schematic pages. Its other history is still erased.
+
+### Changed
+
+- Dashed AC lines on the schematics and the floorplan now show the gaps of the dashes in a lighter tint of the line colour (half the opacity of the dash on the schematics) instead of the page background, so an AC wire reads as one line.
+
+### Fixed
+
+- A wire can now be drawn between two terminals of the same device, for example from one relay contact to another on a relay board. The wire drawing, the quick cable popover and the cable form accepted only two different devices before; they now accept one device when the two ends name different terminals. A wire dropped on two signal terminals starts as a signal cable even when the device also has power terminals. Same terminal on both ends and a bare box of the same device are still refused.
+
+## [0.7.2] - 2026-11-12
+
+### Added
+
+- Snap to grid in the schematic editor (issue #14, plan 0028). A Snap button
+  turns a 16 unit grid on or off (on by default, remembered per browser) and a
+  faint dot grid shows while it is on, in both themes. Devices and off-page
+  tabs snap by their top-left corner, wire bend points and dragged stretches
+  by their coordinates, zone shapes when moved, resized or a polygon corner is
+  moved. Hold Alt while dragging to flip the snap.
+- Auto-arrange stage one leaves hand-placed devices alone (issue #14). A device
+  you drag or drop at a chosen spot is marked (new column
+  `schematic_devices.hand_placed`, migration 16; older pages have every device
+  free). The first click arranges only the other devices; the second click
+  arranges everything and clears the marks with the bend points and tabs, and
+  Undo restores them.
+
+### Fixed
+
+- Crossings of an off-page stub line with a wire or another stub line were
+  sometimes plain intersections (issue #14). Hops that lay closer together than
+  one hop were dropped, and a crossing near the end of a horizontal stretch got
+  none. Close hops are now drawn as one wide hop, and the vertical line hops
+  where the horizontal one has no room.
 
 ## [0.7.1] - 2026-11-12
 

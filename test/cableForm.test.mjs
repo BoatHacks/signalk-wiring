@@ -135,3 +135,11 @@ test('new cables start with red, black and brown/blue/green-yellow, and edits do
   // Without the flag (editing) nothing is filled in.
   assert.deepEqual(buildCablePayload({ ...base, kind: 'both' }).conductors.map((c) => c.color), [null, null])
 })
+
+test('a jumper between two terminals of one device is valid; the same terminal or none is not', () => {
+  const jumper = { fromDeviceId: 'a', toDeviceId: 'a', terminals: { signal: { from: 'Relay 1 COM', to: 'Relay 2 COM' } } }
+  assert.equal(validateCable(jumper), null)
+  assert.match(validateCable({ ...jumper, terminals: { signal: { from: 'Relay 1 COM', to: 'Relay 1 COM' } } }), /different terminals/)
+  assert.match(validateCable({ ...jumper, terminals: { signal: { from: 'Relay 1 COM', to: '' } } }), /different terminals/)
+  assert.match(validateCable({ fromDeviceId: 'a', toDeviceId: 'a' }), /different terminals/)
+})

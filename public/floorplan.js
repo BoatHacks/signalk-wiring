@@ -211,6 +211,16 @@ export function removeWaypoint (route, index) {
   return route.filter((_, i) => i !== index).map(pointOf)
 }
 
+// A new waypoint at `index` (0 puts it before the first one), placed by a
+// click in `view` and taking the axis the view does not show from `previous`,
+// the point before it (the route's start for index 0, or null).
+export function insertWaypoint (route, index, previous, view, a, b) {
+  const at = Math.max(0, Math.min(index, route.length))
+  const points = route.map(pointOf)
+  points.splice(at, 0, waypointFromClick(previous || (points[at - 1] || null), view, a, b))
+  return points
+}
+
 // The drawn polyline of a wire run: its resolved start (if any) followed
 // by the stored waypoints. The start is derived, never stored, so moving
 // the device moves the start with it.

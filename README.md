@@ -15,6 +15,20 @@ to someone else doesn't depend on the current owner being present.
 - **Schematic routing**: wires are routed around device boxes with bridges at
   crossings, devices never overlap, spacing follows cable length, and conduit
   bands show wires that run together.
+- **Snap to grid on schematics**: a Snap button (on by default) snaps devices,
+  tabs, bend points and zone shapes to a faint 16 unit grid; hold Alt while
+  dragging to flip it. Devices you place by hand stay put when you click
+  Auto-arrange once; click it again to arrange everything.
+- **Touch screens and tablets**: on the schematic and the floorplan, two
+  fingers pan and pinch zoom while one finger keeps dragging devices, handles
+  and markers (a second finger cancels the drag, nothing is saved). Small
+  targets get a larger invisible hit area for fingers only, popovers stay on
+  screen, and the browser's own pinch, pull-to-refresh and text selection stay
+  out of the canvases. Not yet checked on real touch hardware.
+- **Device colors**: give a device a schematic box color (hex text or a color
+  picker, empty for the theme color). Its schematic box gets that outline and
+  a light tint as fill, enclosures included, and the red night theme dims it.
+  An icon color can be stored too; it is used once icons are drawn in the boxes.
 - **Cables between devices, circuits worked out for you**: you record
   cables from the supply side to the load side of devices (battery, fuse,
   switch, lamp) and the circuits follow. A circuit is what one fuse or
@@ -63,13 +77,25 @@ to someone else doesn't depend on the current owner being present.
   optional power factor on AC) and checked against the rating of the fuse or
   breaker that protects it, flagging circuits over their rating and saying what
   is missing on incomplete ones.
+- **Cable checks (advisory)**: every cable that is not signal only is checked
+  for size against the fuse or breaker that protects it and against its load,
+  and for voltage drop (3 percent on a circuit with a critical device, 10
+  percent otherwise, both plugin options). Warning badges on the Cables tab
+  open the reasoning with every number and its source, the load summary counts
+  the results and a mark shows on the schematic wire. The ampacity table is our
+  own and conservative, with its sources in `docs/cable-checks.md`; it is
+  advice, not a safety guarantee, and the table is awaiting review before a
+  release.
 - **Removing keeps the record.** "Removing" a record marks it `removed`
   rather than dropping it, so the wiring's history stays intact — a refit
   doesn't erase what used to be there. The one exception is a cable that is
   already removed, which can then be deleted permanently (with its history and
   attachments) from the Cables tab.
 - A **change log** per record: every create/edit/removal is timestamped
-  with a before/after diff, viewable from the webapp.
+  with a before/after diff, viewable from the webapp. The **Changes** tab
+  shows what changed lately across the whole system, grouped by record and
+  written in words, with filters for date range, kind and text. A record
+  deleted for good leaves a one-line "permanently deleted" entry.
 - The same look as the stowage webapp: a header bar, an underlined tab
   strip, and a red-shifted **night theme** that protects night vision,
   switched by a button or, with the `autoTheme` option, by the vessel's
@@ -88,7 +114,9 @@ to someone else doesn't depend on the current owner being present.
   devices (or create them from a palette by role), drag a wire from one to
   another and the cable and its circuit exist; wires are right-angled and
   coloured by conductor, can be bent, and cables to devices on other pages
-  show as labelled stubs. Auto-arrange lays a page out from the supply.
+  show as labelled stubs. Auto-arrange lays a page out from the supply (the
+  first click leaves devices you placed by hand alone, the second arranges
+  everything).
   Delete removes the selected wire (with an Undo message; it is deleted for
   good when the message ends) or takes a selected device off the page only.
 - A **connect tool** on the floorplan: pick the From and To devices, click
@@ -105,8 +133,11 @@ to someone else doesn't depend on the current owner being present.
   "continues on <plan>" as a link to the next one, clicking the To device
   ends a route drawn for a wire run, and a wire run can be deleted from the
   route panel (with Undo).
-- **Device icons**: mark one of a device's images as its icon, shown in
-  device lists, on circuit diagrams and on floorplan markers.
+- **Device icons**: every device name is preceded by an icon, a built-in line
+  icon picked from the device type (lists, cable and circuit tables, circuit
+  diagrams, the schematic palette, pickers and the device page title). Mark
+  one of a device's images as its icon and that image is shown instead, also on
+  floorplan markers.
 - **Photo/file attachments** per cable, device or conduit (JPEG/PNG/WebP/HEIC/
   PDF, 15MB cap), with a "Take photo" button for phone cameras. Devices and
   cables can be duplicated.

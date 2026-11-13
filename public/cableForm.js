@@ -203,7 +203,13 @@ export function cableTitle (cable, deviceNameById) {
 export function validateCable (values) {
   if (!values.fromDeviceId) return 'Choose the supply side (From).'
   if (!values.toDeviceId) return 'Choose the load side (To).'
-  if (values.fromDeviceId === values.toDeviceId) return 'From and To must be different devices.'
+  if (values.fromDeviceId === values.toDeviceId) {
+    // A jumper between two terminals of one device is fine; the two ends must
+    // then name different terminals.
+    const ends = Object.values(values.terminals || {})
+    const apart = ends.some((t) => t && t.from && t.to && t.from !== t.to)
+    if (!apart) return 'From and To are the same device: choose two different terminals, one for each end.'
+  }
   return null
 }
 

@@ -150,3 +150,13 @@ test('every badge has a short tooltip and a legend entry', () => {
   assert.deepEqual(LEGEND.map(([n]) => n), ['over rating', 'ok', 'incomplete', 'measured', 'estimate'])
   for (const text of [...Object.values(BADGE_HELP), ...LEGEND.map(([, t]) => t)]) assert.ok(!/[\u2013\u2014]/.test(text))
 })
+
+test('checkSummaryLine words the cable check counts, nothing when there are no cables', async () => {
+  const { checkSummaryLine } = await import('../public/loadSummary.js')
+  assert.equal(checkSummaryLine({ ok: 0, warning: 0, fail: 0, cannot: 0 }), null)
+  assert.equal(checkSummaryLine({ ok: 9, warning: 0, fail: 0, cannot: 0 }), 'Cable checks (advisory): 9 ok.')
+  assert.equal(
+    checkSummaryLine({ ok: 9, warning: 3, fail: 2, cannot: 4 }),
+    'Cable checks (advisory): 2 too small, 3 with a high voltage drop, 4 cannot be checked yet, 9 ok.'
+  )
+})

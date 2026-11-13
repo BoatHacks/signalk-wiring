@@ -713,7 +713,7 @@ export function circuitHighlight (circuit) {
 
 // autoLayout, resolveOverlaps and the other layout functions live in
 // schematicLayout.js and are re-exported here.
-export { autoLayout, resolveOverlaps, findOverlaps, freeTabSpot, arrangeStage, ARRANGE_LABEL, ARRANGE_ALL_LABEL, rankGap, GAP_MIN, GAP_MAX, OVERLAP_MARGIN } from './schematicLayout.js'
+export { autoLayout, arrangeFree, resolveOverlaps, findOverlaps, freeTabSpot, arrangeStage, ARRANGE_LABEL, ARRANGE_ALL_LABEL, rankGap, GAP_MIN, GAP_MAX, OVERLAP_MARGIN } from './schematicLayout.js'
 export { routePage, routeSchematicPage, stubAt, conduitBands, pathToDWithBridges, USE_NEW_ROUTER } from './wireRouter.js'
 
 // Live routing while dragging (plan 0026). request(args) asks for a route with

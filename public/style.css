@@ -43,6 +43,7 @@
   --live-off: #8a8a85;
   --live-unknown: #c9c4a8;
   --wire-highlight: #e0a800;
+  --grid-dot: #b9b6ac;
 }
 
 [data-theme="dark"] {
@@ -85,6 +86,7 @@
   --live-on: #ff5c47;
   --live-off: #4d332e;
   --live-unknown: #7a5048;
+  --grid-dot: #5a3d37;
 }
 
 * { box-sizing: border-box; }
@@ -96,6 +98,10 @@ button, input, select, textarea {
   background: var(--surface);
   font-family: inherit;
 }
+
+/* Plan 0031: no double-tap delay on buttons and links; the canvases switch the
+   browser's own gestures off below. */
+html, body { touch-action: manipulation; }
 
 body {
   margin: 0;
@@ -551,9 +557,15 @@ label.inline {
 .run-line { stroke: var(--text-muted); stroke-opacity: 0.5; stroke-linejoin: round; pointer-events: none; }
 .run-line.highlighted { stroke: var(--accent); stroke-opacity: 0.9; }
 .run-line.active { stroke: var(--danger); stroke-opacity: 1; }
+/* dashed (AC) routes: the gaps show the same colour at half the dash opacity */
+.run-line.run-gap { stroke-opacity: 0.25; }
+.run-line.run-gap.highlighted { stroke-opacity: 0.45; }
+.run-line.run-gap.active { stroke-opacity: 0.5; }
 
 .waypoint { fill: var(--surface); stroke: var(--danger); stroke-width: 0.5; cursor: grab; }
 .waypoint.selected { fill: var(--danger); }
+.waypoint-mid { fill: var(--surface); stroke: var(--danger); stroke-width: 0.4; stroke-opacity: 0.7; fill-opacity: 0.8; cursor: copy; }
+.waypoint-mid:hover { fill-opacity: 1; stroke-opacity: 1; }
 
 main:has(.floorplan-pair) { max-width: none; }
 
@@ -676,6 +688,12 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-device.role-storage .sch-device-box { stroke: var(--marker-storage); }
 .sch-device.role-distribution .sch-device-box { stroke: var(--marker-distribution); }
 .sch-device.role-converter .sch-device-box { stroke: var(--marker-converter); }
+/* Device color (plan 0030): outline and tint through variables set on the box;
+   the role outline above applies only when no color is set. Later rules (lit,
+   live) still win, and the night theme uses the dimmed red pair. */
+.sch-device.has-color { --c-stroke: var(--box-stroke); --c-fill: var(--box-fill); }
+[data-theme="dark"] .sch-device.has-color { --c-stroke: var(--box-stroke-night); --c-fill: var(--box-fill-night); }
+.sch-device.has-color .sch-device-box { stroke: var(--c-stroke); fill: var(--c-fill); }
 .sch-device.selected .sch-device-box { stroke-width: 3; }
 .sch-device.dim { opacity: 0.3; }
 .sch-device.lit .sch-device-box { stroke: var(--wire-highlight); stroke-width: 3; }
@@ -697,6 +715,8 @@ main:has(.floorplan-pair) { max-width: none; }
 .sch-wire-line.c-earth { stroke: var(--wire-earth); }
 .sch-wire-line.c-signal { stroke: var(--wire-signal); }
 .sch-wire-pair { stroke-width: 1.5; }
+/* AC lines are dashed; the gaps show the same colour, lighter, instead of the background */
+.sch-wire-gap { stroke-opacity: 0.5; pointer-events: none; }
 .sch-wire-pair.c-positive { stroke: var(--wire-positive); }
 .sch-wire-pair.c-negative { stroke: var(--wire-negative); }
 .sch-wire-pair.c-line { stroke: var(--wire-line); }
@@ -771,6 +791,7 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-device.live-fixed .sch-device-box, .sch-device.live-locked .sch-device-box, .sch-device.live-none .sch-device-box { cursor: not-allowed; }
 
 /* Port blocks (devices whose terminals name ports) */
+.sch-grid-dot { fill: var(--grid-dot); fill-opacity: 0.8; }
 .sch-zone-shape { fill: var(--link); fill-opacity: 0.07; stroke: var(--link); stroke-width: 2; pointer-events: none; }
 .sch-zone.selected .sch-zone-shape { fill-opacity: 0.12; stroke-width: 3; }
 .sch-zone-label { font-size: 13px; font-weight: 600; fill: var(--link); pointer-events: none; }
@@ -858,3 +879,115 @@ main:has(.schematic-editor) { max-width: none; }
 .bundle-list .link-button { background: none; border: 0; padding: 0; color: var(--link); text-decoration: underline; cursor: pointer; font: inherit; text-align: left; }
 .bundle-list ul { list-style: none; padding-left: 0; }
 .bundle-list li { margin: 4px 0; }
+
+/* Device colors (plan 0030): hex text, native picker and Clear, plus the swatch on the device page. */
+.color-field { display: flex; flex-direction: column; gap: 4px; }
+.color-field-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.form-field input.color-text { width: 9em; font-family: ui-monospace, monospace; }
+.form-field input.color-text[aria-invalid="true"] { border-color: var(--danger); }
+.form-field input.color-picker { width: 44px; height: 36px; padding: 2px; cursor: pointer; }
+.field-error { font-size: 12px; color: var(--danger); }
+.color-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border-strong); vertical-align: -2px; }
+
+/* Plan 0031: the canvases handle touch themselves, so the browser must not
+   zoom, scroll, pull to refresh, select text or show a callout or a tap
+   highlight while a finger is on them. */
+.schematic-canvas, .floorplan-canvas {
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.schematic-canvas-wrap, .floorplan-canvas-wrap { overscroll-behavior: contain; }
+
+/* Device icons before names (plan 0032): inline SVG, no layout shift */
+.dev-icon { display: inline-flex; flex: none; vertical-align: middle; line-height: 0; }
+.dev-icon svg { display: block; }
+.dev-icon-muted { color: var(--text-muted-strong); }
+.dev-icon-text { color: var(--text); }
+.dev-label { display: inline-flex; margin-block: -3px; align-items: center; gap: 6px; max-width: 100%; min-width: 0; vertical-align: middle; }
+.dev-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.device-icon-inline { flex: none; border-radius: 4px; object-fit: cover; }
+.picker-with-icon { display: flex; align-items: center; gap: 8px; }
+.picker-with-icon select { flex: 1; min-width: 0; }
+.palette-item { display: flex; align-items: center; gap: 8px; }
+.diagram-icon { color: var(--text-muted-strong); pointer-events: none; }
+
+/* Changes tab (plan 0033) */
+.changes-filters { display: flex; flex-direction: column; gap: 10px; }
+.changes-filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.chip {
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  min-height: 36px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent-text); }
+.changes-group { padding: 12px 16px; }
+.changes-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.changes-name { margin: 0; font-size: 16px; }
+.changes-kind {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted-strong);
+}
+.changes-latest { margin-left: auto; }
+.changes-entries, .changes-lines { list-style: none; margin: 0; padding: 0; }
+.changes-entry { padding: 8px 0; border-top: 1px solid var(--border); }
+.changes-entry:first-child { border-top: none; }
+.changes-entry-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+.changes-title { font-weight: 600; }
+.changes-removed .changes-title, .changes-purged .changes-title { color: var(--danger); }
+.changes-restored .changes-title, .changes-created .changes-title { color: var(--accent); }
+.changes-time { color: var(--text-muted); font-size: 12px; }
+.changes-lines { margin-top: 4px; font-size: 13px; color: var(--text-muted-strong); }
+.changes-lines li { padding: 1px 0; overflow-wrap: anywhere; }
+.changes-more { margin-top: 4px; }
+.changes-next { text-align: center; margin: 12px 0; }
+@media (max-width: 700px) {
+  .changes-latest { margin-left: 0; width: 100%; }
+}
+
+/* Cable checks (plan 0034, issue #10): badges on a cable row, the reasoning
+   popover and the warning mark on a schematic wire. Colours come from the
+   theme tokens, so the night theme keeps to its reds. */
+.check-cell { white-space: normal; min-width: 150px; }
+.check-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.check-badge { cursor: pointer; font: inherit; font-size: 11px; line-height: 1.3; }
+.check-badge.check-fail { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+.check-badge.check-warning { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+.check-badge.check-ok { background: var(--ok-bg); border-color: var(--ok-border); color: var(--accent); }
+.check-badge.check-cannot { background: var(--surface-alt); border-color: var(--border-strong); color: var(--text-muted); }
+.check-popover {
+  position: fixed; z-index: 60; width: 340px; overflow-y: auto; padding: 10px 12px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); font-size: 13px;
+}
+.check-pop-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.check-section { margin-top: 6px; }
+.check-heading { font-weight: 600; margin-top: 6px; }
+.check-popover ul { margin: 2px 0 4px; padding-left: 18px; }
+.check-popover li { margin: 2px 0; }
+.check-verdict { font-weight: 600; }
+.check-verdict.check-fail { color: var(--danger); }
+.check-verdict.check-warning { color: var(--warn); }
+.check-verdict.check-ok { color: var(--accent); }
+.check-verdict.check-cannot { color: var(--text-muted); }
+.check-note { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-alt); color: var(--text-muted-strong); }
+.check-summary { margin: 4px 0 10px; }
+.inspector-check { display: inline-block; }
+/* The mark takes no pointer events: wire and stub selection and the touch hit
+   areas are decided by the canvas, not by what is drawn. */
+.sch-check-mark { pointer-events: none; }
+.sch-check-mark .sch-check-tri { fill: var(--surface); stroke-width: 1.6; stroke-linejoin: round; }
+.sch-check-mark.check-warning .sch-check-tri { stroke: var(--warn); }
+.sch-check-mark.check-fail .sch-check-tri { stroke: var(--danger); fill: var(--danger-bg); }
+.sch-check-mark .sch-check-bang { stroke: var(--text); stroke-width: 1.8; stroke-linecap: round; }
+.sch-check-mark .sch-check-dot { fill: var(--text); }

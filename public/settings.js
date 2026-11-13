@@ -4,7 +4,9 @@ export const DEFAULT_SETTINGS = {
   convention: 'freestyle',
   defaultGaugeUnit: 'AWG',
   defaultLengthUnit: 'm',
-  autoTheme: false
+  autoTheme: false,
+  voltageDropLimitCritical: 3,
+  voltageDropLimitNormal: 10
 }
 
 // Values a new wire run form starts with. Edits use the record's own

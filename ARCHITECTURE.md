@@ -79,7 +79,28 @@ Registered via `registerWithRouter(router)`. Owns:
   + their devices) shaped for a diagram renderer.
 - Derivation leftovers (`GET /plugins/signalk-wiring/derived`, readonly
   access): the battery banks and the warnings that belong to no circuit.
-- Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`).
+- Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`), and
+  across records for the Changes tab (`GET /plugins/signalk-wiring/changelog`,
+  plan 0033). Both are registered on the plain router, so they are admin-only
+  like attachments; the webapp reads them with the admin login it already
+  needs for writes. Query: `kind` (comma separated or repeated), `since` and
+  `until` (ISO times), `q` (record name or entry summary, case-insensitive),
+  `id` (one record only, used by "Show N more"), `limit` (groups, default 20,
+  at most 100), `cursor` and `entries` (entries per group, default 5, at most
+  1000). The result is `{ groups, nextCursor }`; a group has `kind`, `id`,
+  `name` (the current name, or for a record that is gone the name from its
+  newest entry that carries one), `status` (`active`, `removed` or `purged`
+  when the record no longer exists), `latest`, `units` (the unit columns of
+  the current record, so "6 to 10 mm2" can name its unit), `entries` (newest
+  first, parsed `diff`) and `more` (how many are not in `entries`). Groups
+  sort by their latest entry's time and rowid, newest first; the cursor is
+  that pair, so paging has no gaps or repeats. Circuit entries are left out
+  unless the `circuit` kind is asked for. `Store.changeGroups` does the query.
+- On every purge, `Store._eraseHistory` erases the record's change log and
+  inserts one entry (`summary` "permanently deleted", `diff_json` with the
+  `name` and `kind`; a cable is named by its label or its two ends). The
+  webapp's Changes tab (`public/changesView.js`, words in `public/changes.js`)
+  reads the route above.
 - Live view, switching and calibration routes live in `src/liveRoutes.js`
   (see §2.2.1), registered from `index.js` beside these.
 - Device icons (`GET /plugins/signalk-wiring/devices/:id/icon`), registered
@@ -414,7 +435,8 @@ CREATE TABLE schematic_devices (  -- 0016: the devices on a page and where they 
   position INTEGER NOT NULL,
   device_id TEXT NOT NULL REFERENCES devices(id),
   x REAL NOT NULL,
-  y REAL NOT NULL
+  y REAL NOT NULL,
+  hand_placed INTEGER NOT NULL DEFAULT 0  -- 0028: 1 when the user dragged or dropped the device
 );
 
 CREATE TABLE schematic_wires (    -- 0016: only cables the user bent
@@ -467,7 +489,7 @@ version the database is currently at, each step guarding itself with a
 `PRAGMA table_info()` check rather than assuming it's needed — safe to
 run against a fresh install (schema.sql already has the new shape, so
 every guard is a no-op) or an existing one, and safe to run again on
-every subsequent restart. There are fifteen migrations (the third to fifteenth are described below): plan 0008's field
+every subsequent restart. There are seventeen migrations (the third to seventeenth are described below): plan 0008's field
 additions and rename, and plan 0009's position, route and panel-link
 columns (the `plans` table itself comes from `schema.sql`). Structured
 columns (`route`, `calibration`) are JSON text in SQLite so a route edit
@@ -687,6 +709,7 @@ signalk-wiring/
     calibrationStats.js      # pure: delta and watch statistics
     calibration.js           # calibration run state machine
     safety.js                # critical-looking device types
+    settings.js              # plugin options and the wiringSettings resource
     store.js                 # SQLite access layer
     schema.sql                # table definitions (§3)
   public/                   # name required by the signalk-webapp keyword (§2.4)
@@ -697,7 +720,9 @@ signalk-wiring/
     import.js                 # CSV import: parsing, column mapping, UI
     loadSummary.js             # panel load summary: calculation, UI
     deviceTypes.js             # popular device types per role, dropdown options
-    deviceIcons.js             # icon url, which images can be icons
+    deviceIcons.js             # icon url, which images can be icons, iconChoice (own image, built-in, none)
+    deviceIcon.js              # DeviceIcon, DeviceLabel, DeviceIconSvg: the shared icon components (plan 0032)
+    builtinIcons.js            # built-in simple icon library and iconFor(device); drawn since plan 0032
     conduits.js                # conduit kinds, cable names, list helpers
     theme.js                   # light and red night theme, optional auto switching
     roles.js                   # device roles: labels and hints
@@ -708,6 +733,9 @@ signalk-wiring/
     calibrate.js               # the Calibrate load dialog
     measured.js                # measured values beside the rating, load figures
     schematic.js               # pure geometry: boxes, terminals, routing, stubs, hit tests
+    cableAmpacity.js           # data: ampacity table, derating, assumptions, sources (plan 0034)
+    cableChecks.js             # pure: size and voltage drop checks of a cable
+    cableCheckView.js          # badges and the reasoning popover
     schematicView.js           # schematics tab: pages, canvas, palette, wires, bends
     batteries.js               # chemistry and purpose lists, defaults, bank card text
     batteriesView.js           # the Batteries tab
@@ -777,6 +805,26 @@ No external services or network dependencies at runtime.
   anonymous-read contract.
 
 
+## Cable checks (plan 0034)
+
+`public/cableAmpacity.js` is the data file: the ampacity table (AWG and mm2),
+the derating bands, the AWG cross-sections, the assumptions and the cited
+sources; `docs/cable-checks.md` explains each figure. `public/cableChecks.js`
+is pure: `circuitInput` turns a derived circuit into rating, voltage, rated
+and measured amps, power factor and the critical flag (a device of a type
+`isCriticalType` accepts); `bundleCount` counts current-carrying conductors in
+a cable's conduits; `checkCable` returns a result with a verdict (ok, warning,
+fail, cannot, exempt), an `ampacity` and a `drop` part holding every number and
+its source; `checkAll` joins cables to circuits through `derived.cableIds` and
+`returnCableIds`; `badgesFor`, `wireMark`, `explain` and `liveAmpsByCircuit`
+serve the display. `public/cableCheckView.js` has the badges and the popover.
+The Cables tab, the Load Summary and the schematic each call `checkAll` on the
+lists they already load, with the limits from `useSettings()`. The limits are
+two plugin options resolved in `src/settings.js` and served by the
+`wiringSettings` resource. Nothing is stored: results are computed on render.
+The schematic mark is a `pointer-events: none` group; wire hit testing is
+geometric, so selection and touch hit areas are unchanged.
+
 ## Schematic routing and layout (plan 0021)
 
 `public/wireRouter.js` routes every wire on a grid around all device boxes, with bridges at crossings, stub lanes and shared stretches for wires in one conduit; `USE_NEW_ROUTER = false` restores the old elbow routes. `public/schematicLayout.js` holds `autoLayout` (rank gaps scaled by the median cable length, `clamp(60+60*sqrt(L), 80, 420)`) and `resolveOverlaps` (24 unit margin). Conduit bands are drawn from the shared stretches.
@@ -789,4 +837,62 @@ Plan 0024 added `devices.parent_id` and `schematics.enclosure_id` (migration 15)
 
 Plan 0025 added router bundling (`bundleGroups`, parallel lanes beside one reference path per bundle, at most six bundles per page), the two-stage `arrangeStage` helper, `moveSegment` and `mergeShortJogs` for orthogonal segment dragging, and double-click re-routing of hand-routed wires.
 
+Plan 0028 added `schematic_devices.hand_placed` (migration 16, guarded with a `table_info` check, so safe to run twice; rows from before read as free). The schematic resource carries `handPlaced: true` on a placement only when set (a free device has no key); a write of the list replaces the marks. `public/snapGrid.js` holds the pure snap helpers (`snapValue`, `snapPoint`, `snapCorner`, `snapSegmentDelta`, `snapMoveShape`, `snapResizeShape`, the Alt rule `snapActive` and the local storage setting, default on, try/catch); `schematicView.js` applies them in one function that reads the Alt state of each pointer event and replays the last pointer position when Alt is pressed or released mid-drag. `arrangeFree` in `schematicLayout.js` keeps the hand-placed devices in stage one (the others take the auto layout shifted into their frame, and the overlap pass may move only them); stage two passes empty marks, bends and tabs to the same save and Undo puts them all back. `findBridges` in `wireRouter.js` keeps every crossing (no hop is dropped for lying near another), `pathToDWithBridges` draws hops that would touch as one wide half ellipse, and a crossing too near the end of the horizontal stretch is hopped by the vertical one (`{ x, y, v: true }`).
+
 Plan 0026 replaced the cheap drag routes with live routing through `createRouteThrottle` (one route at a time, 66 ms apart, latest request wins); the drop uses the same routing call.
+
+## Built-in icon library (plan 0029)
+
+`public/builtinIcons.js` holds the simple icon set: 24 by 24 line icons as
+markup strings (`SIMPLE_ICONS`, `currentColor` strokes, so they follow the
+theme), one per device type, a fallback per role and a generic one. The pure
+`iconFor(device)` returns `{ simple, detailed }`: the simple key comes from the
+type (then the model text, then the role); `detailed` is always null until the
+detailed set is drawn. `simpleIconSvg(key, size)` gives inline markup.
+
+Plan 0032 draws them. `iconChoice(device, bare)` in `deviceIcons.js` is the pure
+rule: the device's own attached image wins, else the built-in icon from
+`iconFor`, else (no device) a bare `{ type, role }` for pickers and the palette,
+else nothing. `public/deviceIcon.js` holds the components on top of it:
+`DeviceIcon` (inline SVG in a `.dev-icon` span, `currentColor`, muted or text
+tone, or an `img` for an attached image with its own `imageSize`), `DeviceLabel`
+(icon then name, with a small negative block margin so a text line does not
+grow) and `DeviceIconSvg` for circuit diagram nodes (`iconSpace` says how much
+width a node reserves). `DeviceLink` in `app.js` takes an optional device map and
+renders a `DeviceLabel`, so tables name a device the same way everywhere.
+`test/deviceIconPlaces.test.mjs` scans that each place uses the shared
+component. The Load Summary table names no devices, so it has none.
+
+Plan 0030 added `devices.schematic_box_color` and `devices.schematic_icon_color` (migration 17, TEXT, nullable, guarded with a `table_info` check, so safe to run twice; old rows read null). `Store._checkColors` validates on create and update: empty or null clears, `#rrggbb` or `#rgb` is accepted (expanded, lower case), anything else throws a message; changes are logged like any field. The device resource serves them as `schematicBoxColor` and `schematicIconColor`. The device form has a `color` field type (`ColorField` in `app.js`: hex text, native picker kept in sync, Clear, inline message; `colorFieldState` in `deviceFields.js` decides validity and an invalid value blocks the save). `public/colorTone.js` is pure: `parseHex`, `normalizeHex`, `boxFill` (18 percent mix into a surface), `nightTone` (luminance mapped to a dim red, capped at `NIGHT_MAX_RED`) and `boxColors`. `DeviceShape` in `schematicView.js` sets the four results as inline custom properties on the box group and adds `has-color`; `style.css` picks the day or night pair (`--c-stroke`, `--c-fill`) at the same specificity as the role outline and before the selected, highlighted and live rules, so those still win. The icon color is not drawn.
+
+## Touch polish (plan 0031)
+
+Three pure modules, no DOM, tested without a browser. `public/touchGestures.js`:
+`pinchStep(prev, next, deadZone)` takes two touch points before and after a
+move and returns the scale, the midpoint move and `idle` (inside the 6 px dead
+zone); `pinchView(view, rect, step, limits)` returns the new viewBox so the
+drawing point under the old midpoint ends up under the new one, with the width
+bounded by `limits` (the floorplan passes its zoom span, the schematic has no
+limit, like its buttons). `public/touchTargets.js`: `hitRadius(kind,
+pointerType, zoom)` (the base radius for a mouse or pen, the radius that gives
+44 px for a finger), `rectPad` for tabs and `pickTarget`, which cuts every
+candidate's radius to half the distance to its nearest neighbour (never below
+the base) and returns the nearest hit. `public/popoverPlace.js`:
+`placePopover(anchor, size, viewport, margin, gap)` centres on the anchor, opens
+below, flips above, shrinks to the roomier side and returns `maxWidth` and
+`maxHeight`.
+
+Both canvases track touch pointers by `pointerId` in a capture-phase handler on
+the svg (so a second finger never reaches a marker handler). The second finger
+cancels the running drag (`cancelDrag` in the schematic restores positions,
+routes, tabs and shapes from the saved page; the floorplan drops the ghost) and
+starts a gesture; pointer moves of the gesture update the viewBox from a
+synchronously kept view, so rapid events do not drift. The hit areas are
+geometric, not extra DOM: the schematic's `onPointerDown` and the floorplan's
+svg `onPointerDown` read `e.pointerType` of that press and, for a finger, pick
+the target with `pickTarget`; the mouse path is the old code. The popover and
+the cluster and bundle lists use `placePopover` with the wrap's size (the list
+height is estimated from its row count). CSS: `touch-action: none`,
+`overscroll-behavior: contain`, `user-select: none`, no callout or tap highlight
+on `.schematic-canvas` and `.floorplan-canvas`; `touch-action: manipulation` on
+`html, body`.

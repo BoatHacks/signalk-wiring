@@ -140,3 +140,34 @@ test('popoverKinds offers AC as well on a mismatch', () => {
     ['positive', 'negative', 'both', 'ac'])
   assert.deepEqual(popoverKinds('both', CABLE_KINDS).map((k) => k.value), ['positive', 'negative', 'both'])
 })
+
+test('suggestKind: both ends dropped on signal terminals of a mixed device is a signal cable', () => {
+  const board = {
+    id: 'rb', name: 'Relay board', role: 'consumer',
+    terminals: [
+      { name: 'DC supply +', conductor: 'positive', port: 'DC supply' },
+      { name: 'DC supply -', conductor: 'negative', port: 'DC supply' },
+      { name: 'Relay 1 COM', conductor: 'signal', port: 'Relay 1' },
+      { name: 'Relay 2 COM', conductor: 'signal', port: 'Relay 2' }
+    ]
+  }
+  assert.deepEqual(suggestKind(board, 'Relay 1 COM', board, 'Relay 2 COM'), { kind: 'signal', mismatch: null })
+  // a power terminal at one end is not a signal cable
+  assert.notEqual(suggestKind(board, 'DC supply +', board, 'Relay 2 COM').kind, 'signal')
+})
+
+test('startValues: a wire between two relay ports of one device starts as a signal cable with both terminals', () => {
+  const board = {
+    id: 'rb', name: 'Relay board', role: 'consumer',
+    terminals: [
+      { name: 'DC supply +', conductor: 'positive', port: 'DC supply' },
+      { name: 'Relay 1 COM', conductor: 'signal', port: 'Relay 1' },
+      { name: 'Relay 2 COM', conductor: 'signal', port: 'Relay 2' }
+    ]
+  }
+  const start = startValues({ a: board, ta: 'Relay 1 COM', b: board, tb: 'Relay 2 COM', cables: [] })
+  assert.equal(start.values.kind, 'signal')
+  assert.equal(start.values.fromDeviceId, 'rb')
+  assert.equal(start.values.toDeviceId, 'rb')
+  assert.deepEqual(start.values.terminals.signal, { from: 'Relay 1 COM', to: 'Relay 2 COM' })
+})

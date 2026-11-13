@@ -3,13 +3,16 @@ import { newId } from './ids.js'
 import { deviceIconUrl } from './deviceIcons.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
-  moveWaypoint, removeWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
+  moveWaypoint, removeWaypoint, insertWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
   metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints, conduitRoutePoints, unroutedCables,
   conduitMembers, effectiveCableRoute, cornerArrows, routeEndAction, routeWithEnd, continuationMarks,
   escapeStep, deleteStep
 } from './floorplan.js'
 import { hashForState } from './router.js'
 import { isTypingTarget, wireLineStyle, scaledDash, isDoubleTap, deviceHash } from './schematic.js'
+import { pickTarget } from './touchTargets.js'
+import { placePopover } from './popoverPlace.js'
+import { pinchStep, pinchView, DEAD_ZONE_PX } from './touchGestures.js'
 import { useUndo } from './undoBar.js'
 import { offerCableUndo } from './canvasRemoval.js'
 import { cableName } from './conduits.js'
@@ -223,6 +226,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const [flip, setFlip] = useState(false)
   const [ghost, setGhost] = useState(null) // a marker being dragged: { kind, key, px }
   const drag = useRef(null)
+  const touches = useRef(new Map()) // touch pointers down, by pointerId
+  const gesture = useRef(null) // a two-finger pan and zoom in progress (plan 0031)
   const lastTap = useRef(null) // the last tap on a device marker, for the double tap
   const [hoverId, setHoverId] = useState(null) // the device marker under the pointer
   const [openBundle, setOpenBundle] = useState(null) // the selected bundle: { kind, key, ids, px }
@@ -304,7 +309,96 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
   }
 
-  const onPointerDown = (e) => { setOpenCluster(null); setOpenBundle(null); startDrag(e, null) }
+  const onPointerDown = (e) => {
+    if (e.pointerType === 'touch' && touches.current.size >= 2) return
+    // A finger gets an invisible hit area of about 44 px around each marker
+    // and cluster (plan 0031): a press that missed the drawn marker but is
+    // inside the area acts on that marker. A mouse or pen sees no change.
+    const hit = e.pointerType === 'touch' ? touchTargetAt(e) : null
+    if (hit && hit.kind === 'cluster') {
+      e.stopPropagation()
+      setOpenBundle(null)
+      setOpenCluster(openCluster && openCluster.id === hit.cluster.id ? null : { id: hit.cluster.id, ids: hit.cluster.ids, px: [hit.x, hit.y] })
+      return
+    }
+    if (hit) { onMarkerDown(e, hit.target); return }
+    setOpenCluster(null); setOpenBundle(null); startDrag(e, null)
+  }
+
+  // Where a list opened at a drawing point goes: fully inside the canvas and
+  // clear of the finger (plan 0031). The anchor is mapped to pixels of the wrap
+  // around the canvas; the list height is estimated from its row count.
+  const listStyle = (px, rows) => {
+    const svg = svgRef.current
+    const wrap = svg && svg.parentElement
+    if (!svg || !wrap) return { left: '0px', top: '0px' }
+    const pt = svg.createSVGPoint()
+    pt.x = px[0]; pt.y = px[1]
+    const s = pt.matrixTransform(svg.getScreenCTM())
+    const w = wrap.getBoundingClientRect()
+    const vp = { width: w.width, height: w.height }
+    const at = placePopover({ x: s.x - w.left, y: s.y - w.top }, { width: Math.min(260, vp.width * 0.8), height: 90 + 22 * rows }, vp, 8)
+    return { left: at.left + 'px', top: at.top + 'px', transform: 'none', maxWidth: Math.min(at.maxWidth, 260) + 'px', maxHeight: at.maxHeight + 'px' }
+  }
+
+  // The marker, waypoint or cluster whose hit area holds this press, if any.
+  const touchTargetAt = (e) => {
+    const [x, y] = toDrawing(e)
+    const cands = []
+    for (const { device, px } of deviceMarks) {
+      if (!clustered.has(device.id)) cands.push({ kind: 'marker', x: px[0], y: px[1], target: { kind: 'device', key: device.id } })
+    }
+    for (const w of waypointMarkers) cands.push({ kind: 'marker', x: w.px[0], y: w.px[1], target: { kind: 'waypoint', key: w.index } })
+    for (const m of midMarkers) cands.push({ kind: 'marker', x: m.px[0], y: m.px[1], target: { kind: 'mid', key: m.index } })
+    for (const c of clusterSet.clusters) cands.push({ kind: 'cluster', x: c.x / pxPerUnit, y: c.y / pxPerUnit, cluster: c })
+    return pickTarget({ x, y }, cands, 'touch', pxPerUnit)
+  }
+
+  // Two fingers pan and pinch the view. A second finger first cancels the
+  // one-finger drag (a marker returns to where it was, nothing is saved).
+  // Lifting one finger ends the gesture; the finger left does nothing until it
+  // is lifted too.
+  const cancelDrag = () => { drag.current = null; setGhost(null) }
+  const onTouchDownCapture = (e) => {
+    if (e.pointerType !== 'touch') return
+    if (touches.current.size === 0) gesture.current = null
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touches.current.size < 2) return
+    e.stopPropagation()
+    try { svgRef.current.setPointerCapture(e.pointerId) } catch (_) { /* unsupported pointer */ }
+    if (gesture.current && !gesture.current.ended) return
+    cancelDrag()
+    const ids = [...touches.current.keys()].slice(0, 2)
+    const start = ids.map((id) => touches.current.get(id))
+    gesture.current = { ids, start, last: start, active: false, ended: false, view: { x: box.x, y: box.y, w: box.width, h: box.height } }
+  }
+  const touchMoved = (e) => {
+    if (e.pointerType !== 'touch' || !touches.current.has(e.pointerId)) return false
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const g = gesture.current
+    if (!g) return false
+    if (g.ended) return true
+    const pair = g.ids.map((id) => touches.current.get(id))
+    if (!pair[0] || !pair[1]) return true
+    const step = pinchStep(g.active ? g.last : g.start, pair, g.active ? 0 : DEAD_ZONE_PX)
+    if (!g.active) {
+      if (step.idle) return true
+      g.active = true
+    }
+    g.view = pinchView(g.view, svgRef.current.getBoundingClientRect(), step, { minW: size.width * MIN_ZOOM_SPAN, maxW: size.width * 4 })
+    g.last = pair
+    setBox({ x: g.view.x, y: g.view.y, width: g.view.w, height: g.view.h })
+    return true
+  }
+  const touchEnded = (e) => {
+    if (e.pointerType !== 'touch') return false
+    touches.current.delete(e.pointerId)
+    const g = gesture.current
+    if (!g) return false
+    g.ended = true
+    if (touches.current.size === 0) gesture.current = null
+    return true
+  }
 
   // A marker takes the press itself so dragging it moves the marker, not the view.
   const onMarkerDown = (e, target) => {
@@ -322,6 +416,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   }
 
   const onPointerMove = (e) => {
+    if (touchMoved(e)) return
     const d = drag.current
     if (!d) return
     if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > CLICK_SLOP_PX) d.moved = true
@@ -337,6 +432,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   }
 
   const onPointerUp = (e) => {
+    if (touchEnded(e)) return
     const d = drag.current
     drag.current = null
     setGhost(null)
@@ -346,13 +442,14 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       if (d.moved) {
         const [a, b] = metersAt(e)
         if (d.target.kind === 'device') actions.moveDevice(d.target.key, plan.view, a, b)
+        else if (d.target.kind === 'mid') actions.insertWaypoint(d.target.key, plan.view, a, b)
         else actions.moveWaypoint(d.target.key, plan.view, a, b)
       } else if (d.target.kind === 'device') {
         const tap = { id: d.target.key, t: Date.now(), x: e.clientX, y: e.clientY }
         if (ctx.tool === 'select' && isDoubleTap(lastTap.current, tap)) { lastTap.current = null; window.location.hash = deviceHash(d.target.key); return }
         lastTap.current = tap
         actions.selectDevice(d.target.key)
-      } else {
+      } else if (d.target.kind === 'waypoint') {
         actions.selectWaypoint(d.target.key)
       }
       return
@@ -410,6 +507,9 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
   const labelIds = layers.names ? visibleLabels(data.devices, { hoverId, selectedId: ctx.deviceId, members, run: ctx.run }) : new Set()
   const runLines = []
   const waypointMarkers = []
+  // A handle at the middle of each stretch of the chosen route: dragging it adds a point there.
+  const midMarkers = []
+  const midsOn = ctx.tool === 'select' || ctx.tool === 'route'
   // Where a route leaves this plan, a stub with a link to the plan it continues on.
   const continuations = []
   const addContinuations = (ownerId, points) => {
@@ -443,6 +543,10 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           const px = pxFor('waypoint', i, p)
           if (px) waypointMarkers.push({ index: i, px })
         })
+        for (let i = 0; midsOn && i < pxs.length - 1; i++) {
+          const a = pxs[i]; const b = pxs[i + 1]
+          if (a && b) midMarkers.push({ index: i + 1 - offset, px: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], a, b })
+        }
       }
     }
   }
@@ -477,6 +581,10 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           const px = pxFor('waypoint', i, p)
           if (px) waypointMarkers.push({ index: i, px })
         })
+        for (let i = 0; midsOn && i < pxs.length - 1; i++) {
+          const a = pxs[i]; const b = pxs[i + 1]
+          if (a && b) midMarkers.push({ index: i + 1, px: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], a, b })
+        }
       }
     }
   }
@@ -617,7 +725,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       <svg ref=${svgRef} class="floorplan-canvas ${calibrating || ctx.tool !== 'select' ? 'crosshair' : ''}"
         viewBox="${box.x} ${box.y} ${box.width} ${box.height}"
         onWheel=${onWheel} onPointerDown=${onPointerDown} onPointerMove=${onPointerMove}
-        onPointerUp=${onPointerUp} onPointerCancel=${() => { drag.current = null; setGhost(null) }}>
+        onPointerUp=${onPointerUp} onPointerDownCapture=${onTouchDownCapture}
+        onPointerCancel=${(e) => { if (!touchEnded(e)) cancelDrag() }}>
         <image href=${imageUrl} x=${size.x} y=${size.y} width=${size.width} height=${size.height} />
 
         ${conduitLines.map((l, i) => uncoveredPieces(i, l.pts, conduitBundles.covered).map((piece, n) => html`
@@ -626,6 +735,11 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         `))}
         ${conduitBundles.bundles.map((b) => bundleMark(b, 'conduit'))}
 
+        ${runLines.map((l, i) => l.dash ? uncoveredPieces(i, l.pts, runBundles.covered).map((piece, n) => html`
+          <polyline key=${'g' + l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
+            class="run-line run-gap ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
+            stroke-width=${unit * (l.active ? 0.9 : 0.5)} />
+        `) : null)}
         ${runLines.map((l, i) => uncoveredPieces(i, l.pts, runBundles.covered).map((piece, n) => html`
           <polyline key=${l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
             class="run-line ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
@@ -642,6 +756,16 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           <rect key=${'w' + w.index} x=${w.px[0] - unit} y=${w.px[1] - unit} width=${unit * 2} height=${unit * 2}
             class="waypoint ${ctx.waypointIndex === w.index ? 'selected' : ''}"
             onPointerDown=${(e) => onMarkerDown(e, { kind: 'waypoint', key: w.index })} />
+        `)}
+        ${midMarkers.map((m) => html`
+          <circle key=${'m' + m.index} cx=${m.px[0]} cy=${m.px[1]} r=${unit * 0.8} class="waypoint-mid" data-testid="route-mid"
+            onPointerDown=${(e) => onMarkerDown(e, { kind: 'mid', key: m.index })}><title>Drag to add a point</title></circle>
+        `)}
+        ${ghost && ghost.kind === 'mid' && midMarkers.filter((m) => m.index === ghost.key).map((m) => html`
+          <g key="midghost" class="waypoint-mid-ghost" pointer-events="none">
+            <polyline points=${[m.a, ghost.px, m.b].map((p) => p.join(',')).join(' ')} fill="none" class="run-line active" stroke-width=${unit * 0.5} stroke-dasharray=${unit * 1.2 + ' ' + unit * 0.8} />
+            <rect x=${ghost.px[0] - unit} y=${ghost.px[1] - unit} width=${unit * 2} height=${unit * 2} class="waypoint" />
+          </g>
         `)}
 
         ${deviceMarks.map(({ device, px, lit }) => {
@@ -720,7 +844,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       </svg>
       ${openCluster && html`
         <div class="cluster-list" data-testid="cluster-list"
-          style=${{ left: ((openCluster.px[0] - box.x) / box.width * 100) + '%', top: ((openCluster.px[1] - box.y) / box.height * 100) + '%' }}>
+          style=${listStyle(openCluster.px, openCluster.ids.length)}>
           <strong>${openCluster.ids.length} devices here</strong>
           <ul>
             ${openCluster.ids.map((id) => html`
@@ -732,7 +856,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
       `}
       ${openBundle && html`
         <div class="cluster-list bundle-list" data-testid="bundle-list"
-          style=${{ left: ((openBundle.px[0] - box.x) / box.width * 100) + '%', top: ((openBundle.px[1] - box.y) / box.height * 100) + '%' }}>
+          style=${listStyle(openBundle.px, openBundle.ids.length)}>
           <strong>${openBundle.ids.length} ${openBundle.kind === 'run' ? 'cables' : 'conduits'} along this stretch</strong>
           <ul>
             ${bundleMembers(openBundle.kind, openBundle.ids).map((m) => html`
@@ -930,6 +1054,13 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
       setWaypointIndex(null)
     },
     moveWaypoint: (index, view, a, b) => saveRoute(moveWaypoint(currentRoute(), index, view, a, b)),
+    insertWaypoint: (index, view, a, b) => {
+      const route = currentRoute()
+      const points = conduit ? conduitRoutePoints(conduit) : routePoints(run, null, devicesById)
+      const offset = points.length - route.length
+      saveRoute(insertWaypoint(route, index, points[index + offset - 1] || null, view, a, b))
+      setWaypointIndex(null)
+    },
     removePlan: (plan) => {
       if (!window.confirm(`Remove the plan "${plan.name}"? Placed devices and routes are kept; the plan stays in the record as removed.`)) return
       guard(() => deleteResource('wiringPlans', plan.id))

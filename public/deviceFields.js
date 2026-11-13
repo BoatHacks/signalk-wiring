@@ -1,3 +1,5 @@
+import { normalizeHex } from './colorTone.js'
+
 // Pure helpers for the extra device fields of plan 0014: a trip rating on
 // fuses and breakers, a nominal voltage on batteries and sources, a power
 // factor on consumers of an AC circuit, and terminals.
@@ -112,4 +114,16 @@ export function ratedLine (device) {
     side('DC', device.ratedDcA, device.ratedDcV)
   ].filter(Boolean)
   return sides.length ? `Rated: ${sides.join('; ')}` : null
+}
+
+// The state of a device color field from the text typed in it (plan 0030).
+// Empty means the theme color: valid, nothing stored. `value` is what is
+// saved (lower case #rrggbb or null) and `picker` what the native color
+// picker shows (it cannot be empty, so it falls back to black).
+export function colorFieldState (text) {
+  const raw = String(text == null ? '' : text).trim()
+  if (raw === '') return { valid: true, value: null, picker: '#000000', message: null }
+  const hex = normalizeHex(raw)
+  if (!hex) return { valid: false, value: null, picker: '#000000', message: 'Not a hex color. Use #rrggbb or #rgb, for example #1a2b3c, or clear it for the theme color.' }
+  return { valid: true, value: hex, picker: hex, message: null }
 }

@@ -8,7 +8,7 @@ import * as S from '../public/schematic.js'
 import * as R from '../public/wireRouter.js'
 import { routeBoatPage, pageNames, pageInput } from './helpers/boatPages.mjs'
 import { readFileSync } from 'node:fs'
-import { checkPage, linesOf, crossingsNearPorts, MIN_CLEAR, LINE_W, PORT_CLEAR } from './helpers/routeCheck.mjs'
+import { checkPage, linesOf, plainCrossings, crossingsNearPorts, MIN_CLEAR, LINE_W, PORT_CLEAR } from './helpers/routeCheck.mjs'
 import { STUB_PITCH } from '../public/wireRouter.js'
 
 const summary = (problems) => problems.map((p) => `${p.type} ${p.ids.map((i) => String(i).slice(0, 8)).join(' ')}`).join('; ')
@@ -269,4 +269,54 @@ test('boat pages route in well under half a second', () => {
     const { ms } = routeBoatPage(name)
     assert.ok(ms < 500, `${name}: ${ms.toFixed(0)} ms`)
   }
+})
+
+// Plan 0028 (issue #14, found testing 0.6.8): crossings of a stub line with a
+// wire or another stub were sometimes plain intersections. The cause: hops that
+// lay closer together than one hop (two lines running side by side across a
+// third) were dropped, and a crossing close to the end of the horizontal stretch
+// got no hop at all. Tab positions are tried at random (a fixed seed) on both
+// boat pages.
+test('boat pages: no crossing of a stub line with a wire or another stub is a plain intersection', () => {
+  let seed = 12345
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
+  for (const name of pageNames) {
+    const base = pageInput(name)
+    const xs = base.boxes.map((b) => b.x)
+    const ys = base.boxes.map((b) => b.y)
+    const x0 = Math.min(...xs) - 100
+    const x1 = Math.max(...xs) + 400
+    const y0 = Math.min(...ys) - 100
+    const y1 = Math.max(...ys) + 300
+    for (let n = 0; n < 25; n++) {
+      const stubPos = {}
+      for (const s of base.stubs) if (n === 0 ? false : rnd() < 0.5) stubPos[s.cableId] = { x: Math.round(x0 + rnd() * (x1 - x0)), y: Math.round(y0 + rnd() * (y1 - y0)) }
+      const { input, result } = routeBoatPage(name, { stubPos })
+      // a line that finds no route is drawn as a straight fallback line; that is not a routing result to check
+      const failed = new Set([...result.stubs].filter(([, r]) => r.fallback).map(([id]) => 's:' + id))
+      for (const [id, r] of result.wires) if (r.fallback) failed.add(id)
+      const lines = linesOf(input, result).lines.filter((l) => !failed.has(l.id))
+      const plain = plainCrossings(lines, (l) => String(l.id).startsWith('s:'))
+      assert.equal(plain.length, 0, `"${name}" run ${n}: ${plain.map((p) => p.ids.map((i) => String(i).slice(0, 10)).join(' x ') + ' at ' + p.at.x + ',' + p.at.y).join('; ')}`)
+    }
+  }
+})
+
+test('stub bridges: hops that would touch are drawn as one wide hop, and a crossing near the end of the horizontal stretch is hopped by the vertical one', () => {
+  // two vertical lines 6 apart cross one horizontal line: both crossings keep an entry
+  const two = R.findBridges(new Map([
+    ['h', [{ x: 0, y: 50 }, { x: 200, y: 50 }]],
+    ['a', [{ x: 100, y: 0 }, { x: 100, y: 100 }]],
+    ['b', [{ x: 106, y: 0 }, { x: 106, y: 100 }]]
+  ]))
+  assert.deepEqual(two.get('h'), [{ x: 100, y: 50 }, { x: 106, y: 50 }])
+  assert.match(R.pathToDWithBridges([{ x: 0, y: 50 }, { x: 200, y: 50 }], two.get('h')), /L96 50 A7 4 0 0 0 110 50/)
+  // the corner of the horizontal line is 4 from the vertical one: the vertical line hops
+  const near = R.findBridges(new Map([
+    ['h', [{ x: 96, y: 50 }, { x: 200, y: 50 }]],
+    ['v', [{ x: 100, y: 0 }, { x: 100, y: 100 }]]
+  ]))
+  assert.equal(near.get('h'), undefined)
+  assert.deepEqual(near.get('v'), [{ x: 100, y: 50, v: true }])
+  assert.match(R.pathToDWithBridges([{ x: 100, y: 0 }, { x: 100, y: 100 }], near.get('v')), /L100 46 A4 4 0 0 1 100 54/)
 })

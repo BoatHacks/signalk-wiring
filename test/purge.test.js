@@ -7,6 +7,13 @@ const assert = require('node:assert/strict')
 const { Store } = require('../src/store')
 
 const count = (store, sql, ...args) => store.db.prepare(sql).get(...args).n
+// Purging erases a record's history but leaves one entry naming it.
+const tombstone = (store, kind, id) => {
+  const log = store.changeLog(kind, id)
+  assert.equal(log.length, 1)
+  assert.equal(log[0].summary, 'permanently deleted')
+  return JSON.parse(log[0].diff_json)
+}
 const cable = (store, from, to, extra = {}) =>
   store.create('wireRun', { from_device_id: from.id, to_device_id: to.id, conductors: [{ conductor: 'positive' }], ...extra })
 
@@ -28,7 +35,7 @@ test('purgeDevice only takes a removed device and erases everything of it', () =
   assert.deepEqual(files.map((a) => a.id), [att.id])
   assert.equal(store.get('device', dev.id), null)
   assert.equal(store.getAttachment(att.id), null)
-  assert.equal(store.changeLog('device', dev.id).length, 0)
+  assert.deepEqual(tombstone(store, 'device', dev.id), { name: {device: 'Lamp', conduit: 'Hose', schematic: 'Page'}['device'], kind: 'device' })
   assert.equal(count(store, 'SELECT COUNT(*) n FROM device_terminals WHERE device_id = ?', dev.id), 0)
   assert.equal(count(store, 'SELECT COUNT(*) n FROM schematic_devices WHERE device_id = ?', dev.id), 0)
   assert.equal(store.getRun(run.id), null)
@@ -92,7 +99,7 @@ test('purgeConduit erases a removed conduit, its assignments, attachments and hi
   assert.deepEqual(store.purgeConduit(hose.id).map((x) => x.id), [att.id])
   assert.equal(store.get('conduit', hose.id), null)
   assert.equal(store.getAttachment(att.id), null)
-  assert.equal(store.changeLog('conduit', hose.id).length, 0)
+  assert.deepEqual(tombstone(store, 'conduit', hose.id), { name: {device: 'Lamp', conduit: 'Hose', schematic: 'Page'}['conduit'], kind: 'conduit' })
   assert.equal(count(store, 'SELECT COUNT(*) n FROM wire_run_conduits WHERE conduit_id = ?', hose.id), 0)
   assert.ok(store.get('wireRun', c.id))
   assert.throws(() => store.purgeConduit(hose.id), (e) => e.notFound === true)
@@ -112,9 +119,35 @@ test('purgeSchematic erases a removed page with its devices, wires and history',
   store.remove('schematic', page.id)
   store.purgeSchematic(page.id)
   assert.equal(store.get('schematic', page.id), null)
-  assert.equal(store.changeLog('schematic', page.id).length, 0)
+  assert.deepEqual(tombstone(store, 'schematic', page.id), { name: {device: 'Lamp', conduit: 'Hose', schematic: 'Page'}['schematic'], kind: 'schematic' })
   assert.equal(count(store, 'SELECT COUNT(*) n FROM schematic_devices WHERE schematic_id = ?', page.id), 0)
   assert.equal(count(store, 'SELECT COUNT(*) n FROM schematic_wires WHERE schematic_id = ?', page.id), 0)
   assert.ok(store.get('device', a.id) && store.get('wireRun', c.id))
+  store.close()
+})
+
+test('purgeCable leaves a tombstone named by its label, or by the two devices it joins', () => {
+  const store = new Store(':memory:')
+  const a = store.create('device', { name: 'Battery' })
+  const b = store.create('device', { name: 'Lamp' })
+  const labelled = cable(store, a, b, { cable_label: 'W12' })
+  const plain = cable(store, a, b)
+  for (const c of [labelled, plain]) {
+    store.update('wireRun', c.id, { gauge: 6 })
+    store.remove('wireRun', c.id)
+    store.purgeCable(c.id)
+  }
+  assert.deepEqual(tombstone(store, 'wireRun', labelled.id), { name: 'W12', kind: 'wireRun' })
+  assert.deepEqual(tombstone(store, 'wireRun', plain.id), { name: 'Battery to Lamp', kind: 'wireRun' })
+  store.close()
+})
+
+test('the inside page of a purged enclosure leaves its own tombstone', () => {
+  const store = new Store(':memory:')
+  const box = store.create('device', { name: 'Box', role: 'enclosure' })
+  const page = store.create('schematic', { name: 'Box (inside)', enclosure_id: box.id })
+  store.remove('device', box.id)
+  store.purgeDevice(box.id)
+  assert.equal(tombstone(store, 'schematic', page.id).kind, 'schematic')
   store.close()
 })

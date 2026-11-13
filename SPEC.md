@@ -136,7 +136,10 @@ them.
   appends a **change log entry** rather than silently overwriting history.
 - `removed → gone`: a removed cable can be deleted permanently on a second,
   confirmed step (the Cables tab). This erases the cable with its conductors,
-  conduit assignments, schematic bends, attachments and change log. On the
+  conduit assignments, schematic bends, attachments and change log, except
+  for one entry "permanently deleted" that stays in the log with the name and
+  kind of the record (this holds for every kind that can be purged), so the
+  Changes tab can show what disappeared. On the
   schematic canvas and the floorplan, removing a cable shows the undo message
   and, when it ends without an Undo, deletes the cable the same way, with no
   confirm dialog and no second step. A removed device, conduit or schematic can also be deleted permanently
@@ -231,7 +234,19 @@ them.
 - **Device**
   - `id`, `name`, `type` (free text, e.g. "bilge pump", "solar"), `iconAttachmentId`
     (optional: one of the device's own JPEG, PNG or WebP attachments, used as
-    its icon), `role`
+    its icon), `schematicBoxColor` and `schematicIconColor` (optional hex colors,
+    stored lower case as `#rrggbb`; a `#rgb` short form is expanded, empty or
+    null clears, anything else is rejected with a message; empty means the
+    theme color; CSV import and export do not carry them). The box color is
+    drawn on the schematic: the box outline is the color and its fill a light
+    tint (18 percent of the color in the theme surface), on every device box
+    and on enclosure boxes; the role colored outline applies only when no color
+    is set, and the text keeps the theme color. In the red night theme both are
+    dimmed to a red of the same relative brightness, capped so they never
+    glare. Selected, highlighted, dimmed and live states keep working. The
+    icon color is stored and shown on the device page only; nothing draws it
+    until icons are drawn in the boxes. Floorplan markers keep role colors.
+    `role`
     (consumer | source | storage | distribution | converter | enclosure; consumer by
     default, so devices recorded before roles existed stay valid), `current`
     (ac | dc, or unset for either: whether the device works on AC or DC, used
@@ -472,9 +487,36 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   then shown in device lists, on the circuit diagram and on floorplan
   markers. Deleting the icon image clears the icon. A "Take photo" button
   next to "Add file" opens the phone camera.
+- Device icons (plan 0032). Everywhere a device is named, its icon comes
+  first: a built-in simple line icon chosen from its type (then its model
+  text, then its role, then a generic one), or the device's own attached icon
+  image when it has one (the image always wins). Shown at 18 px in the Devices
+  list, the circuits list and the circuit page, and the cables tables (before
+  both From and To); 20 px on the schematic New device palette buttons, in the
+  circuit diagram nodes, and beside the type and device pickers (showing the
+  chosen entry); 28 px before the device page title. Icons are decorative and
+  follow the text color of the day and night themes. The Load Summary table
+  names circuits only, so it shows no device icons. Detailed icons and icons
+  inside schematic boxes are deferred.
 - An auto-generated circuit diagram (devices joined by cables, negative
   returns dotted) rendered from the derived circuit, per circuit.
 - A change log view per record, showing prior edits.
+- A **Changes** tab (plan 0033, issue #13) beside the others: what changed
+  lately across the whole system, grouped by record (device, cable, conduit,
+  zone, plan, circuit or schematic), groups ordered by their latest change,
+  newest first. Each entry says what changed in words ("gauge: 6 to 10 mm2",
+  "terminals added: B+"), with its time in the browser's local time; the
+  group header links to the record, or says "permanently deleted" with no
+  link once the record is gone for good. Filters: date range (today, 7 days,
+  30 days which is the default, or custom dates), kind (several can be
+  picked) and a text search over names and what happened. A group shows its
+  latest 5 entries with "Show N more", and the list of groups loads 20 at a
+  time with "Show more records". Circuit entries are hidden unless the
+  Circuits kind is picked, because circuits follow the cables by
+  themselves. Device groups use the shared device label (icon and name). It
+  reads `GET /plugins/signalk-wiring/changelog` (admin login, like the
+  per-record log). Positions and layout changes on schematics and plans are
+  not logged, so they do not appear.
 - A settings panel for the installation's convention
   (ABYC E-11 / DIN EN ISO 13297 / freestyle), used only to drive UI
   labeling hints (e.g. suggested wire colors), never enforced.
@@ -507,7 +549,8 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   height never produce one. The route panel names the chosen cable and has a
   "Delete wire run" button that works like deleting a wire on the schematic
   (no confirmation, Undo, permanent delete when the Undo window ends); there
-  is no key shortcut for it. Escape cancels the in-progress route or the
+  is no key shortcut for it. With a route chosen, a circular handle sits in the middle of each
+  stretch; dragging it inserts a waypoint there (Select or Draw route tool). Escape cancels the in-progress route or the
   current tool; Delete removes the selected waypoint or clears the selected
   device's placement (it becomes "not placed", with Undo).
 - Conduits on the floorplan: draw a conduit's route like a cable's (it is
@@ -555,6 +598,56 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   itself is never removed from a canvas. Escape cancels a drag, a popover or
   the selection; keys are ignored while an input, select or textarea has
   focus.
+- Snap to grid and hand-placed devices on the schematic canvas (plan 0028).
+  A "Snap" toolbar button turns a 16 unit grid on or off (on by default, the
+  choice kept per browser in local storage; 16 units is the router's lane
+  pitch, so snapped devices, ports, tabs and lanes line up). While it is on a
+  faint dot grid is drawn under everything, in a theme colour for the day and
+  night themes, with dots that keep their size on screen when zooming and
+  disappear when they would be too dense to read. A dragged device snaps by its
+  top-left corner (a device dropped from the palette too), an off-page tab by
+  its top-left corner, a wire bend point by its coordinates, a dragged wire
+  stretch by its perpendicular coordinate (so it stays orthogonal and on a
+  lane), and a zone shape when it is moved, resized (Shift for a circle or
+  square follows the shorter side on corner handles) or has a polygon corner
+  moved. Holding Alt while dragging flips the choice (free movement with snap
+  on, snapping with snap off), also when pressed or released in the middle of
+  a drag; touch has no override, only the button. The wires are routed live
+  from the snapped positions. A device is "hand-placed" when the user drags it
+  or drops it at a chosen spot on the page (a device added from a list or by a
+  click on the palette, and a device placed by Auto-arrange, stay free). The
+  first Auto-arrange click arranges only the free devices and leaves the
+  hand-placed ones where they are; the second click (the full arrange) moves
+  everything and clears the marks together with the wire bend points and the
+  tabs the user placed, as one action that Undo reverses, marks included. A
+  page saved before the mark existed has all devices free, so its first click
+  moves them as before. A stretch of a line that crosses another where the
+  horizontal stretch has no room for a hop is hopped by the vertical stretch
+  instead, and hops that would touch are drawn as one wide hop, so no crossing
+  of a stub line with a wire or another stub line is a plain intersection.
+- Touch polish for a large touch screen or tablet (plan 0031). On the
+  schematic canvas and the floorplan, one finger keeps its meaning (drag a
+  device, a wire handle, a tab, a marker or the empty canvas); two fingers pan
+  and pinch zoom the view around their midpoint, within the same zoom limits
+  as the buttons. A second finger cancels a running one-finger drag the way
+  Escape does (the start is restored, nothing is saved); lifting one finger
+  ends the gesture and the finger left does nothing until it is lifted. The
+  fingers must move 6 px before a gesture starts. The wheel and the zoom
+  buttons are unchanged. When the pressing pointer is a finger (read per
+  press, so a hybrid device behaves right), terminal dots, bend and midpoint
+  handles, zone corners and resize handles, the connect handle, off-page tabs,
+  floorplan device and waypoint markers and cluster markers take presses in an
+  invisible area of about 44 px on screen; nothing looks different, and a
+  mouse or pen sees no change. Where areas of neighbours would overlap, the
+  nearer target wins and no area covers another target's centre; over a device
+  box the box (a move) wins beyond the usual handle radius. The quick cable
+  popover and the cluster and bundle lists open fully inside the canvas, clear
+  of the finger, below the point or flipped above it, and scroll inside when
+  the canvas is too small. The canvases switch off the browser's own pinch
+  zoom, pull-to-refresh, text selection, callout and tap highlight; the rest
+  of the page uses touch-action manipulation, so buttons react without the
+  double-tap delay. Double-tapping a device still opens it. Phone layouts, a
+  night theme review and a long-press action are not part of this.
 - A decluttered floorplan (plan 0027). A device is a coloured dot with no
   name by default; a name shows for the hovered device, the selected device,
   and the devices of a highlighted circuit, a selected conduit or a selected
@@ -622,7 +715,8 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   for energy; the table says whether a circuit is measured, partly measured
   or rated, and whether any figure is an estimate. An "incomplete" circuit
   says under its badge what is missing (voltage, rating or both) and what to
-  do, the badges have tooltips and a legend sits under the table. A group figure is counted
+  do, the badges have tooltips and a legend sits under the table. A line above
+  the table counts the cable checks (see Cable checks below). A group figure is counted
   once per circuit, and a measured figure takes no power factor. The summary
   states its own known limitations in the UI (a device fed by more than one
   circuit counts its full wattage on each; peaks are summed as if they
@@ -645,6 +739,37 @@ Circuits, wire runs, devices, attachments, and change log entries must
 all survive a server restart. Nothing in this plugin is ephemeral.
 Storage mechanism is detailed in ARCHITECTURE.md.
 
+### 7.x Cable checks (plan 0034, issue #10)
+
+Advisory checks on every cable, never a safety guarantee; the wording says
+"advisory" wherever a result is shown. Details, the ampacity table, its sources
+and every assumption are in `docs/cable-checks.md`.
+
+- Size: the cable's derated ampacity against the rating of the fuse or breaker
+  protecting its circuit ("cable too small" when the protection is more than the
+  cable carries) and against the load current when known. The table is copper,
+  stranded, 105 C insulation, 30 C ambient for the whole boat; conductors
+  sharing a conduit derate it (the current-carrying conductors of all cables in
+  the cable's conduits are counted, earth and signal not).
+- Voltage drop: round trip (twice the length) resistance of the cable's gauge
+  at 50 C, times the current, as a percentage of the circuit's nominal voltage,
+  against the critical limit (3 percent, circuits with a device of a critical
+  type) or the normal limit (10 percent). On AC the power factor is applied.
+  Over the limit is "voltage drop high".
+- Current: measured (an accepted calibration peak, or a live value where the
+  page has live data) can only raise the figure; else rated power over the
+  voltage (watts over power factor on AC); else the protection rating as the
+  worst case. A cable shared by several circuits carries all of them.
+- Exempt: a cable with no current-carrying conductor (all signal or data, which
+  includes antenna cables, earth only, or a mix of those) shows nothing. A mixed cable is checked on its
+  power conductors. Missing gauge, length, voltage, a circuit or any current
+  gives a muted "cannot check: needs ...".
+- Display: badges on the Cables tab rows with a popover of the numbers, their
+  sources and the assumptions; a count line in the Load Summary; a warning mark
+  on a schematic wire and its stub with the reason as the hover text, and the
+  badges and popover again in the wire inspector for touch. The mark takes no
+  pointer events. Live current is used on the schematic only while Live is on.
+
 ## 9. Configuration
 
 - **Convention**: ABYC E-11 | DIN EN ISO 13297 | freestyle (default:
@@ -655,6 +780,11 @@ Storage mechanism is detailed in ARCHITECTURE.md.
 - **Default length unit**: m | ft — pre-selected on new wire run forms,
   overridable per record (default: m). Same reasoning as the gauge unit
   above: a preference to reduce re-entry, not something enforced.
+- **Voltage drop limit, critical loads**: percent, 0.5 to 20 (default 3).
+- **Voltage drop limit, other loads**: percent, 0.5 to 20 (default 10). Both
+  are used by the cable checks, are validated (a bad value falls back to the
+  default) and reach the webapp through the `wiringSettings` resource as
+  `voltageDropLimitCritical` and `voltageDropLimitNormal`.
 
 Everything else (zones, circuit/device names, voltage, breaker rating,
 rated power, SignalK path) is free-form user data, not plugin
