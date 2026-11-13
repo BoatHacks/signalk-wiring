@@ -122,7 +122,9 @@ test('the relay channels light up in the live view: each consumer is switchable 
 test('the deliberate findings are there and every other cable passes', async () => {
   const { bad, results } = await checkResults(rebuilt)
   const summary = Object.fromEntries(bad.map((b) => [b.label, b]))
-  assert.deepEqual(Object.keys(summary).sort(), ['B11-6', 'B13-3'], JSON.stringify(bad.map((b) => [b.label, b.verdict, b.missing])))
+  // The three PV input cables (array to charge controller) have no fuse of their own, so they cannot be checked.
+  assert.deepEqual(Object.keys(summary).sort(), ['B11-6', 'B13-3', 'S-01', 'S-11', 'S-21'], JSON.stringify(bad.map((b) => [b.label, b.verdict, b.missing])))
+  for (const l of ['S-01', 'S-11', 'S-21']) assert.equal(summary[l].verdict, 'cannot', l)
   // B13-3: bilge pump, long and thin, drop above the critical limit.
   assert.equal(summary['B13-3'].result.drop.verdict, 'warning')
   assert.equal(summary['B13-3'].result.drop.limitKind, 'critical')
@@ -131,7 +133,7 @@ test('the deliberate findings are there and every other cable passes', async () 
   assert.equal(summary['B11-6'].result.ampacity.verdict, 'fail')
   assert.ok(summary['B11-6'].result.ampacity.issues.includes('protection'))
   const counts = countVerdicts(results)
-  assert.equal(counts.cannot, 0)
+  assert.equal(counts.cannot, 3)
   assert.equal(counts.fail + counts.warning, 2)
   assert.ok(counts.ok > 60)
 })
@@ -148,12 +150,12 @@ test('the enclosures have inside pages with their contents', () => {
   const devices = store.list('device')
   const pages = store.list('schematic')
   const enclosures = devices.filter((d) => d.role === 'enclosure')
-  assert.deepEqual(enclosures.map((d) => d.name).sort(), ['AC panel', 'DC distribution panel', 'Relay bank 10', 'Relay bank 11', 'Relay bank 12', 'Relay bank 13'])
+  assert.deepEqual(enclosures.map((d) => d.name).sort(), ['AC panel', 'DC distribution panel', 'Relay bank 10', 'Relay bank 11', 'Relay bank 12', 'Relay bank 13', 'Switch panel'])
   for (const e of enclosures) {
     const page = pages.find((p) => p.enclosure_id === e.id)
     assert.ok(page, `${e.name} has an inside page`)
     const held = devices.filter((d) => d.parent_id === e.id)
-    assert.ok(held.length >= 5, `${e.name} holds devices`)
+    assert.ok(held.length >= 3, `${e.name} holds devices`)
     assert.deepEqual(page.devices.map((d) => d.deviceId).sort(), held.map((d) => d.id).sort(), e.name)
     assert.ok(store.enclosureInfo(e.id).boundaryCables.length >= 1, `${e.name} has boundary cables`)
   }
@@ -255,16 +257,16 @@ test('a drawing point maps to the expected meters and back with the app function
   assert.ok(Math.abs(x - 10.9) < 1e-4 && Math.abs(y) < 1e-9)
 })
 
-test('every device that is not in an enclosure has a position, and enclosure contents have none', () => {
+test('placed devices carry the position of positions.json, unplaced ones have none, and enclosure contents are never placed', () => {
   const { devices, store } = planRows()
   store.close()
   for (const d of devices) {
     const placed = d.pos_x != null && d.pos_y != null && d.pos_z != null
     if (d.parent_id) assert.ok(d.pos_x == null && d.pos_y == null && d.pos_z == null, `${d.name} is inside an enclosure and stays unplaced`)
-    else assert.ok(placed, `${d.name} has a position`)
-    if (!d.parent_id) assert.deepEqual({ x: d.pos_x, y: d.pos_y, z: d.pos_z }, positions[d.name], d.name)
+    else if (!placed) assert.equal(positions[d.name], undefined, `${d.name} is unplaced and has no entry`)
+    if (!d.parent_id && placed) assert.deepEqual({ x: d.pos_x, y: d.pos_y, z: d.pos_z }, positions[d.name], d.name)
   }
-  assert.equal(Object.keys(positions).length, devices.filter((d) => !d.parent_id).length)
+  assert.equal(Object.keys(positions).length, devices.filter((d) => !d.parent_id && d.pos_x != null).length)
   assert.ok(devices.filter((d) => d.role === 'enclosure').every((d) => d.pos_x != null), 'enclosure markers are placed')
 })
 
@@ -293,6 +295,7 @@ test('every device shows inside the hull of at least one plan, and every plan ha
   const hulls = new Map()
   for (const p of plans) hulls.set(p.name, readHull(path.join(demoDir, 'plans', p.filename)))
   for (const d of devices.filter((x) => !x.parent_id)) {
+    if (d.pos_x == null) continue // the user may leave a device unplaced (a bus, for example)
     const point = { x: d.pos_x, y: d.pos_y, z: d.pos_z }
     assert.ok(point.x > 0 && point.x < spec.hullLengthM, `${d.name} x ${point.x}`)
     let inHull = false
@@ -305,7 +308,7 @@ test('every device shows inside the hull of at least one plan, and every plan ha
       if (p.view === 'top' && pointInPolygon(hulls.get(p.name), px)) { inHull = true; shown.set(p.name, shown.get(p.name) + 1) }
       // Below the deck it also lies in the hull of the interior profile.
       if (p.name === 'Interior profile' && point.z <= 1.0) assert.ok(pointInPolygon(hulls.get(p.name), px), `${d.name} is outside the interior profile`)
-      if (p.view === 'side' && point.z > 1.0 && p.name === 'Side profile') assert.ok(inView, `${d.name} is off the side profile`)
+      // Masthead items may sit at or above the top edge of the exterior profile; that is the user's choice.
     }
     assert.ok(inHull, `${d.name} at ${JSON.stringify(point)} is on no top plan hull`)
   }
@@ -313,23 +316,21 @@ test('every device shows inside the hull of at least one plan, and every plan ha
   // Where it belongs: below the deck on the interior plan, at and above it on the deck plan.
   const interior = plans.find((p) => p.name === 'Interior')
   const deck = plans.find((p) => p.name === 'Deck')
-  for (const d of devices.filter((x) => !x.parent_id)) {
+  for (const d of devices.filter((x) => !x.parent_id && x.pos_x != null)) {
     const point = { x: d.pos_x, y: d.pos_y, z: d.pos_z }
     if (point.z < 1) assert.ok(planShowsPoint(asPlan(interior), point) && !planShowsPoint(asPlan(deck), point), d.name)
     else assert.ok(planShowsPoint(asPlan(deck), point) && !planShowsPoint(asPlan(interior), point), d.name)
   }
 })
 
-test('positions.json is consumed by the builder and the zone devices lie in their zones', () => {
+test('positions.json only names devices of the spec that are not inside an enclosure', () => {
   const place = require('../scripts/place-demo.js')
-  const again = place.place(spec)
-  assert.deepEqual(Object.fromEntries(Object.entries(again).map(([n, [x, y, z]]) => [n, { x, y, z }])), positions, 'positions.json is what place-demo.js produces')
-  for (const d of spec.devices.filter((x) => !x.parent)) {
-    const box = place.ZONES[d.zone]
-    if (!box) continue
-    const p = positions[d.name]
-    assert.ok(p.x >= box.x[0] && p.x <= box.x[1] && p.y >= box.y[0] && p.y <= box.y[1], `${d.name} is in ${d.zone}`)
+  const byName = new Map(spec.devices.map((d) => [d.name, d]))
+  for (const name of Object.keys(positions)) {
+    assert.ok(byName.has(name), `${name} is a device of the spec`)
+    assert.ok(!byName.get(name).parent, `${name} is not inside an enclosure`)
   }
+  // the first-pass generator still refuses a zone without a box
   assert.throws(() => place.place({ devices: [{ name: 'X', zone: 'Nowhere' }] }), /no box/)
 })
 

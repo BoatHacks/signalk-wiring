@@ -156,8 +156,11 @@ node scripts/place-demo.js            # rewrites source/positions.json
 | Forepeak (anchor locker) | 9.3 to 10.3 | -0.2 to 0.2 | 0.2 |
 | Cockpit, Deck, Mast | fixed places | | 1.1 to 13.7 |
 
-72 devices are placed (56 below the deck on the Interior plans, 16 at or above
-deck level on the Deck plan); the devices inside an enclosure have no position.
+The first pass placed 72 devices (56 below the deck on the Interior plans, 16 at or
+above deck level on the Deck plan); the devices inside an enclosure have no
+position. `source/positions.json` has since been adjusted by hand on a server and
+read back, so it no longer matches the generator: a device the user left unplaced
+has no entry, and masthead items sit near the top edge of the exterior profile.
 Zones themselves have no position in the plugin's model.
 
 Adjusting on a server and reading back: load the demo into a test server,
@@ -171,4 +174,5 @@ node scripts/read-positions.js [token] [baseUrl]    # default http://localhost:3
 This writes `source/positions.json` from `GET /signalk/v2/api/resources/wiringDevices`
 (devices with a position, by name). Run `node scripts/build-demo.js` in the
 container afterwards, and commit the file, the database and `plans/`. Note that
-`place-demo.js` overwrites the file again: use one or the other.
+`place-demo.js` overwrites the file again and loses the hand adjustments: use it
+only for a first pass, and keep `read-positions.js` for everything after that.
