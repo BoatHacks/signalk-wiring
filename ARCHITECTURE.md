@@ -882,3 +882,24 @@ height is estimated from its row count). CSS: `touch-action: none`,
 `overscroll-behavior: contain`, `user-select: none`, no callout or tap highlight
 on `.schematic-canvas` and `.floorplan-canvas`; `touch-action: manipulation` on
 `html, body`.
+
+## The demo folder (plan 0035)
+
+`demo/` holds a fictional boat as a drop-in data directory: `wiring.db`,
+`plans/` and `attachments/`. It is committed to main and is not in the npm
+package (`package.json` `files` lists only `index.js`, `src` and `public`).
+`demo/source/boat.json` is the readable description of the boat and
+`scripts/build-demo.js` builds `wiring.db` from it through the plugin's own
+`Store`, so the schema, migrations and validation are the real ones. The
+builder is deterministic: ids come from names (a name based UUID), the ids of
+unnamed rows (terminals, conductors, circuits, schematic entries) from a
+counter that replaces `crypto.randomUUID` for the run, the store's own change
+log writes are switched off, and the history in the spec is inserted with times
+counted back from the spec's fixed build date. It checkpoints and switches the
+journal off WAL before closing, so the output is one file. Layout is computed by
+the builder (columns by depth from the supply, consumers in blocks per zone with
+a zone shape around each block). It needs Node 22.13 or newer.
+`test/demo.test.mjs` rebuilds the database and compares every table with the
+committed one, and checks the SignalK paths, the live switching of the relay
+channels, the deliberate cable check findings, the enclosure inside pages and
+the npm file list. `demo/README.md` says how to install and rebuild it.
