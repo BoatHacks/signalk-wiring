@@ -6,7 +6,7 @@ import {
   moveWaypoint, removeWaypoint, insertWaypoint, routePoints, routeLength, circuitMembers, planShowsPoint,
   metersToLengthUnit, lengthDirection, metersToPx, arrowHeadPoints, conduitRoutePoints, unroutedCables,
   conduitMembers, effectiveCableRoute, cornerArrows, routeEndAction, routeWithEnd, continuationMarks,
-  escapeStep, deleteStep
+  escapeStep, deleteStep, followDevice
 } from './floorplan.js'
 import { hashForState } from './router.js'
 import { isTypingTarget, wireLineStyle, scaledDash, isDoubleTap, deviceHash } from './schematic.js'
@@ -1017,9 +1017,16 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
     try { await fn(); reload(); return true } catch (err) { setError(err.message); return false }
   }
 
-  const saveDevicePosition = (device, view, a, b) => guard(() => {
-    const pos = applyClick(devicePosition(device), view, a, b)
-    return putResource('wiringDevices', device.id, { ...device, posX: pos.x, posY: pos.y, posZ: pos.z })
+  const saveDevicePosition = (device, view, a, b) => guard(async () => {
+    const before = devicePosition(device)
+    const pos = applyClick(before, view, a, b)
+    // The ends of routes that sit at the old position move with the device.
+    const follow = followDevice(device.id, before, pos, wireRuns, devicesById)
+    await putResource('wiringDevices', device.id, { ...device, posX: pos.x, posY: pos.y, posZ: pos.z })
+    for (const { runId, route } of follow) {
+      const run = wireRuns.find((r) => r.id === runId)
+      await putResource('wiringWireRuns', runId, { ...withoutAssignments(run), route })
+    }
   })
 
   // The device becomes "not placed" on every plan; it is never removed from

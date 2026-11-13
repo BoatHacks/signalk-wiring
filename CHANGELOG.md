@@ -12,6 +12,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Cables on the floorplan stay attached when a device is moved. The To end of a drawn route is a stored point, so before, moving a device left the end of its cables behind. Now the ends of routes that sit at the device's old position (or at the enclosure that holds it) move with it, and are saved with the move. An end you have moved away from the device by hand stays where it is.
 - The Cables page looked shifted to the right: its table (now 13 columns with the Checks column) was wider than the 1000 px page column and made the whole page scroll sideways. The page now uses the full width for the Cables tab, and on a narrower screen the table scrolls inside its own frame.
 
 ### Changed

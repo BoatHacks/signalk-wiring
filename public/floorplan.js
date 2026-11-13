@@ -413,6 +413,58 @@ export function routeWithEnd (route, point) {
   return [...points, pointOf(point)]
 }
 
+// ---- Routes follow a moved device ------------------------------------------
+// The To end of a route is a stored point (the device's position when the
+// route was finished) and the start is derived. When a device is moved, the
+// ends of routes that sit at its old position move with it, so a cable stays
+// attached. A device inside an enclosure is represented by the placed
+// enclosure around it.
+const FOLLOW_TOLERANCE_M = 0.02
+
+function anchorId (deviceId, devicesById) {
+  const seen = new Set()
+  for (let at = devicesById.get(deviceId); at && !seen.has(at.id); at = devicesById.get(at.parentId)) {
+    seen.add(at.id)
+    if (isPlaced(at) && !at.parentId) return at.id
+  }
+  return null
+}
+
+function samePlace (point, place) {
+  if (!point || !place) return false
+  let shared = 0
+  for (const axis of AXES) {
+    const p = point[axis]
+    const q = place[axis]
+    if (p == null || q == null) continue
+    shared++
+    if (Math.abs(p - q) > FOLLOW_TOLERANCE_M) return false
+  }
+  return shared > 0
+}
+
+// The routes to save after `deviceId` moved from oldPos to newPos:
+// [{ runId, route }] for the wire runs whose first or last point was at the old
+// position of that device (or of the enclosure holding an end device).
+export function followDevice (deviceId, oldPos, newPos, wireRuns, devicesById) {
+  const out = []
+  for (const run of wireRuns) {
+    if (run.status === 'removed' || !Array.isArray(run.route) || run.route.length === 0) continue
+    const route = run.route.map(pointOf)
+    let changed = false
+    if (anchorId(run.toDeviceId, devicesById) === deviceId && samePlace(route[route.length - 1], oldPos)) {
+      route[route.length - 1] = pointOf(newPos)
+      changed = true
+    }
+    if (anchorId(run.fromDeviceId, devicesById) === deviceId && samePlace(route[0], oldPos)) {
+      route[0] = pointOf(newPos)
+      changed = true
+    }
+    if (changed) out.push({ runId: run.id, route })
+  }
+  return out
+}
+
 // ---- Continuation marks ----------------------------------------------------
 
 // Where a route leaves a plan. For each pair of neighbouring points where one
