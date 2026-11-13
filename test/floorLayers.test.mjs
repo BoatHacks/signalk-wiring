@@ -12,7 +12,7 @@ function fakeStorage (initial = {}) {
 const throwing = { getItem () { throw new Error('blocked') }, setItem () { throw new Error('blocked') } }
 
 test('defaults: every layer on and no role hidden', () => {
-  assert.deepEqual(defaultLayers(), { names: true, devices: true, cables: true, conduits: true, hiddenRoles: [] })
+  assert.deepEqual(defaultLayers(), { names: true, devices: true, cables: true, conduits: true, clusters: true, hiddenRoles: [] })
   assert.equal(layersChanged(defaultLayers()), false)
 })
 
@@ -36,7 +36,7 @@ test('storage that throws gives the defaults and saving does not throw', () => {
 test('garbage in storage is ignored field by field', () => {
   assert.deepEqual(loadLayers(fakeStorage({ 'wiring.floorLayers': 'not json' })), defaultLayers())
   const s = sanitizeLayers({ names: 'yes', devices: false, hiddenRoles: ['b', 3, 'a', 'b'], extra: 1 })
-  assert.deepEqual(s, { names: true, devices: false, cables: true, conduits: true, hiddenRoles: ['a', 'b'] })
+  assert.deepEqual(s, { names: true, devices: false, cables: true, conduits: true, clusters: true, hiddenRoles: ['a', 'b'] })
   assert.deepEqual(sanitizeLayers(null), defaultLayers())
 })
 
@@ -93,4 +93,16 @@ test('focusSet: a circuit or conduit keeps its members; a conduit itself too', (
   assert.deepEqual([...f.runIds], ['r1'])
   assert.deepEqual([...f.deviceIds].sort(), ['a', 'b'])
   assert.equal(focusSet({ members }, runs).conduitIds.size, 0)
+})
+
+test('grouping nearby devices is a switch that is on by default and remembered', () => {
+  assert.equal(defaultLayers().clusters, true)
+  const off = toggleLayer(defaultLayers(), 'clusters')
+  assert.equal(off.clusters, false)
+  assert.equal(layersChanged(off), true)
+  const store = fakeStorage()
+  saveLayers(off, store)
+  assert.equal(loadLayers(store).clusters, false)
+  // a stored value that is not a boolean falls back to on
+  assert.equal(sanitizeLayers({ clusters: 'no' }).clusters, true)
 })

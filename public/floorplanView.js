@@ -628,7 +628,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
     }
   }
   const pxPerUnit = Math.min(viewPx.width / box.width, viewPx.height / box.height)
-  const clusterSet = ctx.tool === 'select' && !calibrating
+  const clusterSet = ctx.tool === 'select' && !calibrating && layers.clusters
     ? clusterMarkers(
       deviceMarks.map(({ device, px, lit }) => ({
         id: device.id, x: px[0] * pxPerUnit, y: px[1] * pxPerUnit,

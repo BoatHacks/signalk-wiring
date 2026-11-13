@@ -11,12 +11,13 @@ export const LAYER_SWITCHES = [
   { key: 'names', label: 'Names' },
   { key: 'devices', label: 'Devices' },
   { key: 'cables', label: 'Cables' },
-  { key: 'conduits', label: 'Conduits' }
+  { key: 'conduits', label: 'Conduits' },
+  { key: 'clusters', label: 'Group nearby devices' }
 ]
 
 // Everything on, no role hidden.
 export function defaultLayers () {
-  return { names: true, devices: true, cables: true, conduits: true, hiddenRoles: [] }
+  return { names: true, devices: true, cables: true, conduits: true, clusters: true, hiddenRoles: [] }
 }
 
 // Anything stored that is not understood falls back to the default for that field.
