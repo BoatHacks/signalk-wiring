@@ -83,7 +83,7 @@ test('every SignalK path of the plan is on the boat', async () => {
   const { devices } = await checkResults(rebuilt)
   const paths = new Set()
   for (const d of devices) {
-    for (const key of ['signalkPath', 'switchPath', 'meterPath', 'voltagePath', 'currentPath', 'socPath']) if (d[key]) paths.add(d[key])
+    for (const key of ['signalkPath', 'switchPath', 'meterPath', 'voltagePath', 'currentPath', 'socPath', 'timeRemainingPath']) if (d[key]) paths.add(d[key])
   }
   const channels = { 10: 6, 11: 6, 12: 6, 13: 8 }
   for (const [bank, count] of Object.entries(channels)) {
@@ -94,8 +94,10 @@ test('every SignalK path of the plan is on the boat', async () => {
   }
   for (const name of ['bimini', 'deckPort', 'deckStarboard']) {
     assert.ok(paths.has(`electrical.solar.${name}`), `solar ${name}`)
-    assert.ok(paths.has(`electrical.chargers.${name}`), `charger ${name}`)
+    // the demo server publishes the panel power of each array, which the Dashboard reads as live input
+    assert.ok(paths.has(`electrical.solar.${name}.panelPower`), `solar ${name} panel power`)
   }
+  assert.ok(paths.has('electrical.batteries.house.capacity.timeRemaining'), 'house time remaining')
 })
 
 test('the relay channels light up in the live view: each consumer is switchable through its own channel', () => {

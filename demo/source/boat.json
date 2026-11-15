@@ -6,7 +6,7 @@
   "zones": ["Saloon", "Galley", "Nav station", "Forward cabin", "Aft cabin", "Engine room", "Cockpit", "Mast", "Deck", "Forepeak", "Lazarette"],
 
   "devices": [
-    {"name": "House battery", "type": "Battery", "role": "storage", "zone": "Engine room", "v": 12, "page": ["dc"], "chem": "lifepo4", "purpose": "house", "cap": 400, "usable": 0.8, "make": "LiFePO4 12.8 V 400 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.house.voltage", "cPath": "electrical.batteries.house.current", "sPath": "electrical.batteries.house.capacity.stateOfCharge", "box": "#2e7d32"},
+    {"name": "House battery", "type": "Battery", "role": "storage", "zone": "Engine room", "v": 12, "page": ["dc"], "chem": "lifepo4", "purpose": "house", "cap": 400, "usable": 0.8, "make": "LiFePO4 12.8 V 400 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.house.voltage", "cPath": "electrical.batteries.house.current", "sPath": "electrical.batteries.house.capacity.stateOfCharge", "tPath": "electrical.batteries.house.capacity.timeRemaining", "box": "#2e7d32"},
     {"name": "Starter battery", "type": "Battery", "role": "storage", "zone": "Engine room", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "starter", "cap": 90, "usable": 0.5, "make": "AGM 12 V 90 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.starter.voltage", "cPath": "electrical.batteries.starter.current", "sPath": "electrical.batteries.starter.capacity.stateOfCharge", "box": "#c62828"},
     {"name": "Bow thruster battery", "type": "Battery", "role": "storage", "zone": "Forepeak", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "thruster", "cap": 120, "usable": 0.5, "make": "AGM 12 V 120 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.bowThruster.voltage", "cPath": "electrical.batteries.bowThruster.current", "sPath": "electrical.batteries.bowThruster.capacity.stateOfCharge", "box": "#ef6c00"},
 
@@ -14,10 +14,10 @@
     {"name": "Battery switch", "type": "Battery switch", "role": "distribution", "zone": "Aft cabin", "icon": "#f9a825", "page": ["dc"]},
     {"name": "Main positive bus", "type": "Bus bar", "role": "distribution", "zone": "Engine room", "dcA": 300, "dcV": 12, "page": ["dc"]},
     {"name": "Inverter fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 125, "page": ["dc"]},
-    {"name": "Inverter/charger", "type": "Inverter/charger", "role": "converter", "zone": "Engine room", "page": ["dc", "ac"], "make": "12 V 1600 VA inverter/charger", "path": "electrical.inverters.main", "box": "#6a1b9a",
+    {"name": "Inverter/charger", "type": "Inverter/charger", "role": "converter", "zone": "Engine room", "page": ["dc", "ac"], "make": "12 V 1600 VA inverter/charger", "box": "#6a1b9a",
       "terminals": [["AC in L", "line", 230, "ac-in"], ["AC in N", "neutral", 230, "ac-in"], ["AC in PE", "earth", 230, "ac-in"], ["AC out L", "line", 230, "ac-out"], ["AC out N", "neutral", 230, "ac-out"], ["AC out PE", "earth", 230, "ac-out"], ["DC +", "positive", 12, "dc"]]},
 
-    {"name": "Battery charger", "type": "Battery charger", "role": "converter", "zone": "Lazarette", "page": ["dc", "ac"], "make": "12 V 3 bank 40 A charger", "path": "electrical.chargers.shore",
+    {"name": "Battery charger", "type": "Battery charger", "role": "converter", "zone": "Lazarette", "page": ["dc", "ac"], "make": "12 V 3 bank 40 A charger",
       "terminals": [["AC in L", "line", 230, "ac"], ["AC in N", "neutral", 230, "ac"], ["AC in PE", "earth", 230, "ac"], ["OUT 1 +", "positive", 12, "out1"], ["OUT 2 +", "positive", 12, "out2"], ["OUT 3 +", "positive", 12, "out3"]]},
     {"name": "Charger fuse house", "type": "Fuse", "role": "distribution", "zone": "Lazarette", "trip": 30, "page": ["dc"]},
     {"name": "Charger fuse starter", "type": "Fuse", "role": "distribution", "zone": "Lazarette", "trip": 15, "page": ["dc"]},
@@ -33,14 +33,14 @@
     {"name": "Bow thruster contactor", "type": "Relay", "role": "distribution", "zone": "Forepeak", "switch": "electrical.switches.bank.13.1.state", "page": ["dc"]},
     {"name": "Bow thruster", "type": "Bow thruster motor", "role": "consumer", "zone": "Forepeak", "w": 2000, "current": "dc", "confirm": true, "page": ["dc"], "notes": "Switched by bank 13 channel 1 through the contactor.", "box": "#ef6c00"},
 
-    {"name": "Bimini solar array", "type": "Solar panel", "role": "source", "zone": "Cockpit", "w": 200, "v": 36, "path": "electrical.solar.bimini", "page": ["dc"]},
-    {"name": "Bimini charge controller", "type": "MPPT charger", "role": "converter", "zone": "Lazarette", "path": "electrical.chargers.bimini", "page": ["dc"], "terminals": [["PV +", "positive", 36, "pv"], ["BAT +", "positive", 12, "bat"]]},
+    {"name": "Bimini solar array", "type": "Solar panel", "role": "source", "zone": "Cockpit", "w": 200, "v": 36, "path": "electrical.solar.bimini", "meter": "electrical.solar.bimini.panelPower", "meterUnit": "W", "page": ["dc"]},
+    {"name": "Bimini charge controller", "type": "MPPT charger", "role": "converter", "zone": "Lazarette", "page": ["dc"], "terminals": [["PV +", "positive", 36, "pv"], ["BAT +", "positive", 12, "bat"]]},
     {"name": "Bimini solar fuse", "type": "Fuse", "role": "distribution", "zone": "Lazarette", "trip": 30, "page": ["dc"]},
-    {"name": "Deck port solar array", "type": "Solar panel", "role": "source", "zone": "Deck", "w": 250, "v": 36, "path": "electrical.solar.deckPort", "page": ["dc"]},
-    {"name": "Deck port charge controller", "type": "MPPT charger", "role": "converter", "zone": "Engine room", "path": "electrical.chargers.deckPort", "page": ["dc"], "terminals": [["PV +", "positive", 36, "pv"], ["BAT +", "positive", 12, "bat"]]},
+    {"name": "Deck port solar array", "type": "Solar panel", "role": "source", "zone": "Deck", "w": 250, "v": 36, "path": "electrical.solar.deckPort", "meter": "electrical.solar.deckPort.panelPower", "meterUnit": "W", "page": ["dc"]},
+    {"name": "Deck port charge controller", "type": "MPPT charger", "role": "converter", "zone": "Engine room", "page": ["dc"], "terminals": [["PV +", "positive", 36, "pv"], ["BAT +", "positive", 12, "bat"]]},
     {"name": "Deck port solar fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 30, "page": ["dc"]},
-    {"name": "Deck starboard solar array", "type": "Solar panel", "role": "source", "zone": "Deck", "w": 250, "v": 36, "path": "electrical.solar.deckStarboard", "page": ["dc"]},
-    {"name": "Deck starboard charge controller", "type": "MPPT charger", "role": "converter", "zone": "Engine room", "path": "electrical.chargers.deckStarboard", "page": ["dc"], "terminals": [["PV +", "positive", 36, "pv"], ["BAT +", "positive", 12, "bat"]]},
+    {"name": "Deck starboard solar array", "type": "Solar panel", "role": "source", "zone": "Deck", "w": 250, "v": 36, "path": "electrical.solar.deckStarboard", "meter": "electrical.solar.deckStarboard.panelPower", "meterUnit": "W", "page": ["dc"]},
+    {"name": "Deck starboard charge controller", "type": "MPPT charger", "role": "converter", "zone": "Engine room", "page": ["dc"], "terminals": [["PV +", "positive", 36, "pv"], ["BAT +", "positive", 12, "bat"]]},
     {"name": "Deck starboard solar fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 30, "page": ["dc"]},
 
     {"name": "DC distribution panel", "type": "DC panel", "role": "enclosure", "zone": "Nav station", "page": ["dc"], "box": "#37474f"},

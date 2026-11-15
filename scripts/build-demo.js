@@ -52,7 +52,7 @@ const DEVICE_FIELDS = {
   type: 'type', role: 'role', zone: 'zone', w: 'rated_power_w', pf: 'power_factor', trip: 'trip_rating_a',
   v: 'nominal_voltage', current: 'current', box: 'schematic_box_color', icon: 'schematic_icon_color',
   cap: 'capacity_ah', usable: 'usable_fraction', chem: 'chemistry', purpose: 'purpose', make: 'make_model',
-  installed: 'installed_on', vPath: 'voltage_path', cPath: 'current_path', sPath: 'soc_path',
+  installed: 'installed_on', vPath: 'voltage_path', cPath: 'current_path', sPath: 'soc_path', tPath: 'time_remaining_path',
   path: 'signalk_path', meter: 'meter_path', meterUnit: 'meter_unit', notes: 'notes', switch: 'switch_path',
   confirm: 'confirm_switching', dcA: 'rated_dc_a', dcV: 'rated_dc_v', len: 'len'
 }
