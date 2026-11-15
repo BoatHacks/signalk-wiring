@@ -1022,3 +1022,9 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-bus-open { fill: var(--surface); stroke: var(--text-muted); stroke-width: 1.5; }
 .sch-bus-feed { fill: var(--warn); stroke: var(--warn); stroke-width: 1; }
 .sch-bus-name { fill: var(--text); font-size: 12px; font-weight: 600; pointer-events: none; }
+
+/* A backbone on the floorplan (plan 0037) */
+.bus-line { stroke: var(--wire-signal); stroke-opacity: 0.9; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.bus-line.active { stroke-opacity: 1; }
+.bus-tap circle { fill: var(--surface); stroke: var(--wire-signal); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.bus-tap circle.feed { fill: var(--warn); }

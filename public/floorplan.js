@@ -557,3 +557,56 @@ export function deleteStep (state) {
   if (state.deviceId && state.devicePlaced) return 'clear-placement'
   return null
 }
+
+// ---- Backbones (plan 0037) -------------------------------------------------
+// A backbone has a route like a cable: stored waypoints, drawn as one thick
+// line. Where a tap sits at an end of the backbone (the first tap at 0, the
+// last one at the full length) and that device is placed, the line starts or
+// ends at the device, derived and never stored, so moving the device moves
+// that end with it.
+export function busRoutePoints (bus, devicesById) {
+  const route = (bus && bus.route ? bus.route : []).map(pointOf)
+  if (route.length === 0) return { points: [], startOffset: 0, endDerived: false }
+  const taps = (bus.taps || []).filter((t) => devicesById.get(t.deviceId))
+  const first = taps[0]
+  const last = taps[taps.length - 1]
+  const start = first && first.along === 0 ? resolveRouteStart({ fromDeviceId: first.deviceId }, null, devicesById) : null
+  const atEnd = taps.length > 1 && last.along != null && bus.length != null && bus.length > 0 && last.along >= bus.length
+  const end = atEnd ? resolveRouteStart({ fromDeviceId: last.deviceId }, null, devicesById) : null
+  return { points: [...(start ? [start] : []), ...route, ...(end ? [end] : [])], startOffset: start ? 1 : 0, endDerived: Boolean(end) }
+}
+
+// Live backbones with no drawn route: they show nothing on the plans.
+export function unroutedBuses (backbones) {
+  return (backbones || []).filter((b) => b.status !== 'removed' && !(Array.isArray(b.route) && b.route.length > 0))
+}
+
+// Where each tap sits on a drawn line. `pxs` are the visible points of the line
+// as [x, y] pairs. A tap with a position along the backbone is placed at that
+// fraction of the backbone length (clamped); without one, or without a length,
+// the taps are spread evenly in their order. Returns { tap, px, fraction }.
+export function busTapMarks (bus, pxs) {
+  const pts = (pxs || []).filter(Boolean)
+  const taps = bus.taps || []
+  if (pts.length < 2 || taps.length === 0) return []
+  const lens = []
+  let total = 0
+  for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); lens.push(d); total += d }
+  if (total === 0) return []
+  const at = (f) => {
+    let want = Math.max(0, Math.min(1, f)) * total
+    for (let i = 0; i < lens.length; i++) {
+      if (want <= lens[i] || i === lens.length - 1) {
+        const t = lens[i] === 0 ? 0 : Math.min(1, want / lens[i])
+        return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t]
+      }
+      want -= lens[i]
+    }
+    return pts[pts.length - 1]
+  }
+  return taps.map((tap, i) => {
+    const f = tap.along != null && bus.length != null && bus.length > 0 ? tap.along / bus.length : (taps.length === 1 ? 0.5 : i / (taps.length - 1))
+    const fraction = Math.max(0, Math.min(1, f))
+    return { tap, px: at(fraction), fraction }
+  })
+}
