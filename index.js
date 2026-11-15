@@ -3,6 +3,7 @@
 const path = require('path')
 const { Store } = require('./src/store')
 const { createResourceProvider } = require('./src/resources')
+const { isDemoMode } = require('./src/demoMode')
 const { resolveSettings, settingsWarnings, createSettingsProvider } = require('./src/settings')
 const { registerRoutes } = require('./src/routes')
 const { registerLiveRoutes } = require('./src/liveRoutes')
@@ -71,12 +72,6 @@ module.exports = function (app) {
         description: 'The webapp follows vessels.self.environment.sun (day, dawn, sunrise, sunset, dusk, night) or, failing that, environment.mode (day or night) instead of the manual toggle. Needs a plugin that publishes one of those paths.',
         default: false
       },
-      showFloorplan: {
-        type: 'boolean',
-        title: 'Show the Floorplan tab',
-        description: 'Turn off to hide the Floorplan tab and everything that points to it in the web app. The floorplan data is kept and comes back when this is turned on again.',
-        default: true
-      },
       voltageDropLimitCritical: {
         type: 'number',
         title: 'Voltage drop limit, critical loads (%)',
@@ -103,7 +98,7 @@ module.exports = function (app) {
   let settings = resolveSettings({})
 
   plugin.start = function (options) {
-    settings = resolveSettings(options)
+    settings = resolveSettings(options, isDemoMode(app.getDataDirPath()))
     const dropped = settingsWarnings(options)
     if (dropped.length && typeof app.setPluginStatus === 'function') {
       app.setPluginStatus(`Ignored Dashboard entries: ${dropped.join('; ')}`)

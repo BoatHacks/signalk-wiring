@@ -84,14 +84,20 @@ function settingsWarnings (options) {
 // Plugin options come from the admin UI's config form and may be missing
 // (first start) or stale (an option value removed in a later version), so
 // each one falls back to its default rather than propagating a bad value.
-function resolveSettings (options) {
+//
+// demoMode comes from the marker file, not from the options. showFloorplan is
+// derived from it (hidden in demo mode); a stale showFloorplan key in an old
+// configuration is ignored.
+function resolveSettings (options, demoMode = false) {
   const o = options || {}
+  const demo = demoMode === true
   return {
     convention: CONVENTIONS.includes(o.convention) ? o.convention : 'freestyle',
     defaultGaugeUnit: GAUGE_UNITS.includes(o.defaultGaugeUnit) ? o.defaultGaugeUnit : 'AWG',
     defaultLengthUnit: LENGTH_UNITS.includes(o.defaultLengthUnit) ? o.defaultLengthUnit : 'm',
     autoTheme: o.autoTheme === true,
-    showFloorplan: o.showFloorplan !== false,
+    showFloorplan: !demo,
+    demoMode: demo,
     voltageDropLimitCritical: dropLimit(o.voltageDropLimitCritical, DROP_LIMIT_CRITICAL),
     voltageDropLimitNormal: dropLimit(o.voltageDropLimitNormal, DROP_LIMIT_NORMAL),
     dashboardInputs: resolveDashboardList(o.dashboardInputs, 'Dashboard input').entries,

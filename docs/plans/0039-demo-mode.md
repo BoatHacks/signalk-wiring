@@ -142,7 +142,7 @@ These are my proposals, to be reviewed before the build:
 
 ## Implementation Steps
 
-- [ ] Remove the `showFloorplan` option; derive it from demo mode (marker file
+- [x] Remove the `showFloorplan` option; derive it from demo mode (marker file
       check, settings, schema, OpenAPI, tests).
 - [ ] The restore, with tests.
 - [ ] The GitHub check and update, with tests.

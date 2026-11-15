@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS = {
   defaultLengthUnit: 'm',
   autoTheme: false,
   showFloorplan: true,
+  demoMode: false,
   voltageDropLimitCritical: 3,
   voltageDropLimitNormal: 10,
   dashboardInputs: [],
