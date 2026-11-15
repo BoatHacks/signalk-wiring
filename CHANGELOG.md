@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Duplicating a device now keeps its battery details and monitoring paths, explicit AC/DC setting, AC/DC ratings and schematic colors.
+
 ## [0.8.0] - 2026-11-15
 
 ### Added
