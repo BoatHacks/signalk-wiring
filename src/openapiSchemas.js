@@ -421,6 +421,8 @@ const schemas = {
     amps: nullable(num('Total current, amperes; null without a voltage.', { unit: 'A' })),
     overRating: bool('True when the current is more than the protecting device is rated for.'),
     missingVoltage: bool('No voltage known.'),
+    missingSupply: bool('No supply found: the circuit is not wired back to a battery or a source.'),
+    unprotected: bool('No fuse or breaker protects the circuit, so there is no rating.'),
     missingRating: bool('No protecting rating known.'),
     voltage: nullable(num('Volts.', { unit: 'V' })),
     ratingA: nullable(num('Rating of the protecting device, amperes.', { unit: 'A' })),

@@ -107,6 +107,11 @@ export function calculateCircuitLoad (circuit, deviceById) {
     amps,
     overRating,
     missingVoltage: !voltage,
+    // No supply found at all (the circuit is not wired back to a battery or a
+    // source), as opposed to a supply that has no nominal voltage.
+    missingSupply: !voltage && Array.isArray(derived.supplyDeviceIds) && derived.supplyDeviceIds.length === 0,
+    // No fuse or breaker protects it, so there is no rating to set.
+    unprotected: derived.unprotected === true,
     missingRating: rating == null,
     voltage,
     ratingA: rating,
@@ -132,8 +137,15 @@ export function checkSummaryLine (counts) {
 // when nothing is. Shown as a line under the badge and as its tooltip.
 export function incompleteReason (load) {
   const parts = []
-  if (load.missingVoltage) parts.push('No voltage: set the nominal voltage on the supply')
-  if (load.missingRating) parts.push('No rating: set the trip rating of the fuse or breaker')
+  if (load.missingVoltage) {
+    parts.push(load.missingSupply
+      ? 'No supply: this circuit is not wired back to a battery or a source, so its voltage is unknown'
+      : 'No voltage: set the nominal voltage on the supply')
+  }
+  if (load.missingRating) {
+    parts.push(load.unprotected
+      ? 'No fuse or breaker: nothing to compare the load with'
+      : 'No rating: set the trip rating of the fuse or breaker')
+  }
   return parts.length ? parts.join('. ') : null
 }
-

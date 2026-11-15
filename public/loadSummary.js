@@ -49,7 +49,7 @@ export const BADGE_HELP = {
 export const LEGEND = [
   ['over rating', BADGE_HELP['over rating']],
   ['ok', BADGE_HELP.ok],
-  ['incomplete', 'Voltage or rating is missing, so no check can be made.'],
+  ['incomplete', 'The voltage, the supply or the fuse or breaker rating is missing, so no check can be made.'],
   ['measured', BADGE_HELP.measured],
   ['estimate', BADGE_HELP.estimate]
 ]

@@ -145,6 +145,34 @@ test('incompleteReason says what is missing and what to do', () => {
   assert.equal(incompleteReason(fine), null)
 })
 
+test('incompleteReason tells a missing supply from a supply without a voltage', () => {
+  const withSupply = circuit(['d1'], { voltage: null })
+  withSupply.derived.supplyDeviceIds = ['battery']
+  const a = calculateCircuitLoad(withSupply, byId(device('d1', 20)))
+  assert.equal(a.missingSupply, false)
+  assert.equal(incompleteReason(a), 'No voltage: set the nominal voltage on the supply')
+  const noSupply = circuit(['d1'], { voltage: null })
+  noSupply.derived.supplyDeviceIds = []
+  const b = calculateCircuitLoad(noSupply, byId(device('d1', 20)))
+  assert.equal(b.missingSupply, true)
+  assert.equal(incompleteReason(b), 'No supply: this circuit is not wired back to a battery or a source, so its voltage is unknown')
+  // a supply that is found but has a voltage is never reported missing
+  const fed = circuit(['d1'], { voltage: 12 })
+  fed.derived.supplyDeviceIds = []
+  assert.equal(calculateCircuitLoad(fed, byId(device('d1', 20))).missingSupply, false)
+})
+
+test('incompleteReason says an unprotected circuit has no fuse or breaker, not that a rating is missing', () => {
+  const c = circuit(['d1'], { ratingA: null })
+  c.derived.unprotected = true
+  const load = calculateCircuitLoad(c, byId(device('d1', 20)))
+  assert.equal(load.unprotected, true)
+  assert.equal(incompleteReason(load), 'No fuse or breaker: nothing to compare the load with')
+  const protectedNoRating = circuit(['d1'], { ratingA: null })
+  protectedNoRating.derived.unprotected = false
+  assert.equal(incompleteReason(calculateCircuitLoad(protectedNoRating, byId(device('d1', 20)))), 'No rating: set the trip rating of the fuse or breaker')
+})
+
 test('every badge has a short tooltip and a legend entry', () => {
   for (const name of ['over rating', 'ok', 'measured', 'estimate']) assert.ok(BADGE_HELP[name], name)
   assert.deepEqual(LEGEND.map(([n]) => n), ['over rating', 'ok', 'incomplete', 'measured', 'estimate'])

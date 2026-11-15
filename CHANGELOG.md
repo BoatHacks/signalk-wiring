@@ -7,6 +7,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The Load Summary says what is really missing on an incomplete circuit. A circuit that is not wired back to any battery or source now reads "No supply: this circuit is not wired back to a battery or a source, so its voltage is unknown" (it used to ask for a nominal voltage on a supply that does not exist), and a circuit with no fuse or breaker reads "No fuse or breaker: nothing to compare the load with" instead of asking for a trip rating. The summary rows of `GET /load-summary` carry the same texts and two new flags, `missingSupply` and `unprotected`.
+
 - The Dashboard no longer lists the devices that have no meter under Live power in and out. Under the battery reading it now shows the numbers behind it: each bank's voltage, current and power, the net power into or out of the batteries, and input minus output.
 - In the Dashboard's Needs attention card, every cable and bus on the list says why: a cable that is too small or drops too much voltage gives the reason in a sentence, a check that cannot be made says what is missing, and a bus lists each of its checks that is not ok with the first line of its reasoning.
 
