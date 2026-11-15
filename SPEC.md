@@ -449,6 +449,26 @@ special permission. Only commands and calibration runs go through the plugin.
 
 A dedicated plugin webapp, reached from the SignalK admin UI, providing:
 
+- A Dashboard, the first tab and the page the app opens on (plan 0038,
+  issue #24): statistics (counts of devices by role, cables, circuits,
+  conduits, zones, schematic pages, floorplans and backbones, total cable
+  length with how many cables have none, protected and unprotected circuits,
+  installed battery capacity in Ah and Wh, the summed load of the consumers,
+  and what is still missing: cables without gauge, length or voltage,
+  devices without ratings, the share of devices on a floorplan and on a
+  schematic); a "Needs attention" overview (the counts of the cable and bus
+  checks, the five worst cables and three worst buses, circuits with no
+  protection, cables in no circuit, devices placed on no plan or schematic,
+  schematic pages with overlapping devices), advisory and linked to the
+  records; live power in and out with the battery's net flow beside them;
+  battery banks (voltage, charge, current, time remaining); the switchable
+  consumers that are on. Live data comes over the one shared stream at most
+  every 5 seconds and pauses while the browser tab is hidden. Readings older
+  than 60 seconds are greyed and left out of sums; with no stream or no value
+  a card says "no live data", never zero. A Live switch (on by default,
+  remembered per browser) turns the stream off. Last-hour sparklines come from
+  the server's history routes when a history provider is installed, and are
+  hidden when none answers. The Dashboard only reads: it sends no commands.
 - Browse/search circuits, cables, and devices (by name, zone, or
   status).
 - A Cables tab with the cable form, DC first: From (supply side) and To
@@ -881,6 +901,20 @@ The screens (plan 0037, steps 3 to 5):
   are used by the cable checks, are validated (a bad value falls back to the
   default) and reach the webapp through the `wiringSettings` resource as
   `voltageDropLimitCritical` and `voltageDropLimitNormal`.
+- **Dashboard inputs** and **Dashboard outputs**: two lists of at most 12
+  entries each, shown in the admin UI as arrays of small forms and in the
+  order entered. An entry is `{ label, path, unit, voltage, voltagePath }`:
+  label 1 to 40 characters, a path of dotted SignalK names, unit `W` or `A`,
+  and for `A` an optional fixed voltage (1 to 100) or voltage path that turns
+  amps into watts (an `A` entry with neither is shown as "no voltage" and left
+  out of the sum). A reading counts by its size, whatever its sign. Bad entries
+  are dropped when the settings are resolved, with a note in the plugin status.
+  A filled list replaces the automatic rule on its side; an empty list falls
+  back to the meter paths on devices (sources and charging converters for the
+  input; the first trustworthy meter of each consumer for the output, each
+  meter once and a meter that sits inside another listed meter's reach not
+  added again). Served through `wiringSettings` as `dashboardInputs` and
+  `dashboardOutputs`.
 
 Everything else (zones, circuit/device names, voltage, breaker rating,
 rated power, SignalK path) is free-form user data, not plugin

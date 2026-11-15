@@ -7,6 +7,19 @@ to someone else doesn't depend on the current owner being present.
 
 ## Features
 
+- **Dashboard**: the first tab and the page the app opens on. Statistics,
+  what needs attention (the cable and bus checks, circuits with no
+  protection, cables in no circuit, unplaced devices, overlapping schematic
+  devices), live power in and out with the battery's net flow, battery banks and
+  the switches that are on, each entry linked to its record. Live data uses the
+  one shared stream at most every 5 seconds, pauses while the browser tab is
+  hidden and can be turned off with a switch; with no stream or no value it
+  says "no live data", never zero. Small last-hour graphs appear when the
+  server has a history provider. The plugin options **Dashboard inputs** and
+  **Dashboard outputs** list the SignalK paths of your own sources (Shore,
+  Solar, Total load ...), in watts or in amps with a voltage; empty lists fall
+  back to the meter paths set on devices. The old address `#/` now opens the
+  Dashboard; the Circuits tab is at `#/circuits`.
 - **Enclosures**: breaker boxes and panels can hold other devices, so only
   the box goes on the floorplan; on a schematic the box opens its own inside
   page.

@@ -156,3 +156,30 @@ These are my proposals, to be reviewed before the build:
 ## Open questions
 
 None. The decisions are above; the defaults are for review.
+
+## Decisions made while building
+
+- Readings of sources and charging converters in the automatic input come from
+  the device's `meterPath` and `meterUnit`. A converter counts as charging when
+  its type matches solar, MPPT, alternator, charger or DC-DC. Amps use the
+  device's nominal (else DC rated) voltage.
+- A reading counts by its size, so a sign convention on a meter never makes an
+  input negative.
+- In the automatic output, a chosen meter is left out when every consumer behind
+  it is also behind another chosen meter (an outer meter already contains it).
+- The summed consumer load counts every consumer once (measured peak, else
+  rating); the Load Summary shows per-circuit totals, where a device on two
+  circuits counts twice.
+- Completeness of gauge and voltage looks at power cables only; a cable's
+  voltage is that of a circuit it serves.
+- "Unplaced devices" means a device on no floorplan and on no schematic page
+  (inside a placed enclosure counts as placed).
+- The router no longer special-cases the default tab: the Dashboard is
+  `#/dashboard`, and an empty hash or `#/` opens it.
+- The socket opens after `GET /live` has answered (or failed), so the plugin's
+  paths and the Dashboard's extra paths go out in one subscription.
+- The battery net flow uses the SignalK sign (positive current flows out of the
+  battery) and is current times bank voltage, counted once per current path.
+- Sparklines are drawn for every entry of both sides and each bank's charge.
+- The check against the live demo server and the comment on issue #24 were left
+  to the caller.

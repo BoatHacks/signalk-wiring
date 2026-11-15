@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- A Dashboard (issue #24), the first tab and the page the app opens on. Statistics (counts, total cable length, protected circuits, battery capacity, summed consumer load, what is still missing), a "Needs attention" overview built on the cable and bus checks, live power in and out with the battery's net flow, battery banks, the switches that are on, and last-hour sparklines from the server's history routes when a history provider is installed. Live data uses the one shared stream every 5 seconds, pauses while the browser tab is hidden, greys readings older than a minute and leaves them out of sums, and says "no live data" rather than zero. A Live switch is remembered per browser. Every entry links to its record.
+- Plugin options `dashboardInputs` and `dashboardOutputs` (issue #24): up to 12 entries each of label, SignalK path, unit (W or A) and, for amps, a voltage or a voltage path. They are validated when the settings load (bad entries are dropped and noted in the plugin status), appear in the admin UI as lists of small forms, are served through the `wiringSettings` resource and are in the OpenAPI description. An empty list falls back to the meter paths on devices.
+- `useLive` takes options for extra paths, the update period and pausing while the browser tab is hidden.
+
+### Changed
+
+- The address `#/` now opens the Dashboard instead of the Circuits tab; the Circuits tab is `#/circuits`.
+
 ### Fixed
 
 - The documented minimum signalk-server version for read-only routes and the OpenAPI description was 2.36. The server source shows `router.access` and plugin `getOpenApi` are present from 2.31.0, so the docs now say 2.31. (No code change: both are feature-detected.)

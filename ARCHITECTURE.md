@@ -226,6 +226,25 @@ with no circuit becomes `removed` and is reactivated if its key returns.
 Each change is a normal change-log entry. `cable_ids` on the record keeps
 the cables it had at the last sync to make that overlap match possible.
 
+### 2.3.2 Dashboard (plan 0038)
+
+The Dashboard is webapp only; the plugin adds two settings. `src/settings.js`
+validates `dashboardInputs` and `dashboardOutputs` (label, dotted SignalK
+path, unit W or A, voltage 1 to 100, voltage path, at most 12 entries; bad
+entries dropped, reported by `settingsWarnings` and written to the plugin
+status in `index.js`), `plugin.schema` declares them as arrays of small forms,
+and `wiringSettings` serves them. In the webapp, `public/dashboard.js` is the
+pure part (statistics, the failed-checks overview built on `checkAll` and
+`GET /buses`, live input and output sums, battery cards, switches that are on,
+the localStorage Live preference), `public/history.js` is the history client
+(the provider check at `/signalk/v2/api/history/_providers`, one request per
+path to `/values` for the last hour at 60 s, sparkline geometry, pacing: three
+requests at a time, refreshed every 5 minutes, never while hidden) and
+`public/dashboardView.js` draws the page. It reuses the one `useLive` hook
+(options `extraPaths`, `period`, `pauseWhenHidden`), so there is one WebSocket
+and one subscription, opened once `GET /live` has answered. The router's
+default tab is `dashboard`.
+
 ### 2.4 Webapp (`public/`)
 
 A small single-page app built on Preact + `htm` (JSX-like templates
@@ -749,6 +768,9 @@ signalk-wiring/
     zones.js                   # tags parsing, zone and tag filters
     floorplan.js               # pure geometry: calibration, projection, routes
     live.js                    # Live mode: states, switching, stream subscription
+    dashboard.js               # Dashboard: pure statistics, checks overview, live sums
+    dashboardView.js           # Dashboard page
+    history.js                 # history client and sparkline geometry
     liveMarks.js               # Live mode: lock, reading, legend
     calibrate.js               # the Calibrate load dialog
     measured.js                # measured values beside the rating, load figures
