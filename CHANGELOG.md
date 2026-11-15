@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-15
+
 ### Added
 
 - NMEA 2000 backbones (issue #4, the first part). A backbone is one record with its taps (the drop of each device with port, drop length, place along the backbone and an optional power feed), a cable class, length, terminators and supply rating, served as the `wiringBackbones` resource and documented in the OpenAPI description. Devices get a LEN (load equivalency number). The bus checks are advisory (backbone length for its cable class, each drop, all drops together, device count, exactly two terminators, bus current against the supply rating, a power feed present, and "cannot check" naming what is missing) with limits and cited sources in `docs/bus-checks.md`, and `GET /buses` returns each backbone with its derived data and checks. The load of a powered bus is added to the circuit its power feed joins, so the Load Summary and the cable checks count it. Database schema version 18.
