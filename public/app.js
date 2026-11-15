@@ -12,7 +12,7 @@ import { duplicateDevicePayload, duplicateCablePrefill } from './duplicate.js'
 import {
   CABLE_KINDS, CONDUCTOR_LABELS, kindByValue, defaultNegativeLanding, negativeLandingCandidates, needsTerminal,
   terminalOptions, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle,
-  LINK_CHOICES, linkApplies, linkKind, resolveLink
+  LINK_CHOICES, linkApplies, linkKind, resolveLink, PROTOCOLS, protocolLabel
 } from './cableForm.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
@@ -41,7 +41,7 @@ import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
-import { NMEA2000_PORT, deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState } from './deviceFields.js'
+import { NMEA2000_PORT, deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState, terminalPresetList, newPresetTerminals } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import {
   CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
@@ -370,6 +370,11 @@ function TerminalsEditor ({ value, role, type, onChange }) {
       <div class="row-actions">
         <button type="button" onClick=${add}>+ Add terminal</button>
         ${preset && value.length === 0 && html`<button type="button" onClick=${() => onChange(preset.terminals)}>Use standard ports for ${preset.label}</button>`}
+        <select value="" data-testid="terminal-preset" aria-label="Add standard ports"
+          onChange=${(e) => { const p = terminalPresetList()[Number(e.target.value)]; e.target.value = ''; if (p) onChange([...value, ...newPresetTerminals(value, p.terminals)]) }}>
+          <option value="">Add standard ports…</option>
+          ${terminalPresetList().map((p, i) => html`<option value=${i} key=${p.label}>${p.label}</option>`)}
+        </select>
       </div>
     </div>
   `
@@ -1273,6 +1278,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
         length: '',
         lengthUnit: settings.defaultLengthUnit,
         cableLabel: '',
+        protocol: '',
         zoneId: '',
         tags: [],
         notes: '',
@@ -1444,6 +1450,13 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
       </div>
       <label class="form-field"><span>Cable label</span>
         <input type="text" value=${values.cableLabel} onInput=${(e) => set('cableLabel', e.target.value)} />
+      </label>
+      <label class="form-field"><span>Protocol</span>
+        <select value=${values.protocol || ''} data-testid="cable-protocol" onChange=${(e) => set('protocol', e.target.value)}>
+          <option value="">None</option>
+          ${PROTOCOLS.map((p) => html`<option value=${p.value} key=${p.value}>${p.label}</option>`)}
+        </select>
+        <small class="hint">A label for signal cables: it colours the cable on schematics and the floorplan. A bus with taps is better recorded on the Buses tab.</small>
       </label>
       <label class="form-field"><span>Zone</span>
         <${ZoneField} value=${values.zoneId} onChange=${(v) => set('zoneId', v)} />
@@ -1720,7 +1733,7 @@ function CablesList () {
                   <td><${DeviceLink} id=${cable.fromDeviceId} names=${deviceNameById} devices=${deviceById} /></td>
                   <td><${DeviceLink} id=${cable.toDeviceId} names=${deviceNameById} devices=${deviceById} /></td>
                   <td>${(cable.conductors || []).length === 0 ? 'Positive' : cable.conductors.map((c) => CONDUCTOR_LABELS[c.conductor] + (c.color ? ` (${c.color})` : '')).join(', ')}${cable.link ? html` <span class="badge link-badge" data-testid="link-badge">${cable.link}</span>` : ''}</td>
-                  <td>${cable.cableLabel || '-'}</td>
+                  <td>${cable.cableLabel || '-'}${cable.protocol && html` <span class=${`badge proto-badge p-${cable.protocol}`} data-testid="protocol-badge">${protocolLabel(cable.protocol)}</span>`}</td>
                   <td>${(cable.conduitIds || []).map((id) => conduitNameById.get(id) || '?').join(' > ') || '-'}</td>
                   <td>${formatGauge(cable.gauge, cable.gaugeUnit)}</td>
                   <td>${cable.length ? `${cable.length} ${cable.lengthUnit || ''}` : '-'}</td>

@@ -5,7 +5,7 @@ export const TYPE_SUGGESTIONS = {
   consumer: [
     'Navigation light', 'Cabin light', 'Anchor light', 'Bilge pump', 'Freshwater pump',
     'Refrigerator', 'Chartplotter', 'VHF radio', 'Autopilot', 'Anchor windlass',
-    'Fan', 'Heater', 'Instrument', 'Radar', 'AIS transceiver', 'Stereo', 'Water heater'
+    'Fan', 'Heater', 'Instrument', 'NMEA 2000 device', 'Radar', 'AIS transceiver', 'Stereo', 'Water heater'
   ],
   source: [
     'Solar panel', 'Shore power inlet', 'Generator', 'Alternator', 'Wind generator',

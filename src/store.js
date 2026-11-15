@@ -24,7 +24,7 @@ const TABLES = {
     table: 'wire_runs',
     columns: [
       'id', 'from_device_id', 'to_device_id', 'gauge', 'gauge_unit',
-      'length', 'length_unit', 'zone', 'cable_label', 'switch_ref', 'link',
+      'length', 'length_unit', 'zone', 'cable_label', 'switch_ref', 'link', 'protocol',
       'route', 'zone_id', 'tags', 'status', 'notes'
     ]
   },
@@ -529,9 +529,18 @@ const MIGRATIONS = [
         UNIQUE (schematic_id, backbone_id))`)
       db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_backbones_schematic ON schematic_backbones (schematic_id)')
     }
+  },
+  {
+    version: 20,
+    description: 'plan 0037: wire_runs + protocol (NMEA 2000 cable, Seatalk-1, NMEA 0183, sensor, other; null for none)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      if (!has('wire_runs', 'protocol')) db.exec('ALTER TABLE wire_runs ADD COLUMN protocol TEXT')
+    }
   }
 ]
 
+const CABLE_PROTOCOLS = ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'other']
 const BACKBONE_CLASSES = ['micro', 'mini', 'maxi']
 const ZONE_SHAPE_KINDS = ['rect', 'oval', 'polygon']
 const RATING_COLUMNS = ['rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v']
@@ -735,7 +744,7 @@ class Store {
     if (kind === 'device') row = this._checkLen(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true))))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'backbone') row = this._checkBackbone(kind, row, true)
-    if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null); row = this._checkGauge(row, null) }
+    if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkProtocol(this._checkLink(row, null)); row = this._checkGauge(row, null) }
     if (kind === 'schematic') { row.name = this._checkSchematicName(row.name); row = this._checkEnclosureId(row, null) }
     const lists = kind === 'schematic' ? this._checkSchematicLists(row) : null
     const children = this._childrenOf(kind)
@@ -1303,7 +1312,7 @@ class Store {
     }
     if (kind === 'wireRun') {
       this._checkWireRunEnds(patch)
-      patch = this._checkGauge(this._checkLink(patch, existing), existing)
+      patch = this._checkGauge(this._checkProtocol(this._checkLink(patch, existing)), existing)
     }
 
     const { table, columns } = TABLES[kind]
@@ -1560,6 +1569,14 @@ class Store {
       out = { ...out, monitor_device_id: v }
     }
     return out
+  }
+
+  // The optional protocol label of a cable (plan 0037): one of CABLE_PROTOCOLS or null.
+  _checkProtocol (fields) {
+    if (!('protocol' in fields)) return fields
+    const v = fields.protocol === '' || fields.protocol === undefined ? null : fields.protocol
+    if (v !== null && !CABLE_PROTOCOLS.includes(v)) throw new Error(`protocol must be one of: ${CABLE_PROTOCOLS.join(', ')}`)
+    return { ...fields, protocol: v }
   }
 
   // A link type only applies to a cable between two storage devices. `existing`

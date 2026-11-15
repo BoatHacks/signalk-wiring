@@ -37,6 +37,11 @@
   --wire-neutral: #2f6fb5;
   --wire-earth: #4a9a3a;
   --wire-signal: #d9600a;
+  --proto-nmea2000: #1a6fb0;
+  --proto-seatalk1: #8a3fb0;
+  --proto-nmea0183: #b0891a;
+  --proto-sensor: #2f8f6a;
+  --proto-other: #6b6b6b;
   --on-dot: #fff;
   --on-dot-light: #1c1c1c;
   --live-on: #2f8a2f;
@@ -80,6 +85,11 @@
   --wire-neutral: #a15850;
   --wire-earth: #c06657;
   --wire-signal: #e8a030;
+  --proto-nmea2000: #d98a6f;
+  --proto-seatalk1: #c0788f;
+  --proto-nmea0183: #cf9a52;
+  --proto-sensor: #b0a05a;
+  --proto-other: #a07a70;
   --on-dot: #fbdbd3;
   --on-dot-light: #2a0f0b;
   --wire-highlight: #ffb3a6;
@@ -1028,3 +1038,20 @@ main:has(.schematic-editor) { max-width: none; }
 .bus-line.active { stroke-opacity: 1; }
 .bus-tap circle { fill: var(--surface); stroke: var(--wire-signal); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .bus-tap circle.feed { fill: var(--warn); }
+
+/* Cable protocol label (plan 0037): the colour of a signal cable by what it carries */
+.sch-wire.p-nmea2000 .sch-wire-line, .sch-wire.p-nmea2000 .sch-wire-pair { stroke: var(--proto-nmea2000); }
+.sch-wire.p-seatalk1 .sch-wire-line, .sch-wire.p-seatalk1 .sch-wire-pair { stroke: var(--proto-seatalk1); }
+.sch-wire.p-nmea0183 .sch-wire-line, .sch-wire.p-nmea0183 .sch-wire-pair { stroke: var(--proto-nmea0183); }
+.sch-wire.p-sensor .sch-wire-line, .sch-wire.p-sensor .sch-wire-pair { stroke: var(--proto-sensor); }
+.sch-wire.p-other .sch-wire-line, .sch-wire.p-other .sch-wire-pair { stroke: var(--proto-other); }
+.run-line.p-nmea2000:not(.active):not(.highlighted) { stroke: var(--proto-nmea2000); stroke-opacity: 0.85; }
+.run-line.p-seatalk1:not(.active):not(.highlighted) { stroke: var(--proto-seatalk1); stroke-opacity: 0.85; }
+.run-line.p-nmea0183:not(.active):not(.highlighted) { stroke: var(--proto-nmea0183); stroke-opacity: 0.85; }
+.run-line.p-sensor:not(.active):not(.highlighted) { stroke: var(--proto-sensor); stroke-opacity: 0.85; }
+.run-line.p-other:not(.active):not(.highlighted) { stroke: var(--proto-other); stroke-opacity: 0.85; }
+.proto-badge.p-nmea2000 { color: var(--proto-nmea2000); border-color: var(--proto-nmea2000); }
+.proto-badge.p-seatalk1 { color: var(--proto-seatalk1); border-color: var(--proto-seatalk1); }
+.proto-badge.p-nmea0183 { color: var(--proto-nmea0183); border-color: var(--proto-nmea0183); }
+.proto-badge.p-sensor { color: var(--proto-sensor); border-color: var(--proto-sensor); }
+.proto-badge.p-other { color: var(--proto-other); border-color: var(--proto-other); }

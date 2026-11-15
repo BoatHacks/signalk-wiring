@@ -89,6 +89,21 @@ export function terminalOptions (device, conductor) {
 
 const blank = (v) => v === '' || v === null || v === undefined
 
+// What a cable carries (plan 0037): a label with a colour on the schematic and
+// the floorplan. The values are the ones the server accepts.
+export const PROTOCOLS = [
+  { value: 'nmea2000', label: 'NMEA 2000 cable' },
+  { value: 'seatalk1', label: 'Seatalk-1' },
+  { value: 'nmea0183', label: 'NMEA 0183' },
+  { value: 'sensor', label: 'Sensor' },
+  { value: 'other', label: 'Other signal' }
+]
+
+export function protocolLabel (value) {
+  const found = PROTOCOLS.find((p) => p.value === value)
+  return found ? found.label : ''
+}
+
 // Link type between two batteries (plan 0020): a parallel link carries
 // positive and negative, a series link is a single positive conductor.
 export const LINK_CHOICES = [
@@ -134,6 +149,7 @@ export function buildCablePayload (values, { defaults = false } = {}) {
   out.zoneId = blank(values.zoneId) ? null : values.zoneId
   if (values.tags !== undefined) out.tags = values.tags
   if (values.link !== undefined) out.link = values.link || null
+  if (values.protocol !== undefined) out.protocol = values.protocol || null
 
   if (values.kind === 'custom') {
     out.conductors = values.existingConductors || []
@@ -188,7 +204,8 @@ export function cableToValues (cable) {
     zoneId: cable.zoneId || '',
     tags: cable.tags || [],
     notes: cable.notes || '',
-    link: cable.link || null
+    link: cable.link || null,
+    protocol: cable.protocol || ''
   }
 }
 

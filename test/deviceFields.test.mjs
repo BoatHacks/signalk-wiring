@@ -92,3 +92,16 @@ test('an enclosure has no terminals, rated power or current field', () => {
   assert.equal(deviceFieldVisible('ratedPowerW', { role: 'consumer' }), true)
   assert.equal(deviceFieldVisible('current', { role: 'distribution' }), true)
 })
+
+test('presets can be listed and added without repeating a port (plan 0037)', async () => {
+  const { terminalPresetList, newPresetTerminals, deviceFieldVisible, NMEA2000_PORT } = await import('../public/deviceFields.js')
+  const list = terminalPresetList()
+  const n2k = list.find((p) => p.label === 'NMEA 2000 device')
+  assert.ok(n2k)
+  assert.deepEqual(n2k.terminals.map((t) => [t.name, t.conductor, t.port]), [[NMEA2000_PORT, 'signal', NMEA2000_PORT]])
+  assert.deepEqual(newPresetTerminals([{ name: 'nmea 2000' }], n2k.terminals), [])
+  assert.equal(newPresetTerminals([{ name: 'DC +' }], n2k.terminals).length, 1)
+  // the terminals editor shows for a consumer whose type has standard ports
+  assert.equal(deviceFieldVisible('terminals', { role: 'consumer', type: 'NMEA 2000 device', terminals: [] }), true)
+  assert.equal(deviceFieldVisible('terminals', { role: 'consumer', type: 'Fan', terminals: [] }), false)
+})

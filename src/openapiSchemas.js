@@ -134,6 +134,7 @@ const schemas = {
     cableLabel: nullable(str('The label printed on the cable.')),
     switchRef: nullable(str('Reference of the switch or breaker position that controls it.')),
     link: nullable(str('Only on cables between two batteries: "series" or "parallel" (the default).', { enum: ['series', 'parallel'] })),
+    protocol: nullable(str('What the cable carries, a label only: an NMEA 2000 cable, Seatalk-1, NMEA 0183, a sensor or other. Empty for none.', { enum: ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'other'] })),
     route: nullable(list(ref('RoutePoint'), 'Path of the cable through the boat, as points.')),
     tags: nullable(list(str('A tag.'), 'Free-text tags.')),
     status: status(),

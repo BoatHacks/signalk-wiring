@@ -572,7 +572,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         return ownRoute && key >= 0 && isActive ? pxFor('waypoint', key, p) : (planShowsPoint(plan, p) ? pointToPx(cal, plan.view, p) : null)
       })
       for (const seg of layers.cables ? visibleSegments(pxs) : []) {
-        runLines.push({ id: run.id, dash: wireLineStyle(run).dasharray, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' '), pts: seg })
+        runLines.push({ id: run.id, protocol: run.protocol || null, dash: wireLineStyle(run).dasharray, active: isActive, highlighted: inCircuit, points: seg.map((p) => p.join(',')).join(' '), pts: seg })
       }
       addContinuations(run.id, points)
       if (isActive && ownRoute) {
@@ -816,12 +816,12 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
 
         ${runLines.map((l, i) => l.dash ? uncoveredPieces(i, l.pts, runBundles.covered).map((piece, n) => html`
           <polyline key=${'g' + l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
-            class="run-line run-gap ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
+            class="run-line run-gap ${l.protocol ? 'p-' + l.protocol : ''} ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
             stroke-width=${unit * (l.active ? 0.9 : 0.5)} />
         `) : null)}
         ${runLines.map((l, i) => uncoveredPieces(i, l.pts, runBundles.covered).map((piece, n) => html`
           <polyline key=${l.id + ':' + i + ':' + n} points=${piece.map((p) => p.join(',')).join(' ')} fill="none"
-            class="run-line ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
+            class="run-line ${l.protocol ? 'p-' + l.protocol : ''} ${l.active ? 'active' : ''} ${l.highlighted || bundleChosen('run', l.id) ? 'highlighted' : ''} ${focus && !focus.runIds.has(l.id) ? 'faded' : ''}"
             stroke-width=${unit * (l.active ? 0.9 : 0.5)}
             stroke-dasharray=${scaledDash(l.dash, unit * (l.active ? 0.9 : 0.5) / 3) || undefined} />
         `))}

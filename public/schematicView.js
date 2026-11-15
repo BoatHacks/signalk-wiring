@@ -1556,7 +1556,7 @@ function WireShape ({ wire, deviceName, selected, dim, lit, mark }) {
   const style = G.wireLineStyle(wire.cable)
   const d = G.pathToDWithBridges(wire.path, wire.bridges)
   const paired = types.length > 1 ? G.pathToD(G.offsetPath(wire.path, 4)) : null
-  const cls = `sch-wire${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
+  const cls = `sch-wire${wire.cable && wire.cable.protocol ? ' p-' + wire.cable.protocol : ''}${selected ? ' selected' : ''}${dim ? ' dim' : ''}${lit ? ' lit' : ''}`
   return html`
     <g class=${cls} data-wire=${wire.id} data-current=${style.current || ''}>
       ${style.dasharray && html`<path d=${d} class="sch-wire-line sch-wire-gap c-${types[0]}" />`}

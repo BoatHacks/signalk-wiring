@@ -27,7 +27,8 @@ export function deviceFieldVisible (key, values, context = {}) {
     case 'terminals':
       // An enclosure has none: cables land on what is inside it.
       if (role === 'enclosure') return false
-      return !['consumer', 'source'].includes(role) || (Array.isArray(values.terminals) && values.terminals.length > 0)
+      // A type with standard ports (an NMEA 2000 device) shows it too, so the ports can be edited.
+      return !['consumer', 'source'].includes(role) || (Array.isArray(values.terminals) && values.terminals.length > 0) || Boolean(terminalPreset(values.type))
     default: return true
   }
 }
@@ -97,6 +98,18 @@ const TERMINAL_PRESETS = [
   { match: /^\s*inverter\s*$/i, label: 'Inverter', terminals: () => [...dc('DC in'), ...ac('AC out')] },
   { match: /^\s*battery charger\s*$/i, label: 'Battery charger', terminals: () => [...ac('AC in'), ...dc('DC out')] }
 ]
+
+// Every preset, to pick from when adding terminals (plan 0037): its label and
+// its terminals as form rows.
+export function terminalPresetList () {
+  return TERMINAL_PRESETS.map((p) => ({ label: p.label, terminals: p.terminals().map((t) => ({ ...t, voltage: '' })) }))
+}
+
+// The rows of `presetTerminals` that `existing` does not have yet, by name.
+export function newPresetTerminals (existing, presetTerminals) {
+  const have = new Set((existing || []).map((t) => String(t.name || '').trim().toLowerCase()).filter(Boolean))
+  return presetTerminals.filter((t) => !have.has(String(t.name).trim().toLowerCase()))
+}
 
 // The standard terminals for a device type, or null when there is none.
 // Returned as form rows (voltage is an empty string).

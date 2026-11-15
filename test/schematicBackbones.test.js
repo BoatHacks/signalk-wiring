@@ -14,9 +14,9 @@ function setup () {
   return { store, dev, bus, page }
 }
 
-test('the schema is at version 19 and the placement table exists', () => {
+test('the schema is at version 20 and the placement table exists', () => {
   const { store } = setup()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 19)
+  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
   assert.ok(store.db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'schematic_backbones'").get())
 })
 
