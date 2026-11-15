@@ -99,7 +99,11 @@ floorplan shows is now decided by demo mode.
 ### 5. The web app
 
 - `showFloorplan` from the settings keeps hiding the tab, its route and the
-  hints as today. A small "Demo" marker is not part of this plan.
+  hints as today.
+- In demo mode the header shows a subdued " - demo mode, some features might not
+  work as expected" right after the "Wiring Documentation" title (from the
+  served `demoMode` setting; smaller, muted text in both themes, wrapping on a
+  phone; the text is not shown outside demo mode).
 
 ### 6. Removing the plugin option
 
@@ -142,6 +146,7 @@ These are my proposals, to be reviewed before the build:
       check, settings, schema, OpenAPI, tests).
 - [ ] The restore, with tests.
 - [ ] The GitHub check and update, with tests.
+- [ ] The header note in demo mode (web app).
 - [ ] The start sequence in `index.js`, docs (README, SPEC, ARCHITECTURE,
       demo README), CHANGELOG and a comment on issue #20.
 
@@ -149,12 +154,12 @@ These are my proposals, to be reviewed before the build:
 
 - New `src/demoMode.js`, `src/demoSource.js`, `src/demoRestore.js`; `index.js`,
   `src/settings.js`, `src/openapiSchemas.js`, `src/openapiMeta.js`,
-  `public/settings.js`, tests, `README.md`, `SPEC.md`, `ARCHITECTURE.md`,
+  `public/settings.js`, `public/app.js`, `public/style.css`, tests, `README.md`, `SPEC.md`, `ARCHITECTURE.md`,
   `demo/README.md`, `CHANGELOG.md`.
 
 ## Follow-ups (not in this plan)
 
-- A visible "Demo" marker in the web app, and a read-only demo mode.
+- A read-only demo mode.
 - Fetching a specific release instead of `main`.
 
 ## Open questions
