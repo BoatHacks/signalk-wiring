@@ -180,6 +180,43 @@ full reasoning. **Switching and calibration** need a read-write login: the
 plugin sends the switch command, so it can refuse a never-remote device, ask
 for confirmation and log each action.
 
+## Using the API with an AI assistant
+
+The plugin publishes a full OpenAPI 3.0.3 description of its API, so a bridge
+such as the signalk-mcp-server plugin can read it and offer the wiring data to an
+AI assistant. There is no MCP server in this plugin: the description is the
+interface. How a given bridge discovers and reads it has not been tried here.
+
+- **Address.** The SignalK server serves the document at
+  `/skServer/openapi/plugins/signalk-wiring` (for example
+  `http://boat.local:3000/skServer/openapi/plugins/signalk-wiring`) and lists it
+  in the admin UI under API docs as `plugins/signalk-wiring`. It needs
+  signalk-server 2.36 or later and is served for the installed plugin version.
+- **Login.** Log in with `POST /signalk/v1/auth/login` (a JSON body with
+  `username` and `password`) and send the returned `token` as
+  `Authorization: Bearer <token>`. Create a read-only user for the assistant if
+  it only needs to look.
+- **What is offered.** Every read and write operation: the resource API for
+  devices, cables, circuits, conduits, zones, plans, schematic pages and the
+  settings (list, read, create or replace, remove), the plugin routes (version,
+  plan drawings, device icons, derived data and warnings, circuit diagrams,
+  attachments, the change log, the switching table, merge zones, purge), and
+  four read-only query routes made for assistants:
+  `GET /plugins/signalk-wiring/search` (find devices and cables by words, ranked,
+  with why each matched), `.../trace/{deviceId}` (what feeds a device and what it
+  feeds, with the protecting fuse or breaker), `.../load-summary` (the numbers and
+  warnings of the Load Summary tab) and `.../checks` (the cable check verdicts
+  with their reasoning). Every operation has a plain-English description,
+  parameters, error cases and, for the main ones, an example.
+- **Read-only and admin.** Every `GET` needs only a logged-in user of the
+  read-only level; every write (`PUT`, `POST`, `DELETE`, purge, uploads) needs the
+  admin login. The document marks each operation with its level.
+- **What is not offered.** Switching a relay (`POST /switch`) and steering
+  calibration runs are left out of the document on purpose, so an assistant
+  cannot act on the boat through it.
+- **Advisory.** The data is documentation of one boat's wiring, and the load and
+  cable checks are advice, not a safety guarantee.
+
 ## Why Node ≥ 22.13
 
 The plugin stores its data with Node's built-in `node:sqlite`, so there is

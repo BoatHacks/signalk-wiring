@@ -77,6 +77,35 @@ Registered via `registerWithRouter(router)`. Owns:
 - Diagram data (`GET /plugins/signalk-wiring/circuits/:id/diagram`) — a
   denormalized read (derived circuit + its cables, feed and negative return,
   + their devices) shaped for a diagram renderer.
+- Query routes (`src/query.js`, plan 0036): `search`, `trace/:deviceId`,
+  `load-summary` and `checks`, registered through the same read-only
+  registrar. They read the resources the webapp reads (the resource providers'
+  lists) and run the browser's own pure modules: `public/cableChecks.js` and
+  `public/loadCalc.js` (the load calculation, moved out of `loadSummary.js`,
+  which re-exports it) are ES modules, and this CommonJS code loads them with a
+  dynamic `import()`, which works from Node 22.13 (the plugin's minimum) because
+  `public/package.json` declares `"type": "module"`. One calculation serves both
+  sides, and `test/query.test.js` compares the route output with it on the demo
+  database and a small boat. The drop limits come from the plugin settings
+  (`registerRoutes` takes a settings getter). `trace` walks the positive cable
+  graph breadth first from the device (an enclosure stands for what it holds),
+  reports a loop as `cycle`, and takes the protecting device from the derived
+  circuits. `search` scores the fields of devices and cables per word.
+- The OpenAPI document (`src/openapi.js`, `src/openapiMeta.js`,
+  `src/openapiSchemas.js`; plan 0036): the plugin exports `getOpenApi()` next to
+  `registerWithRouter`, and the server publishes the document at
+  `/skServer/openapi/plugins/signalk-wiring`. `collectRoutes()` runs the route
+  registration against a recording router and adds the resource types, so the
+  list of paths and methods is generated and cannot miss a route; the table in
+  `openapiMeta.js` (keyed `METHOD path`) holds the summaries, descriptions for
+  assistants, parameters, bodies, responses and examples, and
+  `openapiSchemas.js` the record schemas. `EXCLUDED_OPERATIONS` lists the routes
+  left out on purpose (`POST /switch` and the calibration routes).
+  `test/openapi.test.js` fails for a route or resource type that is neither
+  documented nor excluded, for a description that names no route, for a broken
+  `$ref`, an operation without summary, responses or security, and for demo
+  records or examples that do not fit their schema (with a small checker, no
+  dependency). `servers` is `/` so the absolute paths are not prefixed.
 - Derivation leftovers (`GET /plugins/signalk-wiring/derived`, readonly
   access): the battery banks and the warnings that belong to no circuit.
 - Change log reads (`GET /plugins/signalk-wiring/changelog/:type/:id`), and
@@ -689,6 +718,10 @@ signalk-wiring/
   src/
     resources.js            # ResourceProvider implementation
     routes.js                # attachments, diagram data, changelog routes
+    query.js                 # search, trace, load summary and checks routes
+    openapi.js               # the OpenAPI document and getOpenApi
+    openapiMeta.js           # descriptions, parameters, examples per operation
+    openapiSchemas.js        # record schemas of the document
     liveRoutes.js            # live view, switching, calibration routes
     switchability.js         # pure: what can be switched, which meter measures it
     switching.js             # sending the switch command, flags, logging
@@ -704,7 +737,8 @@ signalk-wiring/
     router.js                # pure: hash routes (tab and open item) <-> state
     undoBar.js               # the Undo message, shared by lists and canvases
     import.js                 # CSV import: parsing, column mapping, UI
-    loadSummary.js             # panel load summary: calculation, UI
+    loadSummary.js             # panel load summary: UI
+    loadCalc.js                # the load calculation (shared with src/query.js)
     deviceTypes.js             # popular device types per role, dropdown options
     deviceIcons.js             # icon url, which images can be icons, iconChoice (own image, built-in, none)
     deviceIcon.js              # DeviceIcon, DeviceLabel, DeviceIconSvg: the shared icon components (plan 0032)

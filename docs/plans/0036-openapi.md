@@ -118,9 +118,9 @@ instead of raw lists.
 
 ## Implementation Steps
 
-- [ ] The query routes with tests.
-- [ ] The OpenAPI document and `getOpenApi`, with the contract tests.
-- [ ] README, SPEC.md, ARCHITECTURE.md, CHANGELOG.md, issue #7 comment and body.
+- [x] The query routes with tests.
+- [x] The OpenAPI document and `getOpenApi`, with the contract tests.
+- [x] README, SPEC.md, ARCHITECTURE.md, CHANGELOG.md, issue #7 comment and body.
 - [ ] Check the served document on the live server.
 
 ## Files to Create/Modify

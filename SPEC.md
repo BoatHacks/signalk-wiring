@@ -396,12 +396,42 @@ import is a deferred feature (see 10.2), not an MVP input source.
   device.
 - Who can read what: every `GET` route under `/plugins/signalk-wiring/`
   (attachment list and download, the circuit diagram, the change log, the
-  plan drawings, device icons, `derived`, `live`, calibration status and runs,
+  plan drawings, device icons, `derived`, `live`, `search`, `trace`,
+  `load-summary`, `checks`, calibration status and runs,
   `version`) is readable by any logged-in user, a read-only user included,
   where the server supports per-route access levels (signalk-server 2.36 and
   later), and by admins only otherwise. Every write (uploads, deletes,
   purges, zone merge, plan upload) stays admin-only; switching and
   calibration need a read-write login. No plugin option changes this.
+- Query routes (plan 0036, issue #7), all readonly access, for assistants and
+  dashboards: `GET /plugins/signalk-wiring/search?q=&kind=&zone=&role=&limit=`
+  finds devices and cables whose name, label, type, make and model, tags, zone,
+  SignalK path or notes match every word of `q` (or all records of a `zone` or
+  `role` when `q` is empty), ranked (exact name over word start over fragment),
+  each result with `kind` (`device` or `cable`), `id`, `name` and `why` it
+  matched; 25 results by default, 100 at most. `GET .../trace/:deviceId?direction=up|down|both`
+  follows the power cables toward the supply (`up`, against the from-to
+  direction) and toward the loads (`down`), listing devices and cables in order
+  of distance with the enclosures they sit in, and lists the circuits the device
+  is part of and the fuses or breakers that protect them; an enclosure stands for
+  what it holds, and a loop is reported as `cycle` with each device listed once.
+  `GET .../load-summary` returns, per active circuit, the same load figures,
+  status (`ok`, `incomplete`, `over-rating`) and reason as the Load Summary tab,
+  with the derivation warnings and the one-line cable check summary.
+  `GET .../checks` returns the cable check verdict and reasoning per cable and
+  the counts, using the voltage drop limits of the plugin settings (§7.x).
+  The load and check numbers come from the same pure modules as the webapp
+  (`public/loadCalc.js`, `public/cableChecks.js`).
+- The API description (plan 0036, issue #7): the plugin exports `getOpenApi()`,
+  so the SignalK server serves an OpenAPI 3.0.3 document at
+  `/skServer/openapi/plugins/signalk-wiring` (signalk-server 2.36 and later). It
+  describes the resource API for every wiring type and the plugin routes above
+  with absolute paths (`servers` is `/`), a bearer token scheme per access level
+  (read-only for `GET`, admin for every write), schemas for every record, error
+  cases and examples. Relay switching (`POST /switch`) and the calibration
+  routes are excluded on purpose, so the document offers no way to act on the
+  boat. A signalk-mcp-server style bridge can read it; no MCP server is part of
+  the plugin.
 - `POST /plugins/signalk-wiring/zones/:id/merge?into=<zone id>` (admin)
   merges one zone into another.
 - Plan drawings: `POST /plugins/signalk-wiring/plans/:id/image` (admin)
