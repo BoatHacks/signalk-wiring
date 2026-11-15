@@ -399,7 +399,7 @@ import is a deferred feature (see 10.2), not an MVP input source.
   plan drawings, device icons, `derived`, `live`, `search`, `trace`,
   `load-summary`, `checks`, calibration status and runs,
   `version`) is readable by any logged-in user, a read-only user included,
-  where the server supports per-route access levels (signalk-server 2.36 and
+  where the server supports per-route access levels (signalk-server 2.31 and
   later), and by admins only otherwise. Every write (uploads, deletes,
   purges, zone merge, plan upload) stays admin-only; switching and
   calibration need a read-write login. No plugin option changes this.
@@ -424,7 +424,7 @@ import is a deferred feature (see 10.2), not an MVP input source.
   (`public/loadCalc.js`, `public/cableChecks.js`).
 - The API description (plan 0036, issue #7): the plugin exports `getOpenApi()`,
   so the SignalK server serves an OpenAPI 3.0.3 document at
-  `/skServer/openapi/plugins/signalk-wiring` (signalk-server 2.36 and later). It
+  `/skServer/openapi/plugins/signalk-wiring` (signalk-server 2.31 and later). It
   describes the resource API for every wiring type and the plugin routes above
   with absolute paths (`servers` is `/`), a bearer token scheme per access level
   (read-only for `GET`, admin for every write), schemas for every record, error

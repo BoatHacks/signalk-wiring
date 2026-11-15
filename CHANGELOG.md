@@ -7,6 +7,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- The documented minimum signalk-server version for read-only routes and the OpenAPI description was 2.36. The server source shows `router.access` and plugin `getOpenApi` are present from 2.31.0, so the docs now say 2.31. (No code change: both are feature-detected.)
 - Duplicating a device now keeps its battery details and monitoring paths, explicit AC/DC setting, AC/DC ratings and schematic colors.
 
 ## [0.8.0] - 2026-11-15

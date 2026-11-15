@@ -183,7 +183,7 @@ built-in `notes`/`routes` resources — reachable at
 `wiringDevices`), and the webapp shell itself
 (`/signalk-wiring/`) loads without logging in too. **Writes**,
 **attachments**, and the **change log** all require the SignalK admin
-login (plan drawings need any logged-in user on signalk-server 2.36 or
+login (plan drawings need any logged-in user on signalk-server 2.31 or
 later, admin on older servers); a logged-out visitor can browse but not edit, and the webapp
 shows a clear message rather than failing silently. If you expose your
 SignalK instance beyond your own network, this is controlled by
@@ -204,7 +204,7 @@ interface. How a given bridge discovers and reads it has not been tried here.
   `/skServer/openapi/plugins/signalk-wiring` (for example
   `http://boat.local:3000/skServer/openapi/plugins/signalk-wiring`) and lists it
   in the admin UI under API docs as `plugins/signalk-wiring`. It needs
-  signalk-server 2.36 or later and is served for the installed plugin version.
+  signalk-server 2.31 or later and is served for the installed plugin version.
 - **Login.** Log in with `POST /signalk/v1/auth/login` (a JSON body with
   `username` and `password`) and send the returned `token` as
   `Authorization: Bearer <token>`. Create a read-only user for the assistant if

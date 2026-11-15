@@ -145,7 +145,7 @@ Registered via `registerWithRouter(router)`. Owns:
 Access (plan 0035): every GET route in `registerRoutes` (attachment list and
 download, circuit diagram, both change log reads, plan image, device icon,
 `derived`, `version`) goes through one `readOnlyRoutes` registrar, which is
-`router.access('readonly')` when the server offers it (signalk-server 2.36
+`router.access('readonly')` when the server offers it (signalk-server 2.31
 and later) and the plain router otherwise. Every POST and DELETE (uploads,
 purges, zone merge) stays on the plain router, which SignalK gates to admins
 (see §6). Reviewed GET by GET: none needs to stay admin-only, since they

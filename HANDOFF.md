@@ -87,7 +87,7 @@ server:
   measured length, undo). Real mouse and touch drag, wheel zoom and delete
   point are untested.
 - The readonly download route relies on `router.access` (signalk-server
-  2.36+); older servers fall back to admin-only reads.
+  2.31+); older servers fall back to admin-only reads.
 - Plans are not editable after creation except by recalibrating or
   uploading again (a PUT to `wiringPlans` can rename or set a height
   range; there is no UI for it yet).

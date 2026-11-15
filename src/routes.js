@@ -151,7 +151,7 @@ function registerRoutes (router, getStore, dataDir, getSettings = () => resolveS
   // enough, no admin needed); plugin routes default to admin-only. Writes
   // (POST, DELETE, purge) stay on the plain router, which is admin-only. It
   // goes through router.access where the server offers it (signalk-server
-  // >= 2.36); older servers keep the admin-only default, which is safe, just
+  // >= 2.31); older servers keep the admin-only default, which is safe, just
   // stricter.
   const readOnlyRoutes = typeof router.access === 'function' ? router.access('readonly') : router
 

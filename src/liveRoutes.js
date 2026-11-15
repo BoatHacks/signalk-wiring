@@ -3,7 +3,7 @@
 // Routes of plan 0017: what can be switched and metered, the switch command,
 // and (further down) calibration runs. Switching and calibrating need a
 // read-write login; reading what is switchable needs a logged-in user.
-// Where the server has no router.access (before signalk-server 2.36), the
+// Where the server has no router.access (before signalk-server 2.31), the
 // default admin-only rule applies, which is stricter and so safe.
 
 const { createSwitcher, selfPath, unwrap } = require('./switching')
