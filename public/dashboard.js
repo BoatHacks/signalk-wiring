@@ -6,7 +6,7 @@
 // from the server; this file only counts, sums and orders them.
 
 import { hashForState } from './router.js'
-import { checkAll, countVerdicts, lengthMetres, isNonPower } from './cableChecks.js'
+import { checkAll, countVerdicts, lengthMetres, isNonPower, badgesFor, wireMark } from './cableChecks.js'
 import { effectiveCableRoute } from './floorplan.js'
 import { loadFigures } from './measured.js'
 import { allBanks, bankTitle } from './batteries.js'
@@ -198,6 +198,31 @@ function verdictText (result) {
   return parts.join(', ') || result.verdict
 }
 
+// Why a cable is on the list, as one sentence: the reasons of a fail or
+// warning, or what is missing for a check that cannot be made.
+export function cableReason (result) {
+  if (!result) return ''
+  if (result.verdict === 'cannot') {
+    const b = badgesFor(result).find((x) => x.kind === 'cannot')
+    return b ? b.text.replace(/^cannot check:\s*/, '').replace(/^needs/, 'Needs') + '.' : ''
+  }
+  const mark = wireMark(result)
+  return mark ? mark.text.replace(/\s*Advisory only\.$/, '') : ''
+}
+
+// The checks of a bus that are not ok, each as a short line: its title and the
+// first line of its reasoning, or what is missing.
+export function busReasons (bus) {
+  return ((bus && bus.checks) || [])
+    .filter((c) => c.verdict && c.verdict !== 'ok')
+    .map((c) => {
+      const missing = (c.missing || []).filter(Boolean)
+      const first = (c.reasoning || [])[0]
+      const detail = c.verdict === 'cannot' && missing.length > 0 ? `needs ${missing.join('; ')}` : first || ''
+      return { title: c.title, verdict: c.verdict, text: detail }
+    })
+}
+
 // What needs attention, advisory only.
 //   data: { devices, cables, circuits, conduits, schematics, limits, buses }
 //   buses: the answer of GET /buses (or null)
@@ -214,7 +239,7 @@ export function dashboardChecks (data) {
     .map((c) => ({ c, r: results.get(c.id), label: cableLabel(c, deviceById) }))
     .sort((a, b) => VERDICT_RANK[a.r.verdict] - VERDICT_RANK[b.r.verdict] || a.label.localeCompare(b.label))
     .slice(0, WORST_CABLES)
-    .map(({ c, r, label }) => ({ id: c.id, label, verdict: r.verdict, text: verdictText(r), href: cableHref(c, circuits) }))
+    .map(({ c, r, label }) => ({ id: c.id, label, verdict: r.verdict, text: verdictText(r), reason: cableReason(r), href: cableHref(c, circuits) }))
 
   const busList = (data.buses && data.buses.buses) || []
   const busCounts = { ok: 0, warning: 0, fail: 0, cannot: 0 }
@@ -223,7 +248,7 @@ export function dashboardChecks (data) {
     .filter((b) => b.verdict !== 'ok')
     .sort((a, b) => (VERDICT_RANK[a.verdict] ?? 4) - (VERDICT_RANK[b.verdict] ?? 4) || a.name.localeCompare(b.name))
     .slice(0, WORST_BUSES)
-    .map((b) => ({ id: b.id, name: b.name, verdict: b.verdict, href: hashForState({ tab: 'buses', id: b.id }) }))
+    .map((b) => ({ id: b.id, name: b.name, verdict: b.verdict, reasons: busReasons(b), href: hashForState({ tab: 'buses', id: b.id }) }))
 
   const unprotected = circuits
     .filter((c) => c.derived.unprotected)
@@ -426,6 +451,7 @@ export function batteryCards (devices, banks, live, values, stamps = new Map(), 
       voltage: finite(r.voltage) ? r.voltage : null,
       soc: finite(r.soc) ? Math.min(1, Math.max(0, r.soc)) : null,
       current: finite(r.current) ? r.current : null,
+      powerW: finite(r.current) && finite(r.voltage) ? r.current * r.voltage : null,
       timeRemaining: finite(r.timeRemaining) && r.timeRemaining >= 0 ? r.timeRemaining : null,
       timeText: finite(r.timeRemaining) ? formatDuration(r.timeRemaining) : null,
       stale: Boolean(r.stale),

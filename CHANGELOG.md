@@ -5,6 +5,11 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- The Dashboard no longer lists the devices that have no meter under Live power in and out. Under the battery reading it now shows the numbers behind it: each bank's voltage, current and power, the net power into or out of the batteries, and input minus output.
+- In the Dashboard's Needs attention card, every cable and bus on the list says why: a cable that is too small or drops too much voltage gives the reason in a sentence, a check that cannot be made says what is missing, and a bus lists each of its checks that is not ok with the first line of its reasoning.
+
 ## [0.8.1] - 2026-11-15
 
 ### Added

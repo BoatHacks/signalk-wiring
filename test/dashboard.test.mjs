@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   dashboardStats, dashboardChecks, configuredSide, autoInputSide, autoOutputSide, liveFlows, batteryCards,
   switchesOn, dashboardPaths, formatWatts, formatMetres, netText, percentText, onFloorplan, schematicPlaced,
-  cableLengthOf, batteryTotals, isChargingSource, historyPaths, readLivePref, writeLivePref, STALE_MS
+  cableLengthOf, cableReason, busReasons, batteryTotals, isChargingSource, historyPaths, readLivePref, writeLivePref, STALE_MS
 } from '../public/dashboard.js'
 
 const NOW = 1_000_000_000
@@ -417,6 +417,8 @@ test('battery cards: per bank voltage, charge, current and time remaining', () =
   assert.equal(cards[0].voltage, 12.8)
   assert.equal(cards[0].soc, 0.87)
   assert.equal(cards[0].current, 10)
+  assert.equal(cards[0].powerW, 128)
+  assert.equal(cards[1].powerW, null)
   assert.equal(cards[0].timeText, '6 h 20 min')
   assert.equal(cards[1].title, 'Starter')
   assert.equal(cards[1].voltage, 12.6)
@@ -539,4 +541,39 @@ test('the Live switch survives storage that throws or is missing', () => {
   assert.equal(readLivePref(broken), true)
   assert.doesNotThrow(() => writeLivePref(false, broken))
   assert.equal(readLivePref(undefined), true)
+})
+
+test('checks: every listed cable says why', () => {
+  const c = dashboardChecks(checkData)
+  const fail = c.worstCables.find((x) => x.id === 'w7')
+  // 18 AWG carries 15 A, the breaker is 30 A
+  assert.match(fail.reason, /^Cable too small for 15 A: the 30 A fuse or breaker is more than the cable can carry/)
+  assert.ok(!/Advisory only/.test(fail.reason))
+  for (const x of c.worstCables.filter((y) => y.verdict === 'cannot')) assert.match(x.reason, /^Needs .+\.$/)
+})
+
+test('cableReason: nothing for no result, needs text for a check that cannot be made', () => {
+  assert.equal(cableReason(null), '')
+  const r = cableReason({ verdict: 'cannot', missing: ['a gauge', 'a length'], ampacity: { verdict: 'cannot', missing: ['a gauge'] } })
+  assert.equal(r, 'Needs a gauge and a length.')
+})
+
+test('busReasons: the checks that are not ok, with their first reasoning line or what is missing', () => {
+  const bus = {
+    checks: [
+      { id: 'len', title: 'Backbone length', verdict: 'ok', reasoning: ['fine'] },
+      { id: 'drop', title: 'Drop length', verdict: 'fail', reasoning: ['Drop of 8 m is over the 6 m limit.', 'more'] },
+      { id: 'term', title: 'Terminators', verdict: 'cannot', missing: ['a terminator flag on each end'], reasoning: ['x'] }
+    ]
+  }
+  assert.deepEqual(busReasons(bus), [
+    { title: 'Drop length', verdict: 'fail', text: 'Drop of 8 m is over the 6 m limit.' },
+    { title: 'Terminators', verdict: 'cannot', text: 'needs a terminator flag on each end' }
+  ])
+  assert.deepEqual(busReasons(null), [])
+})
+
+test('checks: a listed bus carries the reasons of its checks that are not ok', () => {
+  const c = dashboardChecks({ ...checkData, buses: { buses: [{ id: 'b9', name: 'Zed', verdict: 'fail', checks: [{ title: 'Drops', verdict: 'fail', reasoning: ['too long'] }] }] } })
+  assert.deepEqual(c.worstBuses[0].reasons, [{ title: 'Drops', verdict: 'fail', text: 'too long' }])
 })

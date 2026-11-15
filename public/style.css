@@ -1115,3 +1115,9 @@ a.dash-stat:hover { text-decoration: none; background: var(--surface); }
 .dash-bank .dash-spark { width: 96px; }
 a.dash-stat { display: flex; align-items: flex-start; min-height: 64px; }
 .dash-unmetered { display: flex; flex-wrap: wrap; align-items: center; gap: 0 14px; }
+
+/* Dashboard: reasons under a check row, and the battery numbers */
+.dash-row.dash-check { flex-wrap: wrap; }
+.dash-reason, .dash-reasons { flex-basis: 100%; margin: 0 0 8px; padding-left: 0; list-style: none; }
+.dash-reasons li { min-height: 0; }
+.dash-flow .dash-row.dash-bnum { display: flex; min-height: 32px; flex-wrap: wrap; }

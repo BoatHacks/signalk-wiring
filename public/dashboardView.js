@@ -97,13 +97,30 @@ function FlowColumn ({ title, side, history, testid }) {
       <ul class="dash-list">
         ${side.entries.map((e) => html`<${FlowRow} key=${e.path} entry=${e} series=${history.series.get(e.path)} showSpark=${history.available} />`)}
       </ul>
-      ${side.notMetered.length > 0 && html`
-        <div class="dash-unmetered" data-testid=${testid + '-unmetered'}>
-          <span class="meta">Not metered:</span>
-          ${side.notMetered.map((n) => html`<${Link} key=${n.deviceId} href=${hashForState({ tab: 'devices', id: n.deviceId })}>${n.label}<//>`)}
-        </div>`}
-      ${side.entries.length === 0 && side.notMetered.length === 0 && html`<div class="meta">Nothing is metered here yet. Set a meter path on a device, or list sources in the plugin configuration.</div>`}
+      ${side.entries.length === 0 && html`<div class="meta">Nothing is metered here yet. Set a meter path on a device, or list sources in the plugin configuration.</div>`}
       <div class="meta">${side.mode === 'configured' ? 'From the list in the plugin configuration.' : 'Worked out from the meters on devices.'}</div>
+    </div>`
+}
+
+// The numbers behind the net reading: each bank's voltage, current and power,
+// and the difference between input and output where both are known.
+function BatteryNumbers ({ cards, netW, flows }) {
+  const rows = (cards || []).filter((c) => c.hasData && !c.stale && (c.voltage !== null || c.current !== null))
+  const inW = flows.inputs.totalW
+  const outW = flows.outputs.totalW
+  return html`
+    <div data-testid="battery-numbers">
+      <ul class="dash-list">
+        ${rows.map((c) => html`
+          <li key=${c.key} class="dash-row dash-bnum"><span>${c.title}</span>
+            <span class="meta">${[
+              c.voltage !== null ? c.voltage.toFixed(2) + ' V' : null,
+              c.current !== null ? `${Math.abs(c.current).toFixed(2)} A ${c.current > 0 ? 'out' : c.current < 0 ? 'in' : ''}`.trim() : null,
+              c.powerW !== null ? formatWatts(Math.abs(c.powerW)) : null
+            ].filter(Boolean).join(', ')}</span></li>`)}
+      </ul>
+      ${netW !== null && html`<div class="meta">Net: ${netW > 0 ? '' : netW < 0 ? '-' : ''}${formatWatts(Math.abs(netW)) || '0 W'}${netW > 0 ? ' out of' : netW < 0 ? ' into' : ' from'} the batteries.</div>`}
+      ${inW !== null && outW !== null && html`<div class="meta">In ${formatWatts(inW) || '0 W'} minus out ${formatWatts(outW) || '0 W'} = ${formatWatts(Math.abs(inW - outW)) || '0 W'} ${inW - outW >= 0 ? 'surplus' : 'deficit'}.</div>`}
     </div>`
 }
 
@@ -119,6 +136,7 @@ function LivePower ({ flows, battery, history, liveOn, liveError }) {
         <div class="dash-flow" data-testid="flow-battery">
           <h3>Battery</h3>
           <div class="dash-total">${net === null ? html`<span class="dash-none">no live data</span>` : net}</div>
+          <${BatteryNumbers} cards=${battery.cards} netW=${battery.netW} flows=${flows} />
           <div class="meta">Current times voltage from the battery monitor. It should roughly be input minus output.</div>
         </div>
       </div>
@@ -204,15 +222,17 @@ function Checks ({ checks }) {
       ${c.worstCables.length > 0 && html`
         <ul class="dash-list" data-testid="worst-cables">
           ${c.worstCables.map((w) => html`
-            <li key=${w.id} class="dash-row"><${Link} href=${w.href}>${w.label}<//>
-              <span class=${'badge check-badge ' + VERDICT_CLASS[w.verdict]}>${w.text}</span></li>`)}
+            <li key=${w.id} class="dash-row dash-check"><${Link} href=${w.href}>${w.label}<//>
+              <span class=${'badge check-badge ' + VERDICT_CLASS[w.verdict]}>${w.text}</span>
+              ${w.reason && html`<div class="meta dash-reason" data-testid="reason">${w.reason}</div>`}</li>`)}
         </ul>`}
       ${busLine.length > 0 && html`<p data-testid="bus-checks">Buses: ${busLine.join(', ')}; ${c.buses.ok} ok.</p>`}
       ${c.worstBuses.length > 0 && html`
         <ul class="dash-list" data-testid="worst-buses">
           ${c.worstBuses.map((b) => html`
-            <li key=${b.id} class="dash-row"><${Link} href=${b.href}>${b.name}<//>
-              <span class=${'badge check-badge ' + VERDICT_CLASS[b.verdict]}>${VERDICT_WORDS[b.verdict]}</span></li>`)}
+            <li key=${b.id} class="dash-row dash-check"><${Link} href=${b.href}>${b.name}<//>
+              <span class=${'badge check-badge ' + VERDICT_CLASS[b.verdict]}>${VERDICT_WORDS[b.verdict]}</span>
+              ${(b.reasons || []).length > 0 && html`<ul class="dash-reasons" data-testid="reason">${b.reasons.map((r, i) => html`<li key=${i} class="meta">${r.title}: ${VERDICT_WORDS[r.verdict]}${r.text ? ', ' + r.text : ''}</li>`)}</ul>`}</li>`)}
         </ul>`}
       ${group('Circuits with no protection', c.unprotected, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Cables in no circuit', c.noCircuit, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.label}<//></li>`)}
