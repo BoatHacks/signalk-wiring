@@ -62,7 +62,7 @@ const resourceExample = {
   wiringBackbones: { id: 'bb-1', name: 'Main backbone', cableClass: 'mini', length: 12, lengthUnit: 'm', terminatorA: true, terminatorB: true, supplyRatingA: 4, status: 'active', taps: [{ deviceId: 'a1b2c3', port: 'NMEA 2000', dropLength: 0.5, along: 2, powerFeed: false }] },
   wiringZones: { id: 'z-1', name: 'Bilge' },
   wiringPlans: { id: 'p-1', name: 'Deck', view: 'top', status: 'active' },
-  wiringSchematics: { id: 's-1', name: '12 V DC', enclosureId: null, status: 'active', devices: [{ deviceId: 'a1b2c3', x: 40, y: 40 }], wires: [], stubs: [], zoneShapes: [] },
+  wiringSchematics: { id: 's-1', name: '12 V DC', enclosureId: null, status: 'active', devices: [{ deviceId: 'a1b2c3', x: 40, y: 40 }], wires: [], stubs: [], zoneShapes: [], backboneBoxes: [] },
   wiringSettings: { convention: 'freestyle', defaultGaugeUnit: 'AWG', defaultLengthUnit: 'm', autoTheme: false, voltageDropLimitCritical: 3, voltageDropLimitNormal: 10 }
 }
 

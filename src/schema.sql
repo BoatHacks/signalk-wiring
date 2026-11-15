@@ -259,6 +259,19 @@ CREATE TABLE IF NOT EXISTS schematic_zones (
   UNIQUE (schematic_id, zone_id)
 );
 
+-- Plan 0037: a backbone placed on a page. x and y are the left end of the
+-- backbone line in page units; one placement per backbone per page.
+CREATE TABLE IF NOT EXISTS schematic_backbones (
+  id TEXT PRIMARY KEY,
+  schematic_id TEXT NOT NULL REFERENCES schematics(id),
+  position INTEGER NOT NULL,
+  backbone_id TEXT NOT NULL REFERENCES backbones(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  hand_placed INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (schematic_id, backbone_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_schematic_devices_schematic ON schematic_devices (schematic_id);
 CREATE INDEX IF NOT EXISTS idx_schematic_wires_schematic ON schematic_wires (schematic_id);
 CREATE INDEX IF NOT EXISTS idx_schematic_stubs_schematic ON schematic_stubs (schematic_id);

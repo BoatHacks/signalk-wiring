@@ -16,7 +16,7 @@ test('migration 17 adds both color columns, twice over safely, old rows read nul
   store.db.exec('ALTER TABLE devices DROP COLUMN schematic_icon_color')
   store.db.pragma('user_version = 16')
   store._migrate()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 18)
+  assert.equal(store.db.pragma('user_version', { simple: true }), 19)
   assert.ok(columns(store).includes('schematic_box_color'))
   assert.ok(columns(store).includes('schematic_icon_color'))
   assert.equal(store.get('device', d.id).schematic_box_color, null)

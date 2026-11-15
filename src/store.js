@@ -517,6 +517,18 @@ const MIGRATIONS = [
       db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_backbone_taps_device_port ON backbone_taps (backbone_id, device_id, COALESCE(port, ''))")
       db.exec('CREATE INDEX IF NOT EXISTS idx_backbone_taps_device ON backbone_taps (device_id)')
     }
+  },
+  {
+    version: 19,
+    description: 'plan 0037: schematic_backbones, a backbone placed on a schematic page',
+    apply (db) {
+      db.exec(`CREATE TABLE IF NOT EXISTS schematic_backbones (
+        id TEXT PRIMARY KEY, schematic_id TEXT NOT NULL REFERENCES schematics(id),
+        position INTEGER NOT NULL, backbone_id TEXT NOT NULL REFERENCES backbones(id),
+        x REAL NOT NULL, y REAL NOT NULL, hand_placed INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (schematic_id, backbone_id))`)
+      db.exec('CREATE INDEX IF NOT EXISTS idx_schematic_backbones_schematic ON schematic_backbones (schematic_id)')
+    }
   }
 ]
 
@@ -774,6 +786,9 @@ class Store {
     const zoneShapes = one
       ? this.db.prepare('SELECT * FROM schematic_zones WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
       : this.db.prepare('SELECT * FROM schematic_zones ORDER BY schematic_id, position').all()
+    const placed = one
+      ? this.db.prepare('SELECT * FROM schematic_backbones WHERE schematic_id = ? ORDER BY position').all(rows[0].id)
+      : this.db.prepare('SELECT * FROM schematic_backbones ORDER BY schematic_id, position').all()
     const group = (list, map) => {
       const by = new Map()
       for (const r of list) {
@@ -790,7 +805,8 @@ class Store {
       if (r.kind === 'polygon') shape.points = r.points ? JSON.parse(r.points) : []
       return shape
     })
-    return rows.map((row) => ({ ...row, devices: dByS.get(row.id) || [], wires: wByS.get(row.id) || [], stubs: sByS.get(row.id) || [], zone_shapes: zByS.get(row.id) || [] }))
+    const bByS = group(placed, (r) => ({ backboneId: r.backbone_id, x: r.x, y: r.y, ...(r.hand_placed ? { handPlaced: true } : {}) }))
+    return rows.map((row) => ({ ...row, devices: dByS.get(row.id) || [], wires: wByS.get(row.id) || [], stubs: sByS.get(row.id) || [], zone_shapes: zByS.get(row.id) || [], backbone_boxes: bByS.get(row.id) || [] }))
   }
 
   _checkSchematicName (name) {
@@ -803,7 +819,7 @@ class Store {
   // not given is null (left alone). A wire without bend points is dropped,
   // since an unbent wire needs no row.
   _checkSchematicLists (fields, existing = null) {
-    const out = { devices: null, wires: null, stubs: null, zone_shapes: null }
+    const out = { devices: null, wires: null, stubs: null, zone_shapes: null, backbone_boxes: null }
     const finite = (v, what) => {
       const n = Number(v)
       if (v === null || v === '' || v === undefined || !Number.isFinite(n)) throw new Error(`${what} must be a number`)
@@ -828,6 +844,17 @@ class Store {
           throw new Error(`${device.name} is inside an enclosure: place it on that enclosure's inside page`)
         }
         return { deviceId, x: finite(item.x, 'x'), y: finite(item.y, 'y'), ...(item.handPlaced === true ? { handPlaced: true } : {}) }
+      })
+    }
+    if (fields.backbone_boxes !== undefined) {
+      if (!Array.isArray(fields.backbone_boxes)) throw new Error('backboneBoxes must be a list')
+      const seen = new Set()
+      out.backbone_boxes = fields.backbone_boxes.map((item) => {
+        const backboneId = item && item.backboneId
+        if (!backboneId || !this.db.prepare('SELECT 1 FROM backbones WHERE id = ?').get(backboneId)) throw new Error(`backbone not found: ${backboneId}`)
+        if (seen.has(backboneId)) throw new Error(`backbone listed twice: ${backboneId}`)
+        seen.add(backboneId)
+        return { backboneId, x: finite(item.x, 'x'), y: finite(item.y, 'y'), ...(item.handPlaced === true ? { handPlaced: true } : {}) }
       })
     }
     if (fields.wires !== undefined) {
@@ -898,6 +925,12 @@ class Store {
         'INSERT INTO schematic_devices (id, schematic_id, position, device_id, x, y, hand_placed) VALUES (?, ?, ?, ?, ?, ?, ?)')
       lists.devices.forEach((d, i) => insert.run(crypto.randomUUID(), id, i, d.deviceId, d.x, d.y, d.handPlaced ? 1 : 0))
     }
+    if (lists.backbone_boxes) {
+      this.db.prepare('DELETE FROM schematic_backbones WHERE schematic_id = ?').run(id)
+      const insert = this.db.prepare(
+        'INSERT INTO schematic_backbones (id, schematic_id, position, backbone_id, x, y, hand_placed) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      lists.backbone_boxes.forEach((b, i) => insert.run(crypto.randomUUID(), id, i, b.backboneId, b.x, b.y, b.handPlaced ? 1 : 0))
+    }
     if (lists.wires) {
       this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
       const insert = this.db.prepare(
@@ -931,7 +964,8 @@ class Store {
       (lists.devices && !same(lists.devices, existing.devices)) ||
       (lists.wires && !same(lists.wires, existing.wires)) ||
       (lists.stubs && !same(lists.stubs, existing.stubs)) ||
-      (lists.zone_shapes && !same(lists.zone_shapes, existing.zone_shapes))
+      (lists.zone_shapes && !same(lists.zone_shapes, existing.zone_shapes)) ||
+      (lists.backbone_boxes && !same(lists.backbone_boxes, existing.backbone_boxes))
     const diff = {}
     this.db.transaction(() => {
       if (cols.length) {
@@ -2030,6 +2064,7 @@ class Store {
     let attachments = []
     this.db.transaction(() => {
       this.db.prepare('DELETE FROM backbone_taps WHERE backbone_id = ?').run(id)
+      this.db.prepare('DELETE FROM schematic_backbones WHERE backbone_id = ?').run(id)
       attachments = this._purgeOwned('backbone', id)
       this.db.prepare('DELETE FROM backbones WHERE id = ?').run(id)
     })()
@@ -2055,6 +2090,7 @@ class Store {
     this.db.prepare('DELETE FROM schematic_wires WHERE schematic_id = ?').run(id)
     this.db.prepare('DELETE FROM schematic_stubs WHERE schematic_id = ?').run(id)
     this.db.prepare('DELETE FROM schematic_zones WHERE schematic_id = ?').run(id)
+    this.db.prepare('DELETE FROM schematic_backbones WHERE schematic_id = ?').run(id)
     const attachments = this._purgeOwned('schematic', id)
     this.db.prepare('DELETE FROM schematics WHERE id = ?').run(id)
     return attachments

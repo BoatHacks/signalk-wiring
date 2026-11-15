@@ -252,6 +252,7 @@ const schemas = {
       points: list(obj({ x: num('x'), y: num('y') }), 'Bend points.')
     }, 'A cable the user bent on this page.'), 'Only cables with user bends. Other cables are drawn automatically between their devices.'),
     stubs: list(obj({ wireRunId: str('The cable.'), x: num('x'), y: num('y') }, 'Where an off-page tab was dragged.'), 'Positions of off-page tabs.'),
+    backboneBoxes: list(obj({ backboneId: str('The backbone.'), x: num('x of the left end of the backbone line.'), y: num('y of the backbone line.'), handPlaced: bool('True when the user dragged it.') }, 'A backbone placed on the page.', { required: ['backboneId', 'x', 'y'] }), 'Backbones drawn on the page, each as a thick line with drops to its tapped devices.'),
     zoneShapes: list(obj({
       zoneId: str('The zone.'),
       kind: str('Shape.', { enum: ['rect', 'oval', 'polygon'] }),
