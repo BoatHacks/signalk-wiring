@@ -114,6 +114,27 @@ export function pathsToWatch (live) {
   return [...paths].sort()
 }
 
+// The paths of the live view plus extra ones a page needs (the Dashboard's
+// configured sources), as one sorted list without duplicates. One list means
+// one subscription on the one socket.
+export function mergePaths (base, extra) {
+  return [...new Set([...base, ...(extra || []).map(stripSelf).filter(Boolean)])].sort()
+}
+
+// The subscribe message for the stream: every path at the same period.
+export function subscribeMessage (paths, period = 1000) {
+  return {
+    context: 'vessels.self',
+    subscribe: paths.map((path) => ({ path, period, policy: 'fixed' }))
+  }
+}
+
+// Should the socket be open? It is while the view is active and, for a page
+// that asks for it, only while the browser tab is shown.
+export function shouldStream (active, hidden, pauseWhenHidden) {
+  return Boolean(active) && !(pauseWhenHidden && hidden)
+}
+
 // Applies the updates of a SignalK delta message to a map of values.
 // Returns true when anything changed.
 // `selfContext` is the vessel's own context from the server's hello message
@@ -165,7 +186,13 @@ export async function sendSwitch (target, state, confirmed = false) {
 //   { live, values, connected, error, info(deviceId), toggle(deviceId) }
 // `toggle` flips a device, asking for confirmation where the plugin says so;
 // it resolves null or throws an Error whose message can be shown.
-export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
+//
+// options (all optional): extraPaths (more paths for the same subscription),
+// period (ms between updates, default 1000; the REST fallback never polls
+// faster than every 3 s) and pauseWhenHidden (close the stream while the
+// browser tab is hidden and reopen it on return).
+export function useLive (active, reloadKey = 0, nameOf = (id) => id, options = {}) {
+  const { extraPaths, period = 1000, pauseWhenHidden = false } = options
   const [live, setLive] = useState(null)
   const [values, setValues] = useState(() => new Map())
   const [connected, setConnected] = useState(false)
@@ -190,9 +217,19 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
     return () => clearInterval(timer)
   }, [active])
 
-  const watchKey = pathsToWatch(live).join('|')
+  const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.hidden === true)
   useEffect(() => {
-    if (!active || !watchKey) return undefined
+    if (!pauseWhenHidden) return undefined
+    const onChange = () => { setHidden(document.hidden === true); setNow(Date.now()) }
+    document.addEventListener('visibilitychange', onChange)
+    onChange()
+    return () => document.removeEventListener('visibilitychange', onChange)
+  }, [pauseWhenHidden])
+
+  const streaming = shouldStream(active, hidden, pauseWhenHidden)
+  const watchKey = mergePaths(pathsToWatch(live), extraPaths).join('|')
+  useEffect(() => {
+    if (!streaming || !watchKey) return undefined
     const paths = watchKey.split('|')
     const watching = new Set(paths)
     let socket = null
@@ -221,7 +258,7 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
         if (!stopped) setConnected(true)
       }
       tick()
-      poll = setInterval(tick, 3000)
+      poll = setInterval(tick, Math.max(3000, period))
     }
 
     const open = () => {
@@ -234,10 +271,7 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
       ws.onopen = () => {
         failures = 0
         setConnected(true)
-        ws.send(JSON.stringify({
-          context: 'vessels.self',
-          subscribe: paths.map((path) => ({ path, period: 1000, policy: 'fixed' }))
-        }))
+        ws.send(JSON.stringify(subscribeMessage(paths, period)))
       }
       ws.onmessage = (event) => {
         let message
@@ -262,7 +296,7 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id) {
       if (socket) { socket.onclose = null; try { socket.close() } catch (e) { /* already closed */ } }
       setConnected(false)
     }
-  }, [active, watchKey])
+  }, [streaming, watchKey, period])
 
   const info = (deviceId) => liveInfo(deviceId, live, values, nameOf, stampsRef.current, now)
 

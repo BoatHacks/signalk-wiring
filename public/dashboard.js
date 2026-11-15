@@ -398,6 +398,11 @@ export function autoOutputSide (live, devices, circuits, values, stamps = new Ma
 
 // ---- Battery cards ----
 
+const firstPath = (bank, paths, key) => {
+  const p = bank.batteryIds.map((id) => paths[id] && paths[id][key]).find(Boolean)
+  return p ? stripSelf(p) : null
+}
+
 // One card per bank: the numbers of the first battery that has each metric
 // (the same rule as the Batteries tab). `net` is the sum over banks of
 // current times voltage, positive when power flows out of the batteries
@@ -425,6 +430,8 @@ export function batteryCards (devices, banks, live, values, stamps = new Map(), 
       timeText: finite(r.timeRemaining) ? formatDuration(r.timeRemaining) : null,
       stale: Boolean(r.stale),
       hasData,
+      socPath: firstPath(bank, paths, 'socPath'),
+      voltagePath: firstPath(bank, paths, 'voltagePath'),
       href: hashForState({ tab: 'batteries' })
     })
     if (finite(r.current) && finite(r.voltage) && !r.stale) {
@@ -504,6 +511,15 @@ export function liveFlows ({ settings, live, devices, circuits, values, stamps, 
     ? configuredSide(settings.dashboardOutputs, values, stamps, now)
     : autoOutputSide(live, devs, circuits, values, stamps, now)
   return { inputs, outputs }
+}
+
+// The paths whose last hour is drawn as a sparkline: every entry of both
+// sides and the charge of each battery bank, once each.
+export function historyPaths (flows, cards) {
+  const paths = []
+  for (const side of [flows.inputs, flows.outputs]) for (const e of side.entries) paths.push(e.path)
+  for (const c of cards) if (c.socPath) paths.push(c.socPath)
+  return [...new Set(paths)]
 }
 
 // ---- Text ----

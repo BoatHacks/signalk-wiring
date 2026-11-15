@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   dashboardStats, dashboardChecks, configuredSide, autoInputSide, autoOutputSide, liveFlows, batteryCards,
   switchesOn, dashboardPaths, formatWatts, formatMetres, netText, percentText, onFloorplan, schematicPlaced,
-  cableLengthOf, batteryTotals, isChargingSource, STALE_MS
+  cableLengthOf, batteryTotals, isChargingSource, historyPaths, STALE_MS
 } from '../public/dashboard.js'
 
 const NOW = 1_000_000_000
@@ -507,4 +507,19 @@ test('text helpers', () => {
   assert.equal(formatMetres(1234), '1.2 km')
   assert.equal(percentText(0.375), '38 %')
   assert.equal(percentText(null), '-')
+})
+
+test('battery cards carry the charge and voltage paths of their first battery that has them', () => {
+  const { cards } = batteryCards(bdevs.slice(0, 3), bbanks, blive, new Map(), new Map(), NOW)
+  assert.equal(cards[0].socPath, 's1')
+  assert.equal(cards[0].voltagePath, 'v1')
+  assert.equal(cards[1].socPath, null)
+})
+
+test('historyPaths: every entry of both sides and the charge of each bank, once', () => {
+  const flows = {
+    inputs: { entries: [{ path: 'a' }, { path: 'b' }] },
+    outputs: { entries: [{ path: 'b' }, { path: 'c' }] }
+  }
+  assert.deepEqual(historyPaths(flows, [{ socPath: 's1' }, { socPath: null }, { socPath: 'a' }]), ['a', 'b', 'c', 's1'])
 })

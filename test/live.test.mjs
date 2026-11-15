@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { stateFromValue, formatReading, liveInfo, confirmText, pathsToWatch, applyDelta } from '../public/live.js'
+import { stateFromValue, formatReading, liveInfo, confirmText, pathsToWatch, applyDelta, mergePaths, subscribeMessage, shouldStream } from '../public/live.js'
 
 const require = createRequire(import.meta.url)
 const switching = require('../src/switching.js')
@@ -106,4 +106,21 @@ test('a delta under the concrete self context from the hello message is applied,
   assert.equal(values.get('electrical.batteries.main.voltage'), 53.59)
   assert.equal(applyDelta(new Map(), delta('vessels.urn:mrn:imo:mmsi:123'), watching, null, Date.now(), self), false)
   assert.equal(applyDelta(new Map(), delta('vessels.self'), watching, null, Date.now(), self), true)
+})
+
+test('mergePaths adds the extra paths to the same list, without duplicates or the self prefix', () => {
+  assert.deepEqual(mergePaths(['b.b', 'a.a'], ['vessels.self.c.c', 'a.a', '']), ['a.a', 'b.b', 'c.c'])
+  assert.deepEqual(mergePaths(['a'], undefined), ['a'])
+})
+
+test('the subscribe message carries the period, 1 s by default and 5 s on the Dashboard', () => {
+  assert.deepEqual(subscribeMessage(['a']), { context: 'vessels.self', subscribe: [{ path: 'a', period: 1000, policy: 'fixed' }] })
+  assert.equal(subscribeMessage(['a', 'b'], 5000).subscribe[1].period, 5000)
+})
+
+test('the stream is open while active, and a page that pauses closes it while hidden', () => {
+  assert.equal(shouldStream(true, false, true), true)
+  assert.equal(shouldStream(true, true, true), false)
+  assert.equal(shouldStream(true, true, false), true)
+  assert.equal(shouldStream(false, false, true), false)
 })

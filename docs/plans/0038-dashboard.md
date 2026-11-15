@@ -136,7 +136,7 @@ These are my proposals, to be reviewed before the build:
 - [x] The `dashboardInputs` and `dashboardOutputs` settings (schema, validation,
       served to the web app), with tests.
 - [x] The pure derivation (statistics, checks, live input and output) with tests.
-- [ ] The history client and the paused, shared live subscription, with tests.
+- [x] The history client and the paused, shared live subscription, with tests.
 - [ ] The Dashboard page, route, landing page, styles, day and night themes.
 - [ ] Browser checks, live check, docs, changelog and a comment on issue #24.
 
