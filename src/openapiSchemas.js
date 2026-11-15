@@ -275,6 +275,7 @@ const schemas = {
     defaultGaugeUnit: str('Gauge unit pre-selected on new cables.', { enum: ['AWG', 'mm2'] }),
     defaultLengthUnit: str('Length unit pre-selected on new cables.', { enum: ['m', 'ft'] }),
     autoTheme: bool('The web app follows the sun or mode for light and dark.'),
+    showFloorplan: bool('Whether the web app shows the Floorplan tab. On by default.'),
     voltageDropLimitCritical: num('Voltage drop limit for circuits with a critical device, percent of the circuit voltage.', { unit: '%', minimum: 0.5, maximum: 20 }),
     voltageDropLimitNormal: num('Voltage drop limit for other circuits, percent.', { unit: '%', minimum: 0.5, maximum: 20 }),
     dashboardInputs: list(DASHBOARD_SOURCE, 'Where the Dashboard reads live power in, in the order shown. At most 12. Empty means the device paths are used.'),

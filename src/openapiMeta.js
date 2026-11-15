@@ -63,7 +63,7 @@ const resourceExample = {
   wiringZones: { id: 'z-1', name: 'Bilge' },
   wiringPlans: { id: 'p-1', name: 'Deck', view: 'top', status: 'active' },
   wiringSchematics: { id: 's-1', name: '12 V DC', enclosureId: null, status: 'active', devices: [{ deviceId: 'a1b2c3', x: 40, y: 40 }], wires: [], stubs: [], zoneShapes: [], backboneBoxes: [] },
-  wiringSettings: { convention: 'freestyle', defaultGaugeUnit: 'AWG', defaultLengthUnit: 'm', autoTheme: false, voltageDropLimitCritical: 3, voltageDropLimitNormal: 10, dashboardInputs: [{ label: 'Shore', path: 'electrical.shore.power', unit: 'W', voltage: null, voltagePath: null }], dashboardOutputs: [] }
+  wiringSettings: { convention: 'freestyle', defaultGaugeUnit: 'AWG', defaultLengthUnit: 'm', autoTheme: false, showFloorplan: true, voltageDropLimitCritical: 3, voltageDropLimitNormal: 10, dashboardInputs: [{ label: 'Shore', path: 'electrical.shore.power', unit: 'W', voltage: null, voltagePath: null }], dashboardOutputs: [] }
 }
 
 const json = (schema, description, example) => ({ description, schema, ...(example !== undefined ? { example } : {}) })

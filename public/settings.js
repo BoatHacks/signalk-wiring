@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS = {
   defaultGaugeUnit: 'AWG',
   defaultLengthUnit: 'm',
   autoTheme: false,
+  showFloorplan: true,
   voltageDropLimitCritical: 3,
   voltageDropLimitNormal: 10,
   dashboardInputs: [],

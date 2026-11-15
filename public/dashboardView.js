@@ -6,6 +6,7 @@
 import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { hashForState } from './router.js'
 import { useSettingsLoaded } from './settings.js'
+import { floorplanShown } from './floorplanSwitch.js'
 import { limitsFrom } from './cableCheckView.js'
 import { useLive } from './live.js'
 import { useHistory, sparkline, sparklinePath } from './history.js'
@@ -180,7 +181,7 @@ function Statistics ({ stats }) {
         <${Stat} label="buses" value=${stats.backbones} href=${tab('buses')} />
         <${Stat} label="zones" value=${stats.zones} href=${tab('zones')} />
         <${Stat} label="schematic pages" value=${stats.schematics} href=${tab('schematics')} />
-        <${Stat} label="floorplans" value=${stats.floorplans} href=${tab('floorplan')} />
+        ${floorplanShown() && html`<${Stat} label="floorplans" value=${stats.floorplans} href=${tab('floorplan')} />`}
         <${Stat} label="battery capacity" value=${b.banks ? `${fmtAh(b.ah)}, ${fmtKwh(b.wh)}` : '-'} href=${tab('batteries')}
           note=${b.assumed12 > 0 ? `${b.assumed12} ${plural(b.assumed12, 'bank')} counted at 12 V` : b.unknown > 0 ? `${b.unknown} ${plural(b.unknown, 'bank')} without capacity` : null} />
         <${Stat} label="consumer load, summed" value=${formatWatts(stats.consumerLoad.watts) || '0 W'} href=${tab('load')}
@@ -189,7 +190,7 @@ function Statistics ({ stats }) {
       <h3>Completeness</h3>
       <ul class="dash-list" data-testid="completeness">
         <li class="dash-plain">${missing.length ? missing.join(', ') + '.' : 'Cables and ratings are complete.'}</li>
-        <li class="dash-plain">Devices on a floorplan: ${c.onFloorplan.count} of ${c.onFloorplan.of} (${percentText(c.onFloorplan.share)}).</li>
+        ${floorplanShown() && html`<li class="dash-plain">Devices on a floorplan: ${c.onFloorplan.count} of ${c.onFloorplan.of} (${percentText(c.onFloorplan.share)}).</li>`}
         <li class="dash-plain">Devices on a schematic: ${c.onSchematic.count} of ${c.onSchematic.of} (${percentText(c.onSchematic.share)}).</li>
       </ul>
     </div>`
@@ -238,7 +239,7 @@ function Checks ({ checks }) {
         </ul>`}
       ${group('Circuits with no protection', c.unprotected, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Cables in no circuit', c.noCircuit, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.label}<//></li>`)}
-      ${group('Devices not placed on a plan or a schematic', c.unplaced, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
+      ${group(floorplanShown() ? 'Devices not placed on a plan or a schematic' : 'Devices not placed on a schematic', c.unplaced, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Schematic pages with overlapping devices', c.overlaps, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
     </div>`
 }
@@ -312,7 +313,7 @@ export function DashboardTab () {
   const status = liveStatus(liveOn, live)
 
   const stats = ready ? dashboardStats(data) : null
-  const checks = ready ? dashboardChecks({ ...data, limits: limitsFrom(settings) }) : null
+  const checks = ready ? dashboardChecks({ ...data, floorplan: settings.showFloorplan !== false, limits: limitsFrom(settings) }) : null
   const switches = ready ? switchesOn(live.live, values, devices) : null
 
   return html`

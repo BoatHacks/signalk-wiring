@@ -264,7 +264,7 @@ export function dashboardChecks (data) {
 
   const onSchematic = schematicPlaced(devices, data.schematics)
   const unplaced = devices
-    .filter((d) => !onFloorplan(d, deviceById) && !onSchematic.has(d.id))
+    .filter((d) => (data.floorplan === false || !onFloorplan(d, deviceById)) && !onSchematic.has(d.id))
     .map((d) => ({ id: d.id, name: d.name, href: hashForState({ tab: 'devices', id: d.id }) }))
     .sort((a, b) => a.name.localeCompare(b.name))
 

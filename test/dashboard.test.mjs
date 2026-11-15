@@ -577,3 +577,11 @@ test('checks: a listed bus carries the reasons of its checks that are not ok', (
   const c = dashboardChecks({ ...checkData, buses: { buses: [{ id: 'b9', name: 'Zed', verdict: 'fail', checks: [{ title: 'Drops', verdict: 'fail', reasoning: ['too long'] }] }] } })
   assert.deepEqual(c.worstBuses[0].reasons, [{ title: 'Drops', verdict: 'fail', text: 'too long' }])
 })
+
+test('checks: with the floorplan off, a device on a floorplan only still counts as unplaced', () => {
+  const on = dashboardChecks(checkData)
+  const off = dashboardChecks({ ...checkData, floorplan: false })
+  assert.ok(off.unplaced.length > on.unplaced.length)
+  const onIds = new Set(on.unplaced.map((x) => x.id))
+  for (const id of onIds) assert.ok(off.unplaced.some((x) => x.id === id))
+})

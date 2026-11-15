@@ -10,6 +10,7 @@ test('resolveSettings fills defaults when options are missing', () => {
     defaultGaugeUnit: 'AWG',
     defaultLengthUnit: 'm',
     autoTheme: false,
+    showFloorplan: true,
     voltageDropLimitCritical: 3,
     voltageDropLimitNormal: 10,
     dashboardInputs: [],
@@ -193,4 +194,13 @@ test('starting the plugin reports dropped dashboard entries in the plugin status
   plugin.stop()
   assert.equal(statuses.length, 1)
   assert.match(statuses[0], /Dashboard input 1: label/)
+})
+
+test('showFloorplan is on unless it is turned off', () => {
+  assert.equal(resolveSettings({}).showFloorplan, true)
+  assert.equal(resolveSettings({ showFloorplan: true }).showFloorplan, true)
+  assert.equal(resolveSettings({ showFloorplan: false }).showFloorplan, false)
+  // a wrong type never hides the tab
+  assert.equal(resolveSettings({ showFloorplan: 'no' }).showFloorplan, true)
+  assert.equal(resolveSettings({ showFloorplan: null }).showFloorplan, true)
 })

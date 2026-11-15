@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- A plugin option "Show the Floorplan tab" (`showFloorplan`, on by default). Turned off, the web app hides the Floorplan tab, sends a link or bookmark to `#/floorplan` to the Dashboard, and leaves out what points to it: the floorplan count and the "on a floorplan" line on the Dashboard, and the hints that say to draw a route there. The floorplan data is kept and comes back when the option is turned on again.
+
 ### Changed
 
 - The Load Summary says what is really missing on an incomplete circuit. A circuit that is not wired back to any battery or source now reads "No supply: this circuit is not wired back to a battery or a source, so its voltage is unknown" (it used to ask for a nominal voltage on a supply that does not exist), and a circuit with no fuse or breaker reads "No fuse or breaker: nothing to compare the load with" instead of asking for a trip rating. The summary rows of `GET /load-summary` carry the same texts and two new flags, `missingSupply` and `unprotected`.

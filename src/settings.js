@@ -91,6 +91,7 @@ function resolveSettings (options) {
     defaultGaugeUnit: GAUGE_UNITS.includes(o.defaultGaugeUnit) ? o.defaultGaugeUnit : 'AWG',
     defaultLengthUnit: LENGTH_UNITS.includes(o.defaultLengthUnit) ? o.defaultLengthUnit : 'm',
     autoTheme: o.autoTheme === true,
+    showFloorplan: o.showFloorplan !== false,
     voltageDropLimitCritical: dropLimit(o.voltageDropLimitCritical, DROP_LIMIT_CRITICAL),
     voltageDropLimitNormal: dropLimit(o.voltageDropLimitNormal, DROP_LIMIT_NORMAL),
     dashboardInputs: resolveDashboardList(o.dashboardInputs, 'Dashboard input').entries,

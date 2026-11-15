@@ -19,6 +19,7 @@ import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
 import { DashboardTab } from './dashboardView.js'
 import { FloorplanTab } from './floorplanView.js'
+import { setFloorplanShown, floorplanShown } from './floorplanSwitch.js'
 import { SchematicsTab } from './schematicView.js'
 import { BatteriesTab } from './batteriesView.js'
 import { GaugeField } from './gaugeField.js'
@@ -1457,7 +1458,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
           <option value="">None</option>
           ${PROTOCOLS.map((p) => html`<option value=${p.value} key=${p.value}>${p.label}</option>`)}
         </select>
-        <small class="hint">A label for signal cables: it colours the cable on schematics and the floorplan. A bus with taps is better recorded on the Buses tab.</small>
+        <small class="hint">A label for signal cables: it colours the cable on schematics${floorplanShown() ? ' and the floorplan' : ''}. A bus with taps is better recorded on the Buses tab.</small>
       </label>
       <label class="form-field"><span>Zone</span>
         <${ZoneField} value=${values.zoneId} onChange=${(v) => set('zoneId', v)} />
@@ -2498,7 +2499,7 @@ function ConduitsList ({ onSelect }) {
     <div>
       <p class="meta">
         A conduit is a conduit, hose, loom, trunking or cable tray that several cables run through.
-        Add the cables on its page; draw its route on the Floorplan tab.
+        Add the cables on its page${floorplanShown() ? '; draw its route on the Floorplan tab' : ''}.
       </p>
       <div class="list-header">
         <button onClick=${() => setShowForm((v) => !v)}>${showForm ? 'Cancel' : '+ New conduit'}</button>
@@ -2632,7 +2633,7 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
           <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` – ${conduit.zone}` : ''}</div>
           <div class="meta">${Array.isArray(conduit.route) && conduit.route.length > 1
             ? `Route drawn: ${conduit.route.length} points`
-            : 'No route drawn yet. Draw it on the Floorplan tab.'}</div>
+            : floorplanShown() ? 'No route drawn yet. Draw it on the Floorplan tab.' : 'No route drawn.'}</div>
           ${conduit.notes && html`<p>${conduit.notes}</p>`}
           <div class="row-actions">
             <button onClick=${() => setEditing(true)}>Edit</button>
@@ -2796,7 +2797,7 @@ function BusesList ({ onSelect }) {
     <div>
       <p class="meta">
         A bus is an NMEA 2000 backbone with the devices tapped onto it. Its length, drops, terminators and load are checked
-        (advisory). Draw its route on the Floorplan tab and place it on a schematic page.
+        (advisory). ${floorplanShown() ? 'Draw its route on the Floorplan tab and place it on a schematic page.' : 'Place it on a schematic page.'}
       </p>
       <div class="list-header">
         <button onClick=${() => setShowForm((v) => !v)}>${showForm ? 'Cancel' : '+ New bus'}</button>
@@ -2893,7 +2894,7 @@ function BusDetail ({ busId, onBack, onNotFound = () => {} }) {
           <h2>${bus.name} <${StatusBadge} status=${bus.status} /> ${bus.status !== 'removed' && html`<${VerdictBadge} verdict=${entry && entry.verdict} />`}</h2>
           <div class="meta">${classLabel(bus.cableClass)}, ${lengthText(bus)}, terminators: ${bus.terminatorA ? 'first end' : 'no first end'}, ${bus.terminatorB ? 'second end' : 'no second end'}${bus.supplyRatingA != null ? `, supply ${bus.supplyRatingA} A` : ''}</div>
           ${entry && html`<div class="meta">${entry.derived.deviceCount} devices, ${lenText(entry.derived)}, drops ${Math.round(entry.derived.totalDropM * 100) / 100} m in total${entry.derived.circuit ? `, fed from circuit ${entry.derived.circuit.name || entry.derived.circuit.id}` : ''}</div>`}
-          <div class="meta">${Array.isArray(bus.route) && bus.route.length > 1 ? `Route drawn: ${bus.route.length} points` : 'No route drawn yet. Draw it on the Floorplan tab.'}</div>
+          <div class="meta">${Array.isArray(bus.route) && bus.route.length > 1 ? `Route drawn: ${bus.route.length} points` : floorplanShown() ? 'No route drawn yet. Draw it on the Floorplan tab.' : 'No route drawn.'}</div>
           ${bus.notes && html`<p>${bus.notes}</p>`}
           <div class="row-actions">
             <button onClick=${() => setEditing(true)}>Edit</button>
@@ -3021,6 +3022,8 @@ function ChangesFromApp () {
 function AppBody () {
   const settings = useSettings()
   const [theme, toggleTheme] = useTheme(settings.autoTheme)
+  setFloorplanShown(settings.showFloorplan)
+  const floorplanOn = settings.showFloorplan !== false
   const [notFound, setNotFound] = useState(null)
   const undo = useUndo()
   const [route, navigate] = useRoute(() => setNotFound(null))
@@ -3041,8 +3044,12 @@ function AppBody () {
   const nav = [
     ['dashboard', 'Dashboard'], ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'], ['buses', 'Buses'],
     ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan'], ['changes', 'Changes']
-  ]
+  ].filter(([key]) => key !== 'floorplan' || floorplanOn)
   const cableForm = (props) => html`<${CableForm} ...${props} />`
+  // With the Floorplan tab turned off, a link or bookmark to it opens the Dashboard.
+  useEffect(() => {
+    if (tab === 'floorplan' && !floorplanOn) navigate({ tab: 'dashboard', id: null }, { replace: true })
+  }, [tab, floorplanOn])
 
   return html`
     <div>
@@ -3082,7 +3089,7 @@ function AppBody () {
       ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${cableForm}
         selectedId=${id} onSelect=${open('schematics')} onNotFound=${missing('schematics')} />`}
       ${tab === 'changes' && html`<${ChangesFromApp} />`}
-      ${tab === 'floorplan' && html`<${FloorplanTab} renderCableForm=${cableForm}
+      ${tab === 'floorplan' && floorplanOn && html`<${FloorplanTab} renderCableForm=${cableForm}
         planId=${id} onPlanChange=${(planId) => go({ tab: 'floorplan', id: planId })} onNotFound=${missing('floorplan')} />`}
       </main>
     </div>
