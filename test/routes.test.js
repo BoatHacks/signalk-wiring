@@ -498,7 +498,7 @@ test('every GET route is registered readonly when the server supports router.acc
   assert.deepEqual(gets.filter((r) => r.level !== 'readonly'), [])
   assert.deepEqual(writes.filter((r) => r.level !== 'admin'), [])
   assert.deepEqual(gets.map((r) => r.routePath).sort(), [
-    '/attachments', '/attachments/:id', '/changelog', '/changelog/:kind/:id',
+    '/attachments', '/attachments/:id', '/buses', '/changelog', '/changelog/:kind/:id',
     '/checks', '/circuits/:id/diagram', '/derived', '/devices/:id/icon', '/load-summary', '/plans/:id/image',
     '/search', '/trace/:deviceId', '/version'
   ])

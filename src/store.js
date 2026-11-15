@@ -5,6 +5,7 @@ const path = require('path')
 const crypto = require('crypto')
 const { Database } = require('./db')
 const { deriveCircuits } = require('./circuits')
+const { attachBusLoads } = require('./buses')
 const { isCriticalType } = require('./safety')
 const { CHEMISTRIES, PURPOSES, LINKS, typeChemistry, typePurpose } = require('./batteries')
 const { deriveBanks } = require('./banks')
@@ -1121,7 +1122,31 @@ class Store {
       conductors: w.conductors
     }))
     const derived = deriveCircuits({ devices, cables })
-    return { ...derived, banks: deriveBanks({ devices, cables, circuits: derived.circuits }) }
+    // Plan 0037: a powered bus loads the circuit its power feed joins.
+    const { backbones, busDevices } = this.busInputs()
+    const circuits = backbones.length > 0 ? attachBusLoads(derived.circuits, backbones, busDevices) : derived.circuits
+    return { ...derived, circuits, banks: deriveBanks({ devices, cables, circuits }) }
+  }
+
+  // Backbones and the device fields the bus code reads, in the shape of the
+  // resources (src/buses.js).
+  busInputs () {
+    const backbones = this.list('backbone').map((b) => ({
+      id: b.id,
+      name: b.name,
+      cableClass: b.cable_class,
+      length: b.length,
+      lengthUnit: b.length_unit,
+      terminatorA: Boolean(b.terminator_a),
+      terminatorB: Boolean(b.terminator_b),
+      supplyRatingA: b.supply_rating_a,
+      status: b.status,
+      taps: b.taps
+    }))
+    const busDevices = backbones.length === 0 ? [] : this.list('device').map((d) => ({
+      id: d.id, name: d.name, status: d.status, len: d.len, ratedPowerW: d.rated_power_w
+    }))
+    return { backbones, busDevices }
   }
 
   // Which consumers can be switched remotely and which meters measure them

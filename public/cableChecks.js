@@ -13,6 +13,7 @@
 import { AMPACITY_A, ASSUMPTIONS, DERATING, awgAreaMm2 } from './cableAmpacity.js'
 import { normalizeUnit } from './gauge.js'
 import { isCriticalType } from './deviceTypes.js'
+import { busWattsOf } from './loadCalc.js'
 
 export const DEFAULT_LIMITS = { critical: 3, normal: 10 }
 const POWER = new Set(['positive', 'negative', 'line', 'neutral'])
@@ -122,6 +123,12 @@ export function circuitInput (circuit, deviceById, liveAmpsByCircuit) {
     if (device.ratedPowerW != null) va += device.ratedPowerW / pf
     else unrated++
     if (device.measured && device.measured.peakW != null) { measured = true; measuredPeakW += device.measured.peakW }
+  }
+  // A powered bus adds its load (plan 0037); a bus device with no figure
+  // makes the sum unknown, like an unrated consumer.
+  if ((d.busLoads || []).length > 0) {
+    va += busWattsOf(d.busLoads, voltage)
+    unrated += d.busLoads.reduce((n, b) => n + b.unknownCount, 0)
   }
   const live = liveAmpsByCircuit && liveAmpsByCircuit.get ? liveAmpsByCircuit.get(circuit.id) : null
   let measuredA = null

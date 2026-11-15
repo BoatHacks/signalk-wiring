@@ -373,6 +373,10 @@ function registerRoutes (router, getStore, dataDir, getSettings = () => resolveS
     res.json(await query.cableChecks(resources))
   }))
 
+  readOnlyRoutes.get('/buses', requireStore, (req, res) => {
+    res.json(query.buses(req.wiringStore))
+  })
+
   readOnlyRoutes.get('/circuits/:id/diagram', requireStore, (req, res) => {
     const diagram = buildCircuitDiagram(req.wiringStore, req.params.id)
     if (!diagram) {

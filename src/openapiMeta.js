@@ -223,6 +223,26 @@ const META = {
     errors: [503]
   },
 
+  'GET /buses': {
+    tag: 'Query',
+    summary: 'NMEA 2000 buses with derived data and checks',
+    description: `Every live NMEA 2000 backbone with what is worked out from it (devices, backbone length, total and longest drop, device count, terminators, LEN total and the current it implies, the power feed and the circuit it joins) and the advisory checks: backbone length for its cable class, each drop, all drops together, device count, terminators, bus load against the supply rating and a power feed. A check is "ok", "warning" (close to a limit), "fail" or "cannot" (something needed is missing, named in "missing"). Each check lists its numbers, reasoning and the manufacturers' guides it comes from. The load of a bus is added to the circuit its power feed joins (see circuit load, "fromBus"). ${ADVISORY}`,
+    responses: {
+      200: json(ref('BusesResponse'), 'The buses and the counts.', {
+        advisory: 'Advisory, not a guarantee.',
+        counts: { ok: 0, warning: 0, fail: 1, cannot: 0 },
+        buses: [{
+          id: 'bb-1', name: 'Main backbone', verdict: 'fail',
+          derived: { backboneId: 'bb-1', name: 'Main backbone', cableClass: 'mini', lengthM: 12, lengthUnit: 'm', supplyRatingA: 4, taps: [], deviceIds: [], deviceCount: 0, totalDropM: 0, longestDropM: null, dropsMissing: [], terminatorCount: 1, lenTotal: null, lenUnknownDeviceIds: [], impliedCurrentA: null, powerFeed: null, circuit: null },
+          checks: [{ id: 'terminators', title: 'Terminators', verdict: 'fail', used: { terminatorCount: 1, required: 2 }, missing: [], reasoning: ['1 terminator marked, 2 needed, one at each end.'], sources: [{ id: 'digitalyacht-guide', publisher: 'Digital Yacht', title: 'NMEA 2000 Networking Guide', url: 'https://digitalyacht.net/nmea-2000-networking-guide/', says: 'two terminators' }] }],
+          assumptions: ['1 LEN is 50 mA; a device without a LEN counts as unknown.'],
+          note: 'Advisory, not a guarantee.'
+        }]
+      })
+    },
+    errors: [503]
+  },
+
   'GET /derived': {
     tag: 'Derived data',
     summary: 'Battery banks and wiring warnings',

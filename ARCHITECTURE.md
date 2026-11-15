@@ -825,6 +825,21 @@ No external services or network dependencies at runtime.
   anonymous-read contract.
 
 
+## NMEA 2000 buses (plan 0037)
+
+Schema version 18: `backbones` and `backbone_taps` (taps are children of the
+backbone like a cable's conductors, written and logged with it; a unique index
+on backbone, device and port, and the store also refuses a device and port that
+is a tap on another live backbone), and `devices.len`. The store validates the
+class, the numbers, the devices and that a power feed names its source. Removal,
+Undo, purge (`purgeBackbone`), the change log and attachments (owner type
+`backbone`) work as for conduits. `src/buses.js` is pure CommonJS (the server
+needs it synchronously in `deriveAll`); the web app does not copy it but reads
+`GET /buses` (`query.buses`). `src/busLimits.json` holds the limits and their
+sources. `deriveAll` calls `attachBusLoads`, which adds `busLoads` to the circuit
+the power feed joins; `public/loadCalc.js` and `public/cableChecks.js` add them
+to the load and the rated current. `docs/bus-checks.md` is the review page.
+
 ## Cable checks (plan 0034)
 
 `public/cableAmpacity.js` is the data file: the ampacity table (AWG and mm2),

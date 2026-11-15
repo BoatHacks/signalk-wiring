@@ -12,6 +12,8 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 const { createResourceProvider } = require('./resources')
 const { contentsOf, pathOf } = require('./enclosures')
+const { describeBuses } = require('./buses')
+const ADVISORY_NOTE = require('./buses').ADVISORY_NOTE
 
 const DEFAULT_LIMIT = 25
 const MAX_LIMIT = 100
@@ -320,9 +322,26 @@ async function cableChecks (resources) {
   return { limits, advisory: checks.ADVISORY_NOTE, counts: checks.countVerdicts(results), results: items }
 }
 
+// The NMEA 2000 buses with what is derived from them and their checks
+// (src/buses.js). The circuit a power feed joins is named from the circuit
+// records.
+function buses (store) {
+  const { backbones, busDevices } = store.busInputs()
+  const derived = store.deriveAll()
+  const records = new Map(store.list('circuit').map((c) => [c.key, c]))
+  const out = describeBuses(backbones, busDevices, derived.circuits).map((b) => {
+    const circuit = b.derived.circuit
+    const record = circuit && records.get(circuit.key)
+    return { ...b, derived: { ...b.derived, circuit: circuit ? { ...circuit, id: record ? record.id : null, name: record ? record.name : null } : null } }
+  })
+  const counts = { ok: 0, warning: 0, fail: 0, cannot: 0 }
+  for (const b of out) counts[b.verdict]++
+  return { advisory: ADVISORY_NOTE, counts, buses: out }
+}
+
 // The drop limits the plugin settings give, as the web app reads them.
 function limitsFromSettings (settings) {
   return { critical: settings.voltageDropLimitCritical, normal: settings.voltageDropLimitNormal }
 }
 
-module.exports = { search, trace, loadSummary, cableChecks, loadResources, limitsFromSettings, DEFAULT_LIMIT, MAX_LIMIT }
+module.exports = { search, trace, loadSummary, cableChecks, buses, loadResources, limitsFromSettings, DEFAULT_LIMIT, MAX_LIMIT }

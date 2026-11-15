@@ -155,6 +155,7 @@ const schemas = {
     deviceIds: idList('Every device the circuit touches.'),
     supplyDeviceIds: idList('Where the power comes from.'),
     endDeviceIds: idList('The devices the circuit ends at (the loads).'),
+    busLoads: list({ type: 'object', additionalProperties: true }, 'Present when an NMEA 2000 bus is fed by this circuit: per bus its LEN current, the rated-power fallback and how many devices are unknown (fromBus is true).'),
     warnings: list(ref('DerivedWarning'), 'Problems found in the wiring of this circuit.')
   }, 'What the cables imply for a circuit. Worked out by the plugin from the devices and cables.'),
 
@@ -411,7 +412,10 @@ const schemas = {
     missingRating: bool('No protecting rating known.'),
     voltage: nullable(num('Volts.', { unit: 'V' })),
     ratingA: nullable(num('Rating of the protecting device, amperes.', { unit: 'A' })),
-    ac: bool('AC circuit.')
+    ac: bool('AC circuit.'),
+    fromBus: bool('Present and true when part of the load comes from an NMEA 2000 bus fed by this circuit.'),
+    busWatts: num('Watts of the bus load, LEN x 0.05 A at the circuit voltage (12 V when unknown), rated power for devices without a LEN. Present with fromBus.', { unit: 'W' }),
+    busUnknownCount: int('Bus devices with neither a LEN nor a rated power. Present with fromBus.')
   }, 'The summed load of one circuit.'),
 
   LoadSummaryResponse: obj({
@@ -441,6 +445,46 @@ const schemas = {
       circuits: list(str('Circuit name.'), 'Names of the circuits the cable serves.')
     }, 'The reasoning as plain lines.'))
   }, 'A cable and its check.', { required: ['cableId', 'verdict'] }),
+
+  BusCheck: obj({
+    id: str('Which check: length, drop, drops-total, devices, terminators, len or power-feed.'),
+    title: str('Name of the check.'),
+    verdict: str('"ok", "warning" (close to a limit), "fail" or "cannot" (something needed is missing).', { enum: ['ok', 'warning', 'fail', 'cannot'] }),
+    used: { type: 'object', additionalProperties: true, description: 'The numbers the check used.' },
+    missing: list(str('What is missing.'), 'What a "cannot" result needs.'),
+    reasoning: list(str('One line.'), 'The reasoning, one line each.'),
+    sources: list(obj({ id: str('Source id.'), publisher: str('Manufacturer.'), title: str('Title of the guide.'), url: str('Address of the guide.'), says: str('The figures the guide gives, in short.') }), 'The guides the limit comes from.')
+  }, 'The result of one bus check.', { required: ['id', 'title', 'verdict', 'reasoning', 'sources'] }),
+
+  BusDerived: obj({
+    backboneId: str('Backbone id.'),
+    name: str('Name.'),
+    cableClass: nullable(str('Cable class.')),
+    lengthM: nullable(num('Backbone length in metres.', { unit: 'm' })),
+    lengthUnit: nullable(str('Unit the length was entered in.')),
+    supplyRatingA: nullable(num('Supply rating, amperes.', { unit: 'A' })),
+    taps: list({ type: 'object', additionalProperties: true }, 'The taps on live devices: device, port, drop length in metres, position, LEN, rated power, power feed flag.'),
+    deviceIds: idList('Distinct devices on the bus.'),
+    deviceCount: int('Number of distinct devices.'),
+    totalDropM: num('Known drop lengths added up, metres.', { unit: 'm' }),
+    longestDropM: nullable(num('Longest known drop, metres.', { unit: 'm' })),
+    dropsMissing: idList('Devices whose tap has no drop length.'),
+    terminatorCount: int('Terminators marked (0 to 2).'),
+    lenTotal: nullable(num('Sum of the known LENs; null when no device has one.')),
+    lenUnknownDeviceIds: idList('Devices without a LEN.'),
+    impliedCurrentA: nullable(num('LEN total times 0.05 A.', { unit: 'A' })),
+    powerFeed: nullable(obj({ deviceId: str('Tap device.'), deviceName: str('Name.'), fedFromDeviceId: str('Fuse, breaker or source id.'), fedFromName: nullable(str('Its name.')) })),
+    circuit: nullable(obj({ key: str('Circuit key.'), protectorId: nullable(str('Protector id.')), id: nullable(str('Circuit record id.')), name: nullable(str('Circuit name.')) }, 'The circuit the power feed joins; it carries the bus load.'))
+  }, 'What is worked out from a backbone and its taps.'),
+
+  BusesResponse: obj({
+    advisory: str('The advisory note.'),
+    counts: obj({ ok: int('ok'), warning: int('warning'), fail: int('fail'), cannot: int('cannot') }, 'Buses per verdict.'),
+    buses: list(obj({
+      id: str('Backbone id.'), name: str('Name.'), verdict: str('Worst verdict of its checks.', { enum: ['ok', 'warning', 'fail', 'cannot'] }),
+      derived: ref('BusDerived'), checks: list(ref('BusCheck'), 'The checks.'), assumptions: list(str('Assumption.'), 'What the checks assume.'), note: str('Advisory note.')
+    }), 'One entry per live backbone.')
+  }, 'NMEA 2000 buses with derived data and checks.', { required: ['advisory', 'counts', 'buses'] }),
 
   ChecksResponse: obj({
     limits: obj({ critical: num('Voltage drop limit for critical circuits, percent.', { unit: '%' }), normal: num('Voltage drop limit for other circuits, percent.', { unit: '%' }) }, 'The limits from the plugin settings.'),

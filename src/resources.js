@@ -110,6 +110,7 @@ function withDerived (resource, derived) {
       deviceIds: found.deviceIds,
       supplyDeviceIds: found.supplyDeviceIds,
       endDeviceIds: found.endDeviceIds,
+      ...(found.busLoads ? { busLoads: found.busLoads } : {}),
       warnings
     }
   }

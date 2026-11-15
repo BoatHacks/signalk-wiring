@@ -103,8 +103,8 @@ and sensor wiring get only a protocol label and standard ports for now.
 
 ## Implementation Steps
 
-- [ ] Migration 18, the store, the resource type and the OpenAPI entry, with tests.
-- [ ] The derivation, the bus load on circuits and the checks, with tests.
+- [x] Migration 18, the store, the resource type and the OpenAPI entry, with tests.
+- [x] The derivation, the bus load on circuits and the checks, with tests.
 - [ ] The Buses tab, the device page section and the LEN field.
 - [ ] The backbone on schematics and the floorplan.
 - [ ] The cable protocol label and the NMEA 2000 port preset.

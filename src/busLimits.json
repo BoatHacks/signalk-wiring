@@ -1,0 +1,53 @@
+{
+  "note": "Limits for the NMEA 2000 bus checks (plan 0037). Every figure names its sources. Where sources disagree the lower figure is used. Advisory planning figures, not a copy of the standard. Review before a release (docs/bus-checks.md).",
+  "sources": {
+    "garmin-length": {
+      "publisher": "Garmin",
+      "title": "NMEA 2000 Cable Length and Device Limitations",
+      "url": "https://www8.garmin.com/manuals/webhelp/GUID-1415AAD0-FE63-42A6-8F8D-DB713D616122/EN-US/GUID-D30B8240-E352-4F53-89CD-3E7DFD78FCAF.html",
+      "says": "100 m between any two points of the network, a drop at most 6 m, all drops together at most 78 m, at most 50 devices"
+    },
+    "garmin-glossary": {
+      "publisher": "Garmin",
+      "title": "NMEA 2000 Glossary",
+      "url": "https://www8.garmin.com/manuals/webhelp/GUID-1415AAD0-FE63-42A6-8F8D-DB713D616122/EN-US/GUID-9C47C97C-88A2-4EC6-9846-9B6937C3ACA7.html",
+      "says": "a drop cable is at most 6 m, a single backbone cable at most 100 m"
+    },
+    "actisense-fundamentals": {
+      "publisher": "Actisense",
+      "title": "3 fundamentals of designing an NMEA 2000 network",
+      "url": "https://actisense.com/news/3-fundamentals-of-designing-an-nmea-2000-network/",
+      "says": "backbone 100 m with lite cable and 250 m with mid or heavy cable, a drop at most 6 m, all drops at most 78 m, at most 50 nodes, one 120 ohm terminator at each end, devices need 9 to 16 V, micro connectors limit the current to 4 A and mini connectors to 8 A"
+    },
+    "digitalyacht-guide": {
+      "publisher": "Digital Yacht",
+      "title": "NMEA 2000 Networking Guide",
+      "url": "https://digitalyacht.net/nmea-2000-networking-guide/",
+      "says": "backbone less than 100 m, supply current less than 3 A (60 LEN), 1 LEN is 50 mA, a drop at most 6 m, all drops less than 76 m, at most 50 devices, two terminators"
+    }
+  },
+  "lenCurrentA": 0.05,
+  "lenCurrentSources": ["digitalyacht-guide"],
+  "defaultBusVoltageV": 12,
+  "defaultBusVoltageSources": ["actisense-fundamentals"],
+  "warnFraction": 0.9,
+  "backboneLengthM": {
+    "micro": 100,
+    "mini": 100,
+    "maxi": 200
+  },
+  "backboneLengthSources": ["garmin-length", "garmin-glossary", "actisense-fundamentals", "digitalyacht-guide"],
+  "backboneLengthNote": "Micro and mini: 100 m (every source). Maxi: 200 m, below the 250 m of the one source that separates heavy cable; Garmin and Digital Yacht give 100 m without naming a cable class. To be reviewed.",
+  "dropLengthM": 6,
+  "dropLengthSources": ["garmin-length", "garmin-glossary", "actisense-fundamentals", "digitalyacht-guide"],
+  "totalDropLengthM": 76,
+  "totalDropLengthSources": ["digitalyacht-guide", "garmin-length", "actisense-fundamentals"],
+  "totalDropLengthNote": "Garmin and Actisense give 78 m, Digital Yacht 76 m. The lower figure is used.",
+  "maxDevices": 50,
+  "maxDevicesSources": ["garmin-length", "actisense-fundamentals", "digitalyacht-guide"],
+  "terminators": 2,
+  "terminatorSources": ["actisense-fundamentals", "digitalyacht-guide"],
+  "supplyCurrentA": 3,
+  "supplyCurrentSources": ["digitalyacht-guide"],
+  "supplyCurrentNote": "3 A (60 LEN). Actisense gives 4 A for micro and 8 A for mini connectors; the lower, class independent figure is used as a warning level above the supply rating you enter."
+}

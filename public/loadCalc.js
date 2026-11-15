@@ -18,6 +18,12 @@ import { loadFigures } from './measured.js'
 // most one at a time in most cases (e.g. a primary/backup-fed device).
 // Correct handling needs per-cable power, which isn't data this plugin
 // collects. `LoadSummary`'s own UI states this, not just this comment.
+// The watts of the bus loads of a circuit (src/buses.js has the same sum).
+export function busWattsOf (busLoads, voltage) {
+  const v = voltage > 0 ? voltage : 12
+  return busLoads.reduce((sum, b) => sum + b.lenCurrentA * v + b.fallbackWatts, 0)
+}
+
 export function calculateCircuitLoad (circuit, deviceById) {
   const derived = circuit.derived || { endDeviceIds: [], deviceIds: [], ac: false, ratingA: null, voltage: null }
   const ac = Boolean(derived.ac)
@@ -69,12 +75,27 @@ export function calculateCircuitLoad (circuit, deviceById) {
     }
   }
 
+  // Plan 0037: a powered NMEA 2000 bus adds its load here, LEN x 0.05 A at
+  // the circuit voltage (12 V when none is known), devices without a LEN at
+  // their rated power. A bus device with neither counts as unknown wattage.
+  const busLoads = derived.busLoads || []
+  const bus = busLoads.length > 0
+    ? { busWatts: busWattsOf(busLoads, derived.voltage), busUnknownCount: busLoads.reduce((n, b) => n + b.unknownCount, 0), fromBus: true }
+    : null
+  if (bus) {
+    totalWatts += bus.busWatts
+    totalVa += bus.busWatts
+    averageWatts += bus.busWatts
+    unknownWattageCount += bus.busUnknownCount
+  }
+
   const voltage = derived.voltage || null
   const rating = derived.ratingA || null
   const amps = voltage ? totalVa / voltage : null
   const overRating = amps != null && rating != null && amps > rating
 
   return {
+    ...(bus || {}),
     deviceCount: knownDeviceCount,
     unknownWattageCount,
     totalWatts,

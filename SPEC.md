@@ -795,6 +795,38 @@ and every assumption are in `docs/cable-checks.md`.
   badges and popover again in the wire inspector for touch. The mark takes no
   pointer events. Live current is used on the schematic only while Live is on.
 
+### 7.y NMEA 2000 buses (plan 0037, issue #4)
+
+A boat can have several NMEA 2000 backbones. A backbone is one record
+(`wiringBackbones`, kind `backbone`) with a name, a cable class (micro, mini or
+maxi), a length and unit, two terminator flags, a supply rating in amperes,
+status, notes, an optional route and attachments, and an ordered list of taps.
+A tap is the drop of one device: the device, its port (the standard port name
+is "NMEA 2000"), the drop length in metres, the place along the backbone and a
+power feed flag; a power feed tap names the fuse, breaker or source it comes
+from (`fedFromDeviceId`). A device and port is a tap on one live backbone only;
+a gateway sits on two backbones through two ports. Devices have an optional LEN
+(load equivalency number, one LEN is 50 mA). Lengths and the supply rating
+are numbers of 0 or more. A backbone is removed with Undo and erased only after
+removal; a device that is a tap or a feed source cannot be erased permanently
+until the backbone is.
+
+Derived (`src/buses.js`): the devices, backbone length, total and longest
+drop, device count, terminator count, LEN total (a device without a LEN is
+unknown) and the implied current (LEN times 0.05 A), the power feed and the
+circuit it joins. Advisory checks, each ok, warning, fail or cannot check with
+its numbers, reasoning and sources: backbone length for the class, each drop at
+most 6 m, all drops at most 76 m, at most 50 devices, exactly two terminators,
+bus current against the supply rating, and a power feed present. The limits are
+in `src/busLimits.json` with their sources and are explained, with the
+assumptions, in `docs/bus-checks.md`. `GET /buses` serves it (read-only).
+
+Bus load: the circuit of the power feed's source gets the bus load, LEN times
+0.05 A times the circuit voltage (12 V when unknown), the rated power for a
+device without a LEN. The circuit shows `busLoads`, the Load Summary and the
+cable checks count it (`fromBus` in the load figures). Boats without
+backbones are unchanged.
+
 ## 9. Configuration
 
 - **Convention**: ABYC E-11 | DIN EN ISO 13297 | freestyle (default:

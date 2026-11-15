@@ -170,11 +170,12 @@ test('trace survives a loop of cables and says so', async () => {
 test('every query route is registered for read-only users and answers 503 while the plugin is stopped', async () => {
   const store = new Store(':memory:')
   const { routes } = harness(store)
-  for (const key of ['get /search', 'get /trace/:deviceId', 'get /load-summary', 'get /checks']) {
+  for (const key of ['get /search', 'get /trace/:deviceId', 'get /load-summary', 'get /checks', 'get /buses']) {
     assert.equal(routes[key].level, 'readonly', key)
   }
   const stopped = harness(null)
   assert.equal((await stopped.call('get /checks')).status, 503)
+  assert.equal((await stopped.call('get /buses')).status, 503)
   store.close()
 })
 
