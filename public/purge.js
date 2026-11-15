@@ -8,6 +8,7 @@ const ROUTES_BASE = '/plugins/signalk-wiring'
 const KINDS = {
   device: { label: 'device', route: 'devices', owner: 'device' },
   conduit: { label: 'conduit', route: 'conduits', owner: 'conduit' },
+  backbone: { label: 'bus', route: 'backbones', owner: 'backbone' },
   schematic: { label: 'schematic', route: 'schematics', owner: null }
 }
 
@@ -37,7 +38,9 @@ export function purgeConfirmText (kind, name, facts = {}) {
     ? ' Its terminals and its places on schematics go too.'
     : kind === 'conduit'
       ? ' The cables stay, they just no longer run through it.'
-      : ' Its devices and cables are not touched.'
+      : kind === 'backbone'
+        ? ' Its taps go too; the devices are not touched.'
+        : ' Its devices and cables are not touched.'
   return `Delete the ${KINDS[kind].label} "${name}" permanently? ${goes.join(' and ')} are erased too.${extra} This cannot be undone.`
 }
 

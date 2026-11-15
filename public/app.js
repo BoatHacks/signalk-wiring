@@ -27,6 +27,10 @@ import { UpdateHint } from './updateHint.js'
 import { cablesEndingOn, blockedText, purgeConfirmText, purgeFacts, purgeRecord } from './purge.js'
 import { hashForState, parseHash } from './router.js'
 import { UndoProvider, useUndo } from './undoBar.js'
+import {
+  BUS_CLASSES, busRows, sortBusRows, filterBuses, tapRows, busesOfDevice, blankTap, cleanTaps, tapsToForm, duplicatePayload, lengthText, lenText, classLabel
+} from './buses.js'
+import { VerdictBadge, BusChecks } from './busesView.js'
 import { deviceBox, endTerminals } from './schematic.js'
 import { PortBlocks } from './ports.js'
 import { useSettings, colorPlaceholder } from './settings.js'
@@ -37,7 +41,7 @@ import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
-import { deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState } from './deviceFields.js'
+import { NMEA2000_PORT, deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState } from './deviceFields.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import {
   CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
@@ -406,6 +410,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
     for (const f of fields) {
       const raw = initial ? initial[f.key] : null
       if (f.type === 'terminals') { v[f.key] = Array.isArray(raw) ? raw.map((t) => ({ ...t })) : []; continue }
+      if (f.type === 'busTaps') { v[f.key] = tapsToForm(raw); continue }
       if (f.type === 'checkbox') { v[f.key] = initial ? Boolean(raw) : Boolean(f.defaultValue); continue }
       v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : (f.defaultValue ?? '')
     }
@@ -435,6 +440,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
       if (f.showWhen && !f.showWhen(values, context)) continue
       const raw = values[f.key]
       if (f.type === 'terminals') { payload[f.key] = cleanTerminals(raw); continue }
+      if (f.type === 'busTaps') { payload[f.key] = cleanTaps(raw); continue }
       if (f.type === 'checkbox') { payload[f.key] = Boolean(raw); continue }
       // Zone and tags are always sent, so clearing them on an edit takes effect.
       if (f.type === 'zone' || f.type === 'deviceType' || f.type === 'conduitKind') { payload[f.key] = raw === '' || raw == null ? null : raw; continue }
@@ -506,6 +512,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
                 .map((d) => html`<option value=${d.id} key=${d.id}>${d.name}${d.status === 'removed' ? ' (removed)' : ''}</option>`)}
             </select>
           `}
+          ${f.type === 'busTaps' && html`<${TapsField} value=${values[f.key]} onChange=${(v) => setField(f.key, v)} backboneId=${context && context.backboneId} />`}
           ${f.type === 'date' && html`
             <input type="date" value=${values[f.key]} onInput=${(e) => setField(f.key, e.target.value)} />
           `}
@@ -828,6 +835,14 @@ const DEVICE_FIELDS = [
     hint: 'Whether this device is AC or DC. Cables drawn to it get the matching cable type, and a warning appears when the two ends disagree. Starts from the type (a battery is DC, a shore power inlet AC). Leave it on Either for converters and for devices whose terminals say it already.'
   },
   { key: 'ratedPowerW', label: 'Rated power (W)', type: 'number', showWhen: (values, ctx) => deviceFieldVisible('ratedPowerW', values, ctx) },
+  {
+    key: 'len',
+    label: 'LEN (load equivalency number)',
+    type: 'number',
+    clearable: true,
+    showWhen: (values, ctx) => deviceFieldVisible('len', values, ctx),
+    hint: 'For an NMEA 2000 device, printed on it or in its manual. 1 LEN is 50 mA. Leave it empty when unknown; the bus checks then say they cannot check.'
+  },
   {
     key: 'tripRatingA',
     label: 'Trip rating (A)',
@@ -2370,6 +2385,8 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
           `}
           ${device.role === 'enclosure' && html`<${EnclosureContents} device=${device} devices=${allDevices} />`}
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
+          ${device.len != null && html`<div class="meta" data-testid="device-len">LEN ${device.len} (${Math.round(device.len * 50)} mA)</div>`}
+          <${OnTheBus} deviceId=${deviceId} len=${device.len} />
           ${device.tripRatingA && html`<div class="meta">Trip rating: ${device.tripRatingA} A</div>`}
           ${ratedLine(device) && html`<div class="meta" data-testid="rated-line">${ratedLine(device)}</div>`}
           ${device.nominalVoltage && html`<div class="meta">Nominal voltage: ${device.nominalVoltage} V</div>`}
@@ -2671,6 +2688,264 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
   `
 }
 
+const BUS_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Main NMEA 2000 backbone' },
+  {
+    key: 'cableClass',
+    label: 'Cable class',
+    type: 'select',
+    options: BUS_CLASSES,
+    blankLabel: 'Not set',
+    clearable: true,
+    hint: 'Micro or mini (light cable) or maxi (heavy cable). It sets the length limit the check uses.'
+  },
+  { key: 'length', label: 'Backbone length', type: 'number', clearable: true, hint: 'Cable length between the two ends.' },
+  { key: 'lengthUnit', label: 'Length unit', type: 'select', options: ['m', 'ft', 'in', 'cm', 'mm'], blankLabel: 'Not set', clearable: true },
+  { key: 'terminatorA', label: 'Terminator at the first end', type: 'checkbox' },
+  { key: 'terminatorB', label: 'Terminator at the second end', type: 'checkbox' },
+  { key: 'supplyRatingA', label: 'Supply rating (A)', type: 'number', clearable: true, hint: 'The fuse or supply device the bus is rated for. The bus current is checked against it.' },
+  { key: 'notes', label: 'Notes', type: 'textarea' },
+  { key: 'taps', label: 'Taps', type: 'busTaps', hint: 'Each device on the bus: its port, the drop length from the backbone (m), where it sits along the backbone, and whether it feeds power in (and from which fuse, breaker or source).' }
+]
+
+// The rows of the taps of a backbone in the form: device, port, drop length,
+// place along the backbone and the power feed.
+function TapsField ({ value, onChange }) {
+  const { items: devices } = useResourceList('wiringDevices')
+  const options = devices.filter((d) => d.status !== 'removed' && d.role !== 'enclosure').sort((a, b) => a.name.localeCompare(b.name))
+  const byId = new Map(devices.map((d) => [d.id, d]))
+  const setRow = (i, patch) => onChange(value.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const portsOf = (id) => ((byId.get(id) || {}).terminals || []).filter((t) => t.conductor === 'signal' && t.name).map((t) => t.name)
+  const add = () => onChange([...value, { ...blankTap(), port: NMEA2000_PORT }])
+  return html`
+    <div class="tap-rows" data-testid="tap-rows">
+      ${value.map((row, i) => html`
+        <div class="tap-row" key=${i} data-testid="tap-row">
+          <select value=${row.deviceId} aria-label="Device" onChange=${(e) => setRow(i, { deviceId: e.target.value })}>
+            <option value="">Choose a device...</option>
+            ${options.map((d) => html`<option value=${d.id} key=${d.id}>${d.name}</option>`)}
+          </select>
+          <input type="text" value=${row.port} placeholder="Port" aria-label="Port" list=${'tap-ports-' + i}
+            onInput=${(e) => setRow(i, { port: e.target.value })} />
+          <datalist id=${'tap-ports-' + i}>${[...new Set([NMEA2000_PORT, ...portsOf(row.deviceId)])].map((p) => html`<option value=${p} key=${p} />`)}</datalist>
+          <input type="number" step="any" min="0" value=${row.dropLength} placeholder="Drop (m)" aria-label="Drop length in metres"
+            onInput=${(e) => setRow(i, { dropLength: e.target.value })} />
+          <input type="number" step="any" min="0" value=${row.along} placeholder="Along" aria-label="Position along the backbone"
+            onInput=${(e) => setRow(i, { along: e.target.value })} />
+          <label class="check-inline"><input type="checkbox" class="checkbox-input" checked=${row.powerFeed} aria-label="Power feed"
+            onChange=${(e) => setRow(i, { powerFeed: e.target.checked })} /> Power feed</label>
+          ${row.powerFeed && html`
+            <select value=${row.fedFromDeviceId} aria-label="Fed from" onChange=${(e) => setRow(i, { fedFromDeviceId: e.target.value })}>
+              <option value="">Fed from...</option>
+              ${options.map((d) => html`<option value=${d.id} key=${d.id}>${d.name}</option>`)}
+            </select>
+          `}
+          <button type="button" onClick=${() => onChange(value.filter((_, j) => j !== i))}>Remove</button>
+        </div>
+      `)}
+      <button type="button" onClick=${add} data-testid="tap-add">+ Add tap</button>
+    </div>
+  `
+}
+
+// GET /buses: the derived data and checks of every live backbone.
+function useBuses (reloadKey = 0) {
+  const [state, setState] = useState({ loading: true, error: null, data: null })
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${ROUTES_BASE}/buses`)
+      .then((res) => { if (!res.ok) throw new Error(`buses: ${res.status}`); return res.json() })
+      .then((data) => { if (!cancelled) setState({ loading: false, error: null, data }) })
+      .catch((err) => { if (!cancelled) setState({ loading: false, error: err.message, data: null }) })
+    return () => { cancelled = true }
+  }, [reloadKey])
+  return state
+}
+
+function BusesList ({ onSelect }) {
+  const [reloadKey, setReloadKey] = useState(0)
+  const [showForm, setShowForm] = useState(false)
+  const [text, setText] = useState('')
+  const { loading, error, items } = useResourceList('wiringBackbones', reloadKey)
+  const { data } = useBuses(reloadKey)
+  const [showRemoved, setShowRemoved] = useShowRemoved('buses')
+  const rows = sortBusRows(busRows(items, data))
+  const removedCount = rows.filter((r) => r.removed).length
+  const visible = filterBuses(rows, text).filter((r) => matchesRemoved({ status: r.removed ? 'removed' : 'active' }, showRemoved))
+  const create = async (payload) => {
+    const id = newId()
+    await putResource('wiringBackbones', id, payload)
+    setShowForm(false)
+    onSelect(id)
+  }
+  return html`
+    <div>
+      <p class="meta">
+        A bus is an NMEA 2000 backbone with the devices tapped onto it. Its length, drops, terminators and load are checked
+        (advisory). Draw its route on the Floorplan tab and place it on a schematic page.
+      </p>
+      <div class="list-header">
+        <button onClick=${() => setShowForm((v) => !v)}>${showForm ? 'Cancel' : '+ New bus'}</button>
+      </div>
+      ${showForm && html`
+        <${Form} fields=${BUS_FIELDS} initial=${{ terminatorA: true, terminatorB: true }} onSubmit=${create}
+          onCancel=${() => setShowForm(false)} submitLabel="Create bus" />
+      `}
+      ${loading && html`<div class="empty-state">Loading buses…</div>`}
+      <${ErrorBanner} message=${error} />
+      ${!loading && !error && items.length === 0 && html`<div class="empty-state">No buses recorded yet.</div>`}
+      ${items.length > 0 && html`
+        <div class="filter-bar">
+          <label class="form-field compact"><span>Name</span>
+            <input type="text" value=${text} onInput=${(e) => setText(e.target.value)} placeholder="Filter" />
+          </label>
+          <label class="check-inline">
+            <input type="checkbox" class="checkbox-input" checked=${showRemoved} onChange=${(e) => setShowRemoved(e.target.checked)} />
+            Show removed${removedCount > 0 ? ` (${removedCount})` : ''}
+          </label>
+        </div>
+      `}
+      ${items.length > 0 && visible.length === 0 && html`<div class="empty-state">No buses match.</div>`}
+      ${visible.map((row) => html`
+        <div key=${row.id} class="list-item ${row.removed ? 'removed' : ''}" data-testid="bus-row" onClick=${() => onSelect(row.id)}>
+          <div>
+            <div>${row.name}</div>
+            <div class="meta">${row.classText}, ${row.lengthText}, ${row.deviceCount === 1 ? '1 device' : `${row.deviceCount} devices`}, ${row.lenText}</div>
+          </div>
+          ${row.removed ? html`<${StatusBadge} status="removed" />` : html`<${VerdictBadge} verdict=${row.verdict} />`}
+        </div>
+      `)}
+    </div>
+  `
+}
+
+function BusDetail ({ busId, onBack, onNotFound = () => {} }) {
+  const undo = useUndo()
+  const [bus, setBus] = useState(null)
+  const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const { items: devices } = useResourceList('wiringDevices')
+  const { data } = useBuses(reloadKey)
+  const reload = () => setReloadKey((k) => k + 1)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchResource('wiringBackbones', busId)
+      .then((value) => { if (!cancelled) setBus(value) })
+      .catch((err) => { if (cancelled) return; if (err.status) onNotFound(); else setError(err.message) })
+    return () => { cancelled = true }
+  }, [busId, reloadKey])
+
+  const deviceById = new Map(devices.map((d) => [d.id, d]))
+  const deviceNames = new Map(devices.map((d) => [d.id, d.name]))
+  const entry = data && data.buses.find((b) => b.id === busId)
+  const taps = bus ? tapRows(bus, deviceById) : []
+
+  const save = async (payload) => { await putResource('wiringBackbones', busId, payload); setEditing(false); reload() }
+  const remove = async () => {
+    if (!bus || !confirmRemove(bus.name)) return
+    const name = bus.name
+    await deleteResource('wiringBackbones', busId)
+    onBack()
+    undo.offer({ message: `Bus "${name}" removed.`, onUndo: () => restoreResource('wiringBackbones', busId) })
+  }
+  const duplicate = async () => {
+    setError(null)
+    try {
+      const id = newId()
+      await putResource('wiringBackbones', id, duplicatePayload(bus))
+      window.location.hash = hashForState({ tab: 'buses', id })
+    } catch (err) { setError(err.message) }
+  }
+  const purge = async () => {
+    setError(null)
+    try {
+      if (!window.confirm(purgeConfirmText('backbone', bus.name, await purgeFacts('backbone', busId)))) return
+      const failure = await purgeRecord('backbone', busId, bus.name)
+      if (failure) { setError(failure); return }
+      onBack()
+      toast(`Deleted "${bus.name}" permanently.`)
+    } catch (err) { setError(err.message) }
+  }
+
+  return html`
+    <div>
+      <${BackLink} onClick=${onBack}>Back to buses<//>
+      <${ErrorBanner} message=${error} />
+      ${bus && !editing && html`
+        <div class="card" data-testid="bus-detail">
+          <h2>${bus.name} <${StatusBadge} status=${bus.status} /> ${bus.status !== 'removed' && html`<${VerdictBadge} verdict=${entry && entry.verdict} />`}</h2>
+          <div class="meta">${classLabel(bus.cableClass)}, ${lengthText(bus)}, terminators: ${bus.terminatorA ? 'first end' : 'no first end'}, ${bus.terminatorB ? 'second end' : 'no second end'}${bus.supplyRatingA != null ? `, supply ${bus.supplyRatingA} A` : ''}</div>
+          ${entry && html`<div class="meta">${entry.derived.deviceCount} devices, ${lenText(entry.derived)}, drops ${Math.round(entry.derived.totalDropM * 100) / 100} m in total${entry.derived.circuit ? `, fed from circuit ${entry.derived.circuit.name || entry.derived.circuit.id}` : ''}</div>`}
+          <div class="meta">${Array.isArray(bus.route) && bus.route.length > 1 ? `Route drawn: ${bus.route.length} points` : 'No route drawn yet. Draw it on the Floorplan tab.'}</div>
+          ${bus.notes && html`<p>${bus.notes}</p>`}
+          <div class="row-actions">
+            <button onClick=${() => setEditing(true)}>Edit</button>
+            <button onClick=${duplicate} data-testid="bus-duplicate">Duplicate</button>
+            ${bus.status !== 'removed' && html`<button onClick=${remove}>Remove</button>`}
+            ${bus.status === 'removed' && html`<button onClick=${purge} data-testid="bus-purge">Delete permanently</button>`}
+            <button onClick=${() => setShowHistory((v) => !v)}>${showHistory ? 'Hide history' : 'History'}</button>
+          </div>
+        </div>
+      `}
+      ${bus && editing && html`
+        <div class="card">
+          <${Form} fields=${BUS_FIELDS} initial=${bus} context=${{ backboneId: busId }} onSubmit=${save} onCancel=${() => setEditing(false)} />
+        </div>
+      `}
+      ${showHistory && html`<${ChangeLog} kind="backbone" id=${busId} />`}
+      ${bus && html`
+        <h3>Taps (${taps.length})</h3>
+        ${taps.length === 0 && html`<div class="empty-state">No devices on this bus yet. Edit the bus to add taps.</div>`}
+        ${taps.length > 0 && html`
+          <table class="cables-table bus-taps" data-testid="bus-taps">
+            <thead><tr><th>Device</th><th>Port</th><th>Drop</th><th>Along</th><th>LEN</th><th>Power feed</th></tr></thead>
+            <tbody>
+              ${taps.map((t) => html`
+                <tr key=${t.key}>
+                  <td><${DeviceLink} id=${t.deviceId} names=${deviceNames} devices=${deviceById} /></td>
+                  <td>${t.port || '-'}</td>
+                  <td>${t.dropText}</td>
+                  <td>${t.alongText || '-'}</td>
+                  <td>${t.lenText}</td>
+                  <td>${t.powerFeed ? html`yes${t.fedFromId ? html`, from <${DeviceLink} id=${t.fedFromId} names=${deviceNames} devices=${deviceById} />` : ' (source not set)'}` : ''}</td>
+                </tr>
+              `)}
+            </tbody>
+          </table>
+        `}
+        <h3>Checks</h3>
+        <${BusChecks} entry=${bus.status === 'removed' ? null : entry} />
+        <h3>Attachments</h3>
+        <${AttachmentList} ownerType="backbone" ownerId=${busId} />
+      `}
+    </div>
+  `
+}
+
+// The "On the bus" section of the device page: every live backbone this
+// device is a tap on.
+function OnTheBus ({ deviceId, len }) {
+  const { items } = useResourceList('wiringBackbones')
+  const on = busesOfDevice(deviceId, items)
+  if (on.length === 0 && len == null) return null
+  return html`
+    <div class="on-the-bus" data-testid="on-the-bus">
+      <h3>On the bus</h3>
+      ${on.length === 0 && html`<div class="meta">LEN ${len}, not on a bus yet.</div>`}
+      ${on.map(({ backbone, taps }) => html`
+        <div class="meta" key=${backbone.id} data-testid="on-the-bus-row">
+          <${RouteLink} tab="buses" id=${backbone.id}>${backbone.name}<//>:
+          ${taps.map((t, i) => html`<span key=${i}>${i > 0 ? '; ' : ' '}${t.port ? `port ${t.port}, ` : ''}drop ${t.dropLength != null ? `${t.dropLength} m` : 'length not set'}${t.along != null ? `, ${t.along} ${backbone.lengthUnit || 'm'} along` : ''}${t.powerFeed ? ', power feed' : ''}</span>`)}
+          ${len != null ? `, LEN ${len}` : ', no LEN'}
+        </div>
+      `)}
+    </div>
+  `
+}
+
 const ICON_MOON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
 const ICON_SUN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
 
@@ -2747,10 +3022,10 @@ function AppBody () {
     navigate({ tab: nextTab, id: null }, { replace: true })
     setNotFound(message)
   }
-  const named = { circuits: 'circuit', devices: 'device', conduits: 'conduit' }
+  const named = { circuits: 'circuit', devices: 'device', conduits: 'conduit', buses: 'bus' }
   const detailMissing = (nextTab) => () => missing(nextTab)(`That ${named[nextTab]} was not found.`)
   const nav = [
-    ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'],
+    ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'], ['buses', 'Buses'],
     ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan'], ['changes', 'Changes']
   ]
   const cableForm = (props) => html`<${CableForm} ...${props} />`
@@ -2781,6 +3056,10 @@ function AppBody () {
       ${tab === 'conduits' && !id && html`<${ConduitsList} onSelect=${open('conduits')} />`}
       ${tab === 'conduits' && id && html`
         <${ConduitDetail} key=${id} conduitId=${id} onBack=${back('conduits')} onNotFound=${detailMissing('conduits')} />
+      `}
+      ${tab === 'buses' && !id && html`<${BusesList} onSelect=${open('buses')} />`}
+      ${tab === 'buses' && id && html`
+        <${BusDetail} key=${id} busId=${id} onBack=${back('buses')} onNotFound=${detailMissing('buses')} />
       `}
       ${tab === 'batteries' && html`<${BatteriesTab} />`}
       ${tab === 'load' && html`<${LoadSummary} />`}

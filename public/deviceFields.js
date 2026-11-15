@@ -11,6 +11,7 @@ import { normalizeHex } from './colorTone.js'
 export function deviceFieldVisible (key, values, context = {}) {
   const role = values.role || 'consumer'
   switch (key) {
+    case 'len': return role !== 'enclosure'
     case 'tripRatingA': return role === 'distribution'
     // Only an enclosure's contents carry power, so the power fields do not apply to it.
     case 'ratedPowerW': case 'current': return role !== 'enclosure'

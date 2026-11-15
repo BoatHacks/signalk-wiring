@@ -1002,3 +1002,13 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-check-mark.check-fail .sch-check-tri { stroke: var(--danger); fill: var(--danger-bg); }
 .sch-check-mark .sch-check-bang { stroke: var(--text); stroke-width: 1.8; stroke-linecap: round; }
 .sch-check-mark .sch-check-dot { fill: var(--text); }
+
+/* Buses (plan 0037) */
+.tap-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.tap-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-alt); }
+.tap-row select, .tap-row input[type="text"], .tap-row input[type="number"] { min-width: 0; flex: 1 1 110px; }
+.tap-row input[type="number"] { flex: 0 1 100px; }
+.bus-checks details { margin-top: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.bus-checks summary { cursor: pointer; }
+.bus-checks ul { margin: 6px 0 4px 18px; padding: 0; }
+.on-the-bus h3 { margin: 10px 0 4px; font-size: 1rem; }

@@ -48,7 +48,7 @@ test('round trip', () => {
     for (const id of [null, 'abc', 'a b/c?d#e']) {
       const parsed = parseHash(hashForState({ tab, id }))
       assert.equal(parsed.tab, tab)
-      const hasId = id && ['circuits', 'devices', 'conduits', 'schematics', 'floorplan'].includes(tab)
+      const hasId = id && ['circuits', 'devices', 'conduits', 'buses', 'schematics', 'floorplan'].includes(tab)
       assert.equal(parsed.id, hasId ? id : null)
     }
   }
