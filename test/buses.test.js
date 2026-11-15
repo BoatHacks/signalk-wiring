@@ -63,28 +63,28 @@ test('a good backbone passes every check', () => {
 })
 
 test('backbone length by class', () => {
-  // mini limit 100 m: 40 ok, 90 is 90 % so a warning, 101 fails. maxi limit 200: 150 ok, 181 warning, 201 fail.
+  // mini limit 100 m: 40 ok, 90 is 90 % so a warning, 101 fails. maxi has the same limit, 100 m (the user chose the strictest figure).
   const v = (cableClass, length) => verdictOf(good({ cableClass, length }), devs, 'length')
   assert.equal(v('mini', 40), 'ok')
   assert.equal(v('mini', 90), 'warning')
   assert.equal(v('mini', 101), 'fail')
   assert.equal(v('micro', 101), 'fail')
-  assert.equal(v('maxi', 150), 'ok')
-  assert.equal(v('maxi', 181), 'warning')
-  assert.equal(v('maxi', 201), 'fail')
+  assert.equal(v('maxi', 40), 'ok')
+  assert.equal(v('maxi', 91), 'warning')
+  assert.equal(v('maxi', 101), 'fail')
   // 300 ft = 91.44 m, a warning for mini.
   assert.equal(verdictOf(good({ length: 300, lengthUnit: 'ft' }), devs, 'length'), 'warning')
 })
 
-test('each drop at most 6 m, all drops together at most 76 m', () => {
+test('each drop at most 6 m, all drops together at most 78 m', () => {
   const many = (n, drop) => Array.from({ length: n }, (_, i) => tap(`d${i}`, drop))
   const manyDevs = (n) => Array.from({ length: n }, (_, i) => dev(`d${i}`, { len: 1 }))
   assert.equal(verdictOf(good({ taps: [tap('gps', 6)] }), devs, 'drop'), 'ok')
   assert.equal(verdictOf(good({ taps: [tap('gps', 6.5)] }), devs, 'drop'), 'fail')
-  // 10 drops of 6 m = 60 m ok (below 68.4); 12 x 6 = 72 m is at least 90 % of 76: warning; 13 x 6 = 78 m fails.
+  // 10 drops of 6 m = 60 m ok (below 70.2, 90 % of 78); 12 x 6 = 72 m is at least 90 % of 78: warning; 14 x 6 = 84 m fails.
   assert.equal(verdictOf(good({ taps: many(10, 6) }), manyDevs(10), 'drops-total'), 'ok')
   assert.equal(verdictOf(good({ taps: many(12, 6) }), manyDevs(12), 'drops-total'), 'warning')
-  assert.equal(verdictOf(good({ taps: many(13, 6) }), manyDevs(13), 'drops-total'), 'fail')
+  assert.equal(verdictOf(good({ taps: many(14, 6) }), manyDevs(14), 'drops-total'), 'fail')
   // 12 drops of 6 m = 72 m but the 13th has no length: still not over, so cannot.
   const partial = good({ taps: [...many(12, 6), tap('d12', null)] })
   const c = checkBus(partial, manyDevs(13)).checks.find((x) => x.id === 'drops-total')

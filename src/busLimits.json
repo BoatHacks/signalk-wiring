@@ -34,15 +34,15 @@
   "backboneLengthM": {
     "micro": 100,
     "mini": 100,
-    "maxi": 200
+    "maxi": 100
   },
   "backboneLengthSources": ["garmin-length", "garmin-glossary", "actisense-fundamentals", "digitalyacht-guide"],
-  "backboneLengthNote": "Micro and mini: 100 m (every source). Maxi: 200 m, below the 250 m of the one source that separates heavy cable; Garmin and Digital Yacht give 100 m without naming a cable class. To be reviewed.",
+  "backboneLengthNote": "Micro and mini: 100 m (every source). Maxi: 100 m too (the user chose the strictest figure): Garmin and Digital Yacht give 100 m without naming a cable class, and only Actisense gives 250 m for heavy cable.",
   "dropLengthM": 6,
   "dropLengthSources": ["garmin-length", "garmin-glossary", "actisense-fundamentals", "digitalyacht-guide"],
-  "totalDropLengthM": 76,
+  "totalDropLengthM": 78,
   "totalDropLengthSources": ["digitalyacht-guide", "garmin-length", "actisense-fundamentals"],
-  "totalDropLengthNote": "Garmin and Actisense give 78 m, Digital Yacht 76 m. The lower figure is used.",
+  "totalDropLengthNote": "Garmin and Actisense give 78 m, Digital Yacht 76 m. The user chose 78 m.",
   "maxDevices": 50,
   "maxDevicesSources": ["garmin-length", "actisense-fundamentals", "digitalyacht-guide"],
   "terminators": 2,

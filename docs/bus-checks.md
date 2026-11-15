@@ -14,9 +14,9 @@ sources; each limit is one line there and can be changed later.
 | --- | --- | --- | --- |
 | Backbone length, micro cable | 100 m | 90 m | Garmin (length page, glossary), Actisense, Digital Yacht |
 | Backbone length, mini cable | 100 m | 90 m | the same |
-| Backbone length, maxi cable | 200 m | 180 m | Actisense (250 m), see the assumptions |
+| Backbone length, maxi cable | 100 m | 90 m | Garmin and Digital Yacht (Actisense gives 250 m for heavy cable), see the assumptions |
 | One drop | 6 m | none | Garmin (both pages), Actisense, Digital Yacht |
-| All drops together | 76 m | 68.4 m | Digital Yacht 76 m; Garmin and Actisense give 78 m |
+| All drops together | 78 m | 70.2 m | Garmin and Actisense 78 m (Digital Yacht gives 76 m) |
 | Devices on the bus | 50 | 45 | Garmin, Actisense, Digital Yacht |
 | Terminators | exactly 2 | none | Actisense, Digital Yacht |
 | One LEN | 0.05 A (50 mA) | | Digital Yacht |
@@ -26,15 +26,13 @@ sources; each limit is one line there and can be changed later.
 
 **Assumptions to confirm**
 
-1. **Total drops 76 m, not 78 m.** Garmin and Actisense say 78 m, Digital Yacht
-   76 m. The rule "take the lower figure" gives 76 m. If you prefer 78 m, change
-   `totalDropLengthM`.
-2. **Maxi backbone 200 m.** Actisense gives 250 m for mid and heavy cable. Garmin
-   and Digital Yacht give 100 m without separating cable classes. Some guides
-   in the search results gave 200 m for heavy cable but could not be opened in
-   full, so they are not cited. 200 m is a compromise below the one cited
-   figure for heavy cable; 100 m for all classes is the strictest reading.
-   Decide which is right for your boat.
+1. **Total drops 78 m (decided by the user).** Garmin and Actisense say 78 m,
+   Digital Yacht 76 m. The plugin uses 78 m; change `totalDropLengthM` to use
+   76 m.
+2. **Maxi backbone 100 m, the same as micro and mini (decided by the user, the
+   strictest reading).** Actisense gives 250 m for mid and heavy cable, while
+   Garmin and Digital Yacht give 100 m without separating cable classes. Change
+   `backboneLengthM.maxi` to use a longer limit for heavy cable.
 3. **The three classes** are micro, mini and maxi as recorded on the backbone;
    the guides name cable grades (lite, mid, heavy) and connector sizes. Micro
    and mini use the light cable figure, maxi the heavy cable figure.
@@ -70,7 +68,7 @@ have confirmed this page.
 
 1. Backbone length for the cable class.
 2. Each drop at most 6 m.
-3. All drops together at most 76 m.
+3. All drops together at most 78 m.
 4. At most 50 devices.
 5. Exactly two terminators.
 6. Bus current (LEN total times 0.05 A) against the supply rating.
@@ -97,7 +95,7 @@ Only the figures were taken; no text is copied.
 - Digital Yacht, NMEA 2000 Networking Guide:
   https://digitalyacht.net/nmea-2000-networking-guide/
   (backbone under 100 m, supply under 3 A or 60 LEN, 1 LEN is 50 mA, drop 6 m,
-  all drops under 76 m, 50 devices, two terminators)
+  all drops under 76 m, 50 devices, two terminators; the plugin uses 78 m, chosen by the user)
 
 ## Where it shows
 
