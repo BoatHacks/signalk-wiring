@@ -11,7 +11,7 @@
     {"name": "Bow thruster battery", "type": "Battery", "role": "storage", "zone": "Forepeak", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "thruster", "cap": 120, "usable": 0.5, "make": "AGM 12 V 120 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.bowThruster.voltage", "cPath": "electrical.batteries.bowThruster.current", "sPath": "electrical.batteries.bowThruster.capacity.stateOfCharge", "box": "#ef6c00"},
 
     {"name": "House main fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 250, "page": ["dc"]},
-    {"name": "Battery switch", "type": "Battery switch", "role": "distribution", "zone": "Aft cabin", "icon": "#f9a825"},
+    {"name": "Battery switch", "type": "Battery switch", "role": "distribution", "zone": "Aft cabin", "icon": "#f9a825", "page": ["dc"]},
     {"name": "Main positive bus", "type": "Bus bar", "role": "distribution", "zone": "Engine room", "dcA": 300, "dcV": 12, "page": ["dc"]},
     {"name": "Inverter fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 125, "page": ["dc"]},
     {"name": "Inverter/charger", "type": "Inverter/charger", "role": "converter", "zone": "Engine room", "page": ["dc", "ac"], "make": "12 V 1600 VA inverter/charger", "path": "electrical.inverters.main", "box": "#6a1b9a",
@@ -26,11 +26,11 @@
     {"name": "Engine alternator", "type": "Alternator", "role": "source", "zone": "Engine room", "v": 12, "page": ["dc"], "make": "12 V 100 A alternator"},
     {"name": "Alternator fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 150, "page": ["dc"]},
     {"name": "Starter charge fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 30, "page": ["dc"]},
-    {"name": "Starter switch", "type": "Battery switch", "role": "distribution", "zone": "Cockpit"},
+    {"name": "Starter switch", "type": "Battery switch", "role": "distribution", "zone": "Cockpit", "page": ["dc"]},
     {"name": "Starter motor", "type": "Starter motor", "role": "consumer", "zone": "Engine room", "w": 1500, "current": "dc", "page": ["dc"]},
 
     {"name": "Bow thruster fuse", "type": "Fuse", "role": "distribution", "zone": "Forepeak", "trip": 250, "page": ["dc"]},
-    {"name": "Bow thruster contactor", "type": "Relay", "role": "distribution", "zone": "Forepeak", "switch": "electrical.switches.bank.13.1.state"},
+    {"name": "Bow thruster contactor", "type": "Relay", "role": "distribution", "zone": "Forepeak", "switch": "electrical.switches.bank.13.1.state", "page": ["dc"]},
     {"name": "Bow thruster", "type": "Bow thruster motor", "role": "consumer", "zone": "Forepeak", "w": 2000, "current": "dc", "confirm": true, "page": ["dc"], "notes": "Switched by bank 13 channel 1 through the contactor.", "box": "#ef6c00"},
 
     {"name": "Bimini solar array", "type": "Solar panel", "role": "source", "zone": "Cockpit", "w": 200, "v": 36, "path": "electrical.solar.bimini", "page": ["dc"]},
@@ -44,7 +44,7 @@
     {"name": "Deck starboard solar fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 30, "page": ["dc"]},
 
     {"name": "DC distribution panel", "type": "DC panel", "role": "enclosure", "zone": "Nav station", "page": ["dc"], "box": "#37474f"},
-    {"name": "Switch panel", "type": "Switch panel", "role": "enclosure", "zone": "Nav station", "notes": "Holds the battery and starter switches and the bow thruster contactor.", "page": ["dc"], "box": "#6d4c41"},
+    {"name": "Switch panel", "type": "Switch panel", "role": "enclosure", "zone": "Nav station", "notes": "Holds the battery and starter switches and the bow thruster contactor.", "box": "#6d4c41"},
     {"name": "DC panel main fuse", "type": "Fuse", "role": "distribution", "zone": "Nav station", "trip": 100, "parent": "DC distribution panel"},
     {"name": "DC panel bus", "type": "Bus bar", "role": "distribution", "zone": "Nav station", "dcA": 300, "dcV": 12, "parent": "DC distribution panel"},
     {"name": "DC negative bus", "type": "Bus bar", "role": "distribution", "zone": "Nav station", "parent": "DC distribution panel"},
