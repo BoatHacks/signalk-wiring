@@ -31,3 +31,7 @@ test('the webapp defaults have empty dashboard source lists', () => {
   assert.deepEqual(DEFAULT_SETTINGS.dashboardInputs, [])
   assert.deepEqual(DEFAULT_SETTINGS.dashboardOutputs, [])
 })
+
+test('demo mode is off by default in the web app settings', () => {
+  assert.equal(DEFAULT_SETTINGS.demoMode, false)
+})

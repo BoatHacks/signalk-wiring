@@ -130,7 +130,12 @@ header {
   color: var(--header-text);
 }
 
-header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
+header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; min-width: 0; }
+
+/* Shown after the title in demo mode only. Smaller and lighter than the title,
+   in the header's own text colour so the red night theme keeps to its reds; it
+   wraps with the title on a narrow screen. */
+.demo-note { font-size: 13px; font-weight: 400; opacity: 0.85; }
 
 .theme-toggle {
   background: transparent;

@@ -3055,7 +3055,7 @@ function AppBody () {
     <div>
       <${UpdateHint} />
       <header>
-        <h1>Wiring Documentation</h1>
+        <h1>Wiring Documentation${settings.demoMode === true && html`<span class="demo-note" data-testid="demo-note"> - demo mode, some features might not work as expected</span>`}</h1>
         <${ThemeToggle} theme=${theme} onToggle=${toggleTheme} />
       </header>
       <nav class="tabs">

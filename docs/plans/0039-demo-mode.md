@@ -146,7 +146,7 @@ These are my proposals, to be reviewed before the build:
       check, settings, schema, OpenAPI, tests).
 - [x] The restore, with tests.
 - [x] The GitHub check and update, with tests.
-- [ ] The header note in demo mode (web app).
+- [x] The header note in demo mode (web app).
 - [ ] The start sequence in `index.js`, docs (README, SPEC, ARCHITECTURE,
       demo README), CHANGELOG and a comment on issue #20.
 
