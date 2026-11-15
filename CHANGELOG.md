@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-15
+
 ### Changed
 
 - The demo boat's three solar arrays each have a 10 A PV fuse between the array and its charge controller (`Bimini PV fuse`, `Deck port PV fuse`, `Deck starboard PV fuse`), and the PV cables S-01, S-11 and S-21 are split into array to fuse and fuse to controller (S-02, S-12 and S-22 are the short fuse to controller cables, 4 mm2 throughout). The three PV cables used to read "cannot check" because nothing protected them; every cable of the demo can now be checked.
