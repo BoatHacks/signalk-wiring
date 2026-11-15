@@ -50,17 +50,20 @@ floorplan shows is now decided by demo mode.
 
 ### 2. Checking and updating the demo files (`src/demoSource.js`)
 
-- One request asks GitHub for the last commit on `main` that touched `demo/`
-  (`GET /repos/BoatHacks/signalk-wiring/commits?sha=main&path=demo&per_page=1`).
-  Its sha is compared with the one stored in `demo/version.json`. Equal means
-  nothing to do.
-- When different: the git tree of that commit lists `demo/wiring.db`,
-  `demo/plans/*` and `demo/attachments/*`. Each file is downloaded from
-  `raw.githubusercontent.com` pinned to that commit sha, so all files are from
-  one version. Only those three places are accepted; every other path (including
-  `demo/source/`, `demo/README.md`) is ignored.
-- Safety: each downloaded file is checked against the git blob sha of the tree
-  entry; path names are checked (no `..`, no absolute paths, no odd characters);
+- One request reads `demo/manifest.json` from `raw.githubusercontent.com` on
+  `main`: the file list with each file's size and sha256, written by
+  `scripts/demo-manifest.js` (the demo builder runs it). The manifest's own
+  sha256 is compared with the one stored in `demo/version.json`. Equal means
+  nothing to do. The GitHub API is not used: its unauthenticated limit of 60
+  requests an hour per address is shared by every server behind one cloud
+  address, which left a hosted demo without files.
+- When different: each file the manifest lists is downloaded from
+  `raw.githubusercontent.com` on `main`. Only `wiring.db` and files directly in
+  `plans/` and `attachments/` may be listed; any other entry refuses the whole
+  update. A push between the manifest and a file shows up as a checksum
+  mismatch and the next start tries again.
+- Safety: each downloaded file is checked against the size and sha256 in the
+  manifest; path names are checked (no `..`, no absolute paths, no odd characters);
   size caps (database 50 MB, plans and attachments 20 MB each, 100 MB in all);
   the database header's schema version must not be newer than the newest
   migration this plugin knows (a demo database from a newer plugin is refused and
@@ -93,7 +96,7 @@ floorplan shows is now decided by demo mode.
   disabled and the status says "Preparing the demo". Outside demo mode nothing
   changes and nothing is awaited.
 - The plugin status reports what happened: demo mode on, demo files updated to
-  commit `abc1234`, unchanged, or kept because GitHub could not be reached, and
+  version `abc1234` (the start of the manifest sha256), unchanged, or kept because GitHub could not be reached, and
   whether the data was restored.
 
 ### 5. The web app
@@ -121,15 +124,15 @@ These are my proposals, to be reviewed before the build:
 - Request timeout 5 s, whole check 30 s, size caps as above.
 - The first restore keeps one copy of the previous data as
   `wiring.db.before-demo`.
-- Unauthenticated GitHub requests (60 an hour per address); a start uses two
-  requests and one per file only when something changed.
+- Plain downloads from raw.githubusercontent.com, no GitHub API; a start uses
+  one request, plus one per file only when the manifest changed.
 - A demo database with a newer schema than the plugin is refused.
 
 ## Test Strategy
 
 - Tests for `isDemoMode` (file present, absent, a directory of that name).
 - Tests of the update with a fake fetch: nothing changed, changed, offline,
-  timeout, rate limit, bad blob sha, disallowed paths, oversize file, newer
+  timeout, rate limit, bad sha256, disallowed paths, a malformed manifest, oversize file, newer
   schema refused, interrupted update leaves the old files, one version only.
 - Tests of the restore on temporary directories: first restore keeps the backup
   once, replaces database, plans and attachments, removes -wal and -shm, skips
@@ -158,9 +161,9 @@ These are my proposals, to be reviewed before the build:
   passes none, so the global `fetch` is used. Tests always inject a fake.
 - Preparations are chained through one promise so an overlapping restart never
   updates or restores the files at the same time as the earlier start.
-- Inside the accepted places, a name with a disallowed character, a nested
-  folder or a non-regular file (a link) refuses the whole update; paths outside
-  them are ignored. `demo/attachments/.gitkeep` is skipped.
+- A manifest entry outside the accepted places, with a disallowed character,
+  in a nested folder or listed twice refuses the whole update. The manifest
+  builder skips `.gitkeep` and anything that is not a plain file.
 - The update swaps `demo` and `demo.new` through `demo.old`; a run that finds
   `demo.old` without `demo` puts it back first.
 - The restore copies into `<name>.demo-new` and renames, also for the database.

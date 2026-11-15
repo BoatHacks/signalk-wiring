@@ -929,12 +929,13 @@ is read from it; a directory of that name does not count). It has no flags.
 - `wiringSettings` carries `demoMode` (boolean) and `showFloorplan`, which is
   derived: false in demo mode, true otherwise. `showFloorplan` is no longer a
   plugin option; a stale value in a configuration is ignored.
-- On every plugin start in demo mode the plugin asks GitHub (repository
-  `BoatHacks/signalk-wiring`, branch `main`) for the last commit that touched
-  `demo/` and compares it with `demo/version.json` in the data directory. When
-  it differs it downloads `demo/wiring.db`, `demo/plans/*` and
-  `demo/attachments/*` pinned to that commit, verifies each file against its git
-  blob sha, and replaces `<dataDir>/demo` in one rename. Limits: database 50 MB,
+- On every plugin start in demo mode the plugin reads `demo/manifest.json` from
+  raw.githubusercontent.com (repository `BoatHacks/signalk-wiring`, branch
+  `main`; not the GitHub API, which is limited to 60 requests an hour per
+  address) and compares its sha256 with `demo/version.json` in the data
+  directory. When it differs it downloads the files the manifest lists
+  (`wiring.db`, `plans/*`, `attachments/*`), verifies each against its size and
+  sha256 in the manifest, and replaces `<dataDir>/demo` in one rename. Limits: database 50 MB,
   other files 20 MB, 100 MB in all; names of `[A-Za-z0-9._-]` only; a database
   whose schema version is newer than the plugin's newest migration is refused.
   Requests time out after 5 s and the check after 30 s. Any failure keeps the

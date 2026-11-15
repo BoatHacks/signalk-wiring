@@ -1044,17 +1044,21 @@ preparations are chained so two never work on the files at once. Until
 plugin. Errors in the async path are caught and put in the plugin status or
 error, never thrown.
 
-`updateDemoFiles` asks the GitHub API for the newest commit on `main` that
-touched `demo/` and compares it with `demo/version.json`. On a difference it
-reads the commit's recursive git tree, accepts only `demo/wiring.db` and the
-flat files in `demo/plans/` and `demo/attachments/`, downloads each from
-raw.githubusercontent.com pinned to the commit, and checks the size against the
-tree, the git blob sha (`sha1("blob <size>\0" + bytes)`), the name characters,
-the size caps and the SQLite header schema version (`PRAGMA user_version`, a
+`updateDemoFiles` does not use the GitHub API, whose unauthenticated limit
+of 60 requests an hour per address a shared cloud address runs out of. It reads
+`demo/manifest.json` from raw.githubusercontent.com on `main` and compares its
+sha256 with the one stored in `demo/version.json`. On a difference it accepts
+only `wiring.db` and flat files in `plans/` and `attachments/` from the
+manifest, downloads each from raw.githubusercontent.com on `main`, and checks
+the size and sha256 against the manifest, the name characters, the size caps and the SQLite header schema version (`PRAGMA user_version`, a
 big-endian integer at byte 60) against `LATEST_SCHEMA_VERSION` exported by
 `src/store.js`. Files are written to `demo.new/` and swapped in by renames
 (`demo` to `demo.old`, `demo.new` to `demo`); the next run recovers a swap that
-was interrupted between the two renames. `fetch` is the global one and can be
+was interrupted between the two renames. A push between reading the manifest and a
+file shows up as a checksum mismatch, which keeps the old files until the next
+start. `scripts/demo-manifest.js` writes the manifest (`scripts/build-demo.js`
+runs it), and a test fails when the committed one does not match the committed
+files. `fetch` is the global one and can be
 injected, which is how the tests run without a network. Every request has a 5 s
 timeout and the whole check a 30 s deadline (`AbortSignal`).
 

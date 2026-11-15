@@ -401,4 +401,6 @@ if (require.main === module) {
   const out = process.argv[2] ? path.resolve(process.argv[2]) : DEFAULT_OUT
   const result = buildDemo(out)
   console.log(`built ${out}: schema version ${result.version}, ${result.devices} devices, ${result.cables} cables`)
+  const manifest = require('./demo-manifest').writeManifest(path.dirname(out))
+  console.log(`wrote ${manifest}`)
 }

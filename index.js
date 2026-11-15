@@ -149,13 +149,13 @@ module.exports = function (app, deps = {}) {
     try {
       update = await updateDemoFiles(dataDir, { fetch: deps.fetch })
     } catch (e) {
-      update = { status: 'kept', commit: null, reason: `the update failed (${e && e.message})` }
+      update = { status: 'kept', version: null, reason: `the update failed (${e && e.message})` }
     }
     if (gen !== generation) return null
-    const short = update.commit ? update.commit.slice(0, 7) : null
-    if (update.status === 'updated') parts.push(`demo files updated to commit ${short}`)
-    else if (update.status === 'unchanged') parts.push(`demo files unchanged (commit ${short})`)
-    else if (short) parts.push(`demo files kept at commit ${short} (${update.reason})`)
+    const short = update.version ? update.version.slice(0, 7) : null
+    if (update.status === 'updated') parts.push(`demo files updated to version ${short}`)
+    else if (update.status === 'unchanged') parts.push(`demo files unchanged (version ${short})`)
+    else if (short) parts.push(`demo files kept at version ${short} (${update.reason})`)
     else parts.push(`no demo files (${update.reason})`)
     try {
       const restored = restoreDemoData(dataDir)

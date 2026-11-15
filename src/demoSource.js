@@ -13,6 +13,7 @@ const MAX_DB_BYTES = 50 * 1024 * 1024
 const MAX_FILE_BYTES = 20 * 1024 * 1024
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024
 const SEGMENT = /^[A-Za-z0-9._-]+$/
+const MAX_MANIFEST_BYTES = 1024 * 1024
 const SQLITE_MAGIC = 'SQLite format 3\0'
 
 class DemoSourceError extends Error {}
@@ -26,38 +27,34 @@ function safeSegment (name) {
   return SEGMENT.test(name) && name !== '.' && name !== '..'
 }
 
-// Which of the demo files in the git tree to take: demo/wiring.db and the
-// files directly in demo/plans/ and demo/attachments/. Everything else (the
-// source folder, the README, a .gitkeep) is ignored. A name inside the accepted
-// places that is not plain (odd characters, a link, a sub-folder) refuses the
-// whole update.
-function selectEntries (tree) {
+// Checks the file list of demo/manifest.json (scripts/demo-manifest.js): only
+// wiring.db and plain names directly in plans/ and attachments/ are accepted,
+// each with its size and sha256. Anything else refuses the whole update.
+function selectEntries (manifest) {
+  if (!manifest || manifest.format !== 1 || !Array.isArray(manifest.files)) fail('the demo manifest is not one this plugin understands')
   const picked = []
-  for (const entry of tree) {
-    if (typeof entry.path !== 'string') continue
+  const seen = new Set()
+  for (const entry of manifest.files) {
+    if (!entry || typeof entry.path !== 'string') fail('the demo manifest has an entry without a path')
     const parts = entry.path.split('/')
-    if (parts[0] !== 'demo') continue
-    const isDb = entry.path === 'demo/wiring.db'
-    const isFolderFile = parts.length >= 2 && (parts[1] === 'plans' || parts[1] === 'attachments') && parts.length >= 3
-    if (!isDb && !isFolderFile) continue
-    if (entry.type === 'tree') continue
-    if (entry.type !== 'blob' || (entry.mode !== '100644' && entry.mode !== '100755')) fail(`${entry.path} is not a plain file`)
-    if (!isDb && parts.length !== 3) fail(`${entry.path} is nested`)
+    const isDb = entry.path === 'wiring.db'
+    if (!isDb && !(parts.length === 2 && (parts[0] === 'plans' || parts[0] === 'attachments'))) fail(`${entry.path} is not an accepted demo file`)
     if (!parts.every(safeSegment)) fail(`${entry.path} has a name that is not allowed`)
-    if (!isDb && parts[2] === '.gitkeep') continue
-    if (typeof entry.sha !== 'string' || !/^[0-9a-f]{40}$/.test(entry.sha)) fail(`${entry.path} has no blob sha`)
+    if (seen.has(entry.path)) fail(`${entry.path} is listed twice`)
+    seen.add(entry.path)
+    if (typeof entry.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(entry.sha256)) fail(`${entry.path} has no sha256`)
     if (!Number.isInteger(entry.size) || entry.size < 0) fail(`${entry.path} has no size`)
     const cap = isDb ? MAX_DB_BYTES : MAX_FILE_BYTES
     if (entry.size > cap) fail(`${entry.path} is larger than ${cap / 1024 / 1024} MB`)
-    picked.push({ rel: parts.slice(1).join('/'), parts: parts.slice(1), sha: entry.sha, size: entry.size })
+    picked.push({ rel: entry.path, parts, sha256: entry.sha256, size: entry.size })
   }
-  if (!picked.some((e) => e.rel === 'wiring.db')) fail('the demo has no wiring.db')
+  if (!seen.has('wiring.db')) fail('the demo has no wiring.db')
   if (picked.reduce((n, e) => n + e.size, 0) > MAX_TOTAL_BYTES) fail('the demo files are larger than 100 MB in all')
   return picked
 }
 
-function blobSha (bytes) {
-  return crypto.createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
+function sha256 (bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex')
 }
 
 // The SQLite header holds PRAGMA user_version as a big-endian 32-bit integer at
@@ -67,11 +64,13 @@ function schemaVersionOf (bytes) {
   return bytes.readUInt32BE(60)
 }
 
-function readLocalCommit (demoDir) {
+// The version of the demo files in demo/ is the sha256 of the manifest they
+// were downloaded with.
+function readLocalVersion (demoDir) {
   try {
     const v = JSON.parse(fs.readFileSync(path.join(demoDir, 'version.json'), 'utf8'))
     if (!fs.statSync(path.join(demoDir, 'wiring.db')).isFile()) return null
-    return typeof v.commit === 'string' ? v.commit : null
+    return typeof v.manifest === 'string' ? v.manifest : null
   } catch (e) {
     return null
   }
@@ -87,8 +86,12 @@ function recover (dataDir) {
 }
 
 // Looks on GitHub for a newer version of the demo files and, when there is one,
-// puts it in <dataDir>/demo. Never throws; every failure leaves demo/ as it was.
-// Returns { status: 'unchanged' | 'updated' | 'kept', commit, reason }.
+// puts it in <dataDir>/demo. Everything comes from raw.githubusercontent.com,
+// not the GitHub API, whose 60 requests an hour per address a shared address
+// (a cloud host) runs out of: demo/manifest.json on the branch names the files
+// with their size and sha256, and an unchanged manifest means one request per
+// start. Never throws; every failure leaves demo/ as it was.
+// Returns { status: 'unchanged' | 'updated' | 'kept', version, reason }.
 async function updateDemoFiles (dataDir, options = {}) {
   const fetchFn = options.fetch || globalThis.fetch
   const repo = options.repo || REPO
@@ -96,41 +99,45 @@ async function updateDemoFiles (dataDir, options = {}) {
   const requestTimeout = options.requestTimeoutMs || REQUEST_TIMEOUT_MS
   const maxSchema = options.latestSchemaVersion || LATEST_SCHEMA_VERSION
   const demoDir = path.join(dataDir, 'demo')
+  const base = `https://raw.githubusercontent.com/${repo}/${encodeURIComponent(branch)}/demo/`
   const deadline = new AbortController()
   const timer = setTimeout(() => deadline.abort(), options.deadlineMs || DEADLINE_MS)
   if (timer.unref) timer.unref()
 
-  const get = async (url, kind) => {
+  const get = async (rel, cap) => {
     const signal = AbortSignal.any([AbortSignal.timeout(requestTimeout), deadline.signal])
-    const res = await fetchFn(url, { signal, headers: { 'User-Agent': 'signalk-wiring', Accept: kind === 'json' ? 'application/vnd.github+json' : '*/*' } })
+    const res = await fetchFn(base + rel, { signal, headers: { 'User-Agent': 'signalk-wiring' } })
     if (!res.ok) {
-      fail(res.status === 403 || res.status === 429 ? 'GitHub refused the request (rate limit)' : `GitHub answered HTTP ${res.status}`)
+      fail(res.status === 403 || res.status === 429 ? 'GitHub refused the request (rate limit)' : `GitHub answered HTTP ${res.status} for demo/${rel}`)
     }
-    return kind === 'json' ? res.json() : Buffer.from(await res.arrayBuffer())
+    const bytes = Buffer.from(await res.arrayBuffer())
+    if (bytes.length > cap) fail(`demo/${rel} is larger than expected`)
+    return bytes
   }
 
   try {
     recover(dataDir)
-    const commits = await get(`https://api.github.com/repos/${repo}/commits?sha=${encodeURIComponent(branch)}&path=demo&per_page=1`, 'json')
-    const commit = Array.isArray(commits) && commits[0] && commits[0].sha
-    if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) fail('GitHub named no demo commit')
-    if (readLocalCommit(demoDir) === commit) return { status: 'unchanged', commit, reason: null }
-
-    const treeDoc = await get(`https://api.github.com/repos/${repo}/git/trees/${commit}?recursive=1`, 'json')
-    if (!treeDoc || treeDoc.truncated || !Array.isArray(treeDoc.tree)) fail('GitHub gave no complete file list')
-    const entries = selectEntries(treeDoc.tree)
+    const manifestBytes = await get('manifest.json', MAX_MANIFEST_BYTES)
+    const version = sha256(manifestBytes)
+    if (readLocalVersion(demoDir) === version) return { status: 'unchanged', version, reason: null }
+    let manifest
+    try {
+      manifest = JSON.parse(manifestBytes.toString('utf8'))
+    } catch (e) {
+      fail('the demo manifest is not valid JSON')
+    }
+    const entries = selectEntries(manifest)
 
     const staging = path.join(dataDir, 'demo.new')
     fs.rmSync(staging, { recursive: true, force: true })
     try {
       fs.mkdirSync(staging, { recursive: true })
-      let total = 0
       for (const e of entries) {
-        const bytes = await get(`https://raw.githubusercontent.com/${repo}/${commit}/demo/${e.rel}`, 'bytes')
+        const bytes = await get(e.parts.map(encodeURIComponent).join('/'), e.size)
         if (bytes.length !== e.size) fail(`demo/${e.rel} has the wrong size`)
-        total += bytes.length
-        if (total > MAX_TOTAL_BYTES) fail('the demo files are larger than 100 MB in all')
-        if (blobSha(bytes) !== e.sha) fail(`demo/${e.rel} does not match its checksum`)
+        // The files are read from the branch, not a fixed commit, so a push
+        // between the manifest and a file shows up here and the next start retries.
+        if (sha256(bytes) !== e.sha256) fail(`demo/${e.rel} does not match its checksum`)
         if (e.rel === 'wiring.db') {
           const v = schemaVersionOf(bytes)
           if (v > maxSchema) fail(`the demo database has schema version ${v}, newer than this plugin understands (${maxSchema})`)
@@ -139,7 +146,7 @@ async function updateDemoFiles (dataDir, options = {}) {
         fs.mkdirSync(path.dirname(target), { recursive: true })
         fs.writeFileSync(target, bytes)
       }
-      fs.writeFileSync(path.join(staging, 'version.json'), JSON.stringify({ commit }) + '\n')
+      fs.writeFileSync(path.join(staging, 'version.json'), JSON.stringify({ manifest: version }) + '\n')
       const old = path.join(dataDir, 'demo.old')
       fs.rmSync(old, { recursive: true, force: true })
       if (fs.existsSync(demoDir)) fs.renameSync(demoDir, old)
@@ -149,14 +156,14 @@ async function updateDemoFiles (dataDir, options = {}) {
       fs.rmSync(staging, { recursive: true, force: true })
       throw e
     }
-    return { status: 'updated', commit, reason: null }
+    return { status: 'updated', version, reason: null }
   } catch (e) {
     let reason = e instanceof DemoSourceError ? e.message : `could not reach GitHub (${e && e.name === 'TimeoutError' ? 'timeout' : e && e.name === 'AbortError' ? 'cancelled' : (e && e.message) || 'error'})`
     if (deadline.signal.aborted) reason = 'the check took longer than 30 seconds'
-    return { status: 'kept', commit: readLocalCommit(demoDir), reason }
+    return { status: 'kept', version: readLocalVersion(demoDir), reason }
   } finally {
     clearTimeout(timer)
   }
 }
 
-module.exports = { REPO, BRANCH, updateDemoFiles, selectEntries, blobSha, schemaVersionOf }
+module.exports = { REPO, BRANCH, updateDemoFiles, selectEntries, sha256, schemaVersionOf }

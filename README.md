@@ -197,11 +197,13 @@ read from it. A server meant for a trade fair or a showroom shows a clean demo
 boat after every start. With the file in place, every time the plugin starts
 (server restart, or saving the plugin settings):
 
-1. The plugin checks GitHub (`BoatHacks/signalk-wiring`, branch `main`) for a
-   newer version of the demo files and, if there is one, downloads it into
-   `demo/` in the data directory. Only `demo/wiring.db`, `demo/plans/` and
-   `demo/attachments/` are taken. Every file is checked against its git
-   checksum, size limits apply, and a demo database with a newer schema than the
+1. The plugin reads the list of demo files, `demo/manifest.json`, from
+   GitHub (`BoatHacks/signalk-wiring`, branch `main`, through
+   raw.githubusercontent.com, so the GitHub API's limit of 60 requests an hour
+   does not apply) and, if it changed, downloads the files into `demo/` in the
+   data directory. Only `demo/wiring.db`, `demo/plans/` and
+   `demo/attachments/` are taken. Every file is checked against its checksum
+   in the list, size limits apply, and a demo database with a newer schema than the
    plugin knows is refused. If GitHub cannot be reached, or anything is wrong,
    the files already in `demo/` are used and the plugin status says so.
 2. The working data is replaced by the demo: `wiring.db` and the `plans/` and
