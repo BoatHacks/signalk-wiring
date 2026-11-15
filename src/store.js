@@ -2235,4 +2235,7 @@ class Store {
   }
 }
 
-module.exports = { Store, PURGED_SUMMARY, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES, METER_UNITS }
+// The newest schema version this plugin understands (its last migration).
+const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
+
+module.exports = { Store, LATEST_SCHEMA_VERSION, PURGED_SUMMARY, REMOVED_STATUS, DEVICE_ROLES, ICON_MIME_TYPES, CONDUCTOR_TYPES, METER_UNITS }
