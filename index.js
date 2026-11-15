@@ -6,6 +6,8 @@ const { createResourceProvider } = require('./src/resources')
 const { resolveSettings, createSettingsProvider } = require('./src/settings')
 const { registerRoutes } = require('./src/routes')
 const { registerLiveRoutes } = require('./src/liveRoutes')
+const { getOpenApi } = require('./src/openapi')
+const { version: PLUGIN_VERSION } = require('./package.json')
 
 module.exports = function (app) {
   const plugin = {}
@@ -106,6 +108,14 @@ module.exports = function (app) {
   plugin.registerWithRouter = function (router) {
     registerRoutes(router, () => store, app.getDataDirPath(), () => settings)
     live = registerLiveRoutes(router, () => store, { app })
+  }
+
+  // The API description (plan 0036). A plugin that registers routes and exports
+  // this has its document published by the server at
+  // /skServer/openapi/plugins/signalk-wiring; the server calls it once when the
+  // plugin is loaded, whether or not it is enabled.
+  plugin.getOpenApi = function () {
+    return getOpenApi(PLUGIN_VERSION)
   }
 
   return plugin
