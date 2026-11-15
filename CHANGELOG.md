@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-15
+
 ### Added
 
 - A plugin option "Show the Floorplan tab" (`showFloorplan`, on by default). Turned off, the web app hides the Floorplan tab, sends a link or bookmark to `#/floorplan` to the Dashboard, and leaves out what points to it: the floorplan count and the "on a floorplan" line on the Dashboard, and the hints that say to draw a route there. The floorplan data is kept and comes back when the option is turned on again.
