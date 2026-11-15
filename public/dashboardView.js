@@ -119,7 +119,9 @@ function BatteryNumbers ({ cards, netW, flows }) {
               c.powerW !== null ? formatWatts(Math.abs(c.powerW)) : null
             ].filter(Boolean).join(', ')}</span></li>`)}
       </ul>
-      ${netW !== null && html`<div class="meta">Net: ${netW > 0 ? '' : netW < 0 ? '-' : ''}${formatWatts(Math.abs(netW)) || '0 W'}${netW > 0 ? ' out of' : netW < 0 ? ' into' : ' from'} the batteries.</div>`}
+      ${netW !== null && html`<div class="meta" data-testid="battery-net">${Math.abs(netW) < 1
+        ? `Net: ${formatWatts(Math.abs(netW)) || '0 W'}, balanced.`
+        : `Net: ${netW < 0 ? '-' : ''}${formatWatts(Math.abs(netW))} ${netW > 0 ? 'out of' : 'into'} the batteries.`}</div>`}
       ${inW !== null && outW !== null && html`<div class="meta">In ${formatWatts(inW) || '0 W'} minus out ${formatWatts(outW) || '0 W'} = ${formatWatts(Math.abs(inW - outW)) || '0 W'} ${inW - outW >= 0 ? 'surplus' : 'deficit'}.</div>`}
     </div>`
 }
