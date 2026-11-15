@@ -332,6 +332,9 @@ test('isChargingSource', () => {
   assert.equal(isChargingSource({ role: 'converter', type: 'Alternator regulator' }), true)
   assert.equal(isChargingSource({ role: 'converter', type: 'Battery charger' }), true)
   assert.equal(isChargingSource({ role: 'converter', type: 'Inverter' }), false)
+  // a DC-DC charger moves energy between batteries that are already counted
+  assert.equal(isChargingSource({ role: 'converter', type: 'DC-DC charger' }), false)
+  assert.equal(isChargingSource({ role: 'converter', type: 'Orion DC/DC converter' }), false)
   assert.equal(isChargingSource({ role: 'consumer', type: 'Solar lamp' }), false)
 })
 

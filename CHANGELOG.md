@@ -7,6 +7,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The Dashboard no longer counts a DC-DC converter as a power input. A DC-DC charger moves energy between two buses that are already counted (a battery or an alternator feeds it), so counting its meter would count the same power twice. Solar controllers, alternators, chargers and source devices still count.
+- The demo boat has the two DC-DC chargers its SignalK demo server publishes: "Orion to starter" and "Orion to thruster", each fed from the House battery through its own fuse and wired to the starter and bow thruster batteries through the existing charger output fuses (the thruster output is now 25 mm2 and 63 A). Their meters are `electrical.chargers.orionStarter.current` and `electrical.chargers.orionThruster.current`. The shore charger now charges the house bank only.
 - A new device starts with a LEN of 0 (the New device form shows 0, and a device created without a LEN through the resource API gets 0), so it no longer makes the bus checks say they cannot check. An empty LEN still means unknown, and existing devices are not changed. A bus device with a LEN of 0 counts no load on the bus; only an unknown LEN falls back to the rated power.
 - The demo boat has a real NMEA 2000 backbone, "Main NMEA2000", with its five taps, a power feed from the DC panel main fuse and LENs on the sensors, so all seven bus checks pass. The demo builder reads `backbones` and `len` from `boat.json`.
 

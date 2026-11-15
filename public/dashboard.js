@@ -21,7 +21,10 @@ export const WORST_CABLES = 5
 export const WORST_BUSES = 3
 export const DEFAULT_BANK_VOLTS = 12
 
-const CHARGER_TYPE = /solar|mppt|alternator|charger|dc-dc|dc\/dc/i
+const CHARGER_TYPE = /solar|mppt|alternator|charger/i
+// A DC-DC converter moves energy between two buses that are already counted
+// (a battery or an alternator feeds it), so it is never an input of its own.
+const DCDC_TYPE = /dc-dc|dc\/dc/i
 const PROTECTOR_TYPE = /fuse|breaker/i
 const VERDICT_RANK = { fail: 0, warning: 1, cannot: 2, ok: 3 }
 
@@ -333,7 +336,7 @@ export function configuredSide (list, values, stamps = new Map(), now = Date.now
 // Sources that feed power in: the source role, and converters that charge.
 export function isChargingSource (device) {
   const role = roleOf(device)
-  return role === 'source' || (role === 'converter' && CHARGER_TYPE.test(device.type || ''))
+  return role === 'source' || (role === 'converter' && CHARGER_TYPE.test(device.type || '') && !DCDC_TYPE.test(device.type || ''))
 }
 
 // The automatic input: each source or charging converter once, by its meter.
