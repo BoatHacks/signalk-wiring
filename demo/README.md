@@ -1,8 +1,10 @@
 # Demo yacht
 
 A fictional boat for demonstrations: a 12 V yacht with a house, a starter and a
-bow thruster battery, shore power, an inverter/charger, an alternator, three
-solar arrays and four relay banks. Everything in it is invented. This folder is
+bow thruster battery, shore power, an inverter/charger, an alternator, two
+DC-DC chargers, three solar arrays and four relay banks. Everything in it is
+invented. The floorplan data is in the database, but the demo does not show it
+(demo mode hides the Floorplan tab). This folder is
 not part of the npm package (`package.json` `files` is `index.js`, `src` and
 `public`); it lives in the repository so a demo server can download it.
 
@@ -41,7 +43,7 @@ To install the files by hand instead:
 Files only reach servers through the main branch, so commit a change to this
 folder to publish it.
 
-The database has schema version 17. The plugin migrates older databases up,
+The database has schema version 20. The plugin migrates older databases up,
 never down, so the demo server must run a plugin at least as new as the
 database (the version of the plugin that built it, or later).
 
@@ -63,12 +65,18 @@ spec.
 ## The boat
 
 - 12 V DC: house battery (LiFePO4, 400 Ah), starter battery, bow thruster
-  battery; main fuse, battery switch, main positive bus; alternator; shore
-  charger with three outputs; three solar arrays, each with a charge controller;
-  the engine start circuit and the bow thruster feed with its contactor; a DC
-  distribution panel (an enclosure with an inside page); four relay banks (also
-  enclosures with inside pages); chartplotter, autopilot, a small data bus with
-  signal cables.
+  battery; main fuse, battery switch, main positive bus; alternator; a shore
+  charger for the house bank; two DC-DC chargers ("Orion to starter" and "Orion
+  to thruster", each fed from the house battery through its own fuse and wired
+  to the starter and thruster batteries through an output fuse); three solar
+  arrays, each with a 10 A PV fuse and a charge controller; the engine start
+  circuit and the bow thruster feed with its contactor; a DC distribution panel
+  (an enclosure with an inside page); four relay banks (also enclosures with
+  inside pages); chartplotter, autopilot and the wind and depth sensors on an
+  NMEA 2000 backbone ("Main NMEA2000", 11 m, two terminators, fed from the DC
+  panel main fuse, all seven bus checks pass), with signal cables besides.
+- The battery switch, the starter switch and the bow thruster contactor stand on
+  their own; the Switch panel enclosure exists but is empty.
 - 230 V AC: shore power inlet, an AC panel with breakers, the inverter/charger,
   a water heater and two outlet circuits.
 - Conduits: mast, engine room and forepeak, each with assigned cables.
@@ -87,10 +95,18 @@ spec.
 - Batteries: `electrical.batteries.house`, `.starter` and `.bowThruster`, each
   with `.voltage`, `.current` and `.capacity.stateOfCharge` (the battery's
   voltage, current and state of charge path fields).
+- The house battery also reads `.capacity.timeRemaining`.
 - Solar: `electrical.solar.bimini`, `.deckPort`, `.deckStarboard` on the arrays,
-  and `electrical.chargers.bimini`, `.deckPort`, `.deckStarboard` on their
-  charge controllers. The shore charger is `electrical.chargers.shore` and the
-  inverter/charger `electrical.inverters.main`.
+  each with its `.panelPower` (watts) as the device meter, which the Dashboard
+  reads as live power in.
+- DC-DC chargers: `electrical.chargers.orionStarter` and `.orionThruster`, with
+  `.current` (amps) as the meter. A DC-DC charger is not counted as a Dashboard
+  power input, since it moves energy between batteries.
+
+These are the paths the SignalK demo server (signalk-showcase.fly.dev)
+publishes: every switch and battery path above exists there. It publishes no
+shore power, alternator, inverter or consumer power meters, so the Dashboard's
+live power out has nothing to read.
 
 ## How the relay channels are modelled
 
@@ -115,8 +131,9 @@ ask for confirmation before switching, as the app does for those types.
 - Cable B11-6, deck wash pump: a 1.5 mm2 cable (20 A) behind a 25 A relay
   channel. It shows "cable too small" (a failure).
 
-Every other power cable passes (107 checked), and the data bus cables are
-exempt. These two are for demonstrating the checks, not examples to copy.
+Every other power cable passes (111 checked, none that cannot be checked), and
+the data bus cables are exempt. The solar array cables each run through a 10 A PV
+fuse (S-01 and S-02, S-11 and S-12, S-21 and S-22) and pass. These two are for demonstrating the checks, not examples to copy.
 
 ## Floorplans and positions
 

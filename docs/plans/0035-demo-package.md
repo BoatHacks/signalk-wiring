@@ -8,9 +8,10 @@ A fictional demo boat for the live demo instance at the trade fair and after
 it: a 12 V yacht with a house, a starter and a bow thruster battery, shore power
 and an inverter, solar, and the relay banks and meters the demo's SignalK boat
 already publishes, so the live view and the cable checks light up. It ships as a
-`demo/` folder in the repository (outside the npm `files` list) that the demo
-build downloads and copies into the plugin's data directory. The plugin also
-gets read access for read-only visitors, which the demo needs first.
+`demo/` folder in the repository (outside the npm `files` list). A server gets
+the files through demo mode (plan 0039): the plugin fetches them from GitHub and
+resets its data to them. The plugin also gets read access for read-only
+visitors, which the demo needs first.
 
 ## Decisions agreed with the user
 
@@ -21,9 +22,11 @@ gets read access for read-only visitors, which the demo needs first.
   stays an ordinary npm package.
 - **A fictional boat built from scratch.** No data from the real boat; no real
   names, serial numbers or installation ids.
-- **Drawings and positions come from the user.** The user supplies three
-  drawings (deck view, interior layout, side view) and the positions of the
-  fictional devices named in the demo builder's comment on issue #20.
+- **Drawings and positions come from the user.** The user supplied four
+  drawings (deck view, interior layout, exterior side view and interior side
+  view) and the positions were placed and adjusted by hand. The demo does not
+  show the floorplan, so this part is kept but unused (see "What changed since
+  this plan").
 - **Read access for visitors, always.** The plugin's GET routes are registered
   so that read-only users can read them, and every write stays admin-only. No
   plugin option. Servers without `router.access` keep the admin-only behaviour,
@@ -86,22 +89,22 @@ gets read access for read-only visitors, which the demo needs first.
   committed `demo/wiring.db` (table contents), and checks every switch path,
   meter path and battery path above exists on the boat.
 
-### 3. Floorplans and positions (needs the user's drawings)
+### 3. Floorplans and positions
 
-- The three drawings go into `demo/plans/` (each calibrated), and the device
-  positions the user supplies are applied by the builder. Until the drawings and
-  positions arrive this step waits; steps 1 and 2 do not depend on it. The
-  format of the positions (a CSV of device name, plan, x, y and z in meters, or
-  clicks on the drawing) is settled when they arrive.
+- The drawings go into `demo/plans/` (each calibrated), and the device
+  positions are applied by the builder from `demo/source/positions.json` (device
+  name to x, y and z in meters, read back from a server with
+  `scripts/read-positions.js`).
 
 ### 4. Package checks and docs
 
-- A test that `npm pack --dry-run` lists nothing from `demo/` and that
-  `package.json` `files` is unchanged.
-- `demo/README.md`: what the folder is, how to copy it into the plugin's data
-  directory (stop the server, copy `wiring.db`, `plans/` and `attachments/`,
-  remove the `-wal` and `-shm` files, start), the schema version it needs (the
-  demo must run a plugin at least as new as the database), and how to rebuild it.
+- A test that the package lists nothing from `demo/` and that `package.json`
+  `files` is unchanged (`test/packageFiles.test.mjs`, which checks the `files`
+  list and that the demo files stay in the repository).
+- `demo/README.md`: what the folder is, how a server gets it (demo mode, or by
+  hand: stop the server, copy `wiring.db`, `plans/` and `attachments/`, remove
+  the `-wal` and `-shm` files, start), the schema version it needs (the demo must
+  run a plugin at least as new as the database), and how to rebuild it.
 - SPEC.md, ARCHITECTURE.md, README, CHANGELOG, a comment on issue #20.
 
 ## Defaults, reviewed with the user
@@ -132,13 +135,40 @@ gets read access for read-only visitors, which the demo needs first.
 - [x] Read access for visitors, with tests.
 - [x] The boat spec and the builder, with tests.
 - [x] The floorplans and positions (four drawings, calibrations, first-pass positions).
-- [ ] The package checks, `demo/README.md`, docs, and a comment on issue #20.
+- [x] The package checks, `demo/README.md` and docs.
+- [x] The comment on issue #20 (the earlier decision comment was corrected for
+      demo mode instead of posting a new one).
 
 ## Files to Create/Modify
 
 - `src/routes.js`, new `scripts/build-demo.js`, `demo/` (spec, README,
   `wiring.db`, `plans/`, `attachments/.gitkeep`).
 - Tests, `SPEC.md`, `ARCHITECTURE.md`, `README.md`, `CHANGELOG.md`.
+
+## What changed since this plan
+
+- **Read access** for visitors shipped in 0.7.4.
+- **Four drawings, not three.** The demo does not show the floorplan: it was not
+  finished in time. Demo mode (plan 0039) hides the Floorplan tab, and the
+  plans and positions stay in the database.
+- **Demo mode replaced the hand copy.** The plugin fetches `demo/` from the main
+  branch of the repository on every start and resets its data to it, so a server
+  needs only a `demo-mode-active` marker file (plan 0039). The "Format" decision
+  above (download the files and copy them into the data directory) is still how
+  the files travel, but the plugin does it.
+- **The boat grew** after this plan: two DC-DC chargers (Orion to starter and to
+  thruster), a 10 A PV fuse per solar array, a real NMEA 2000 backbone with its
+  taps, and a few structural changes made on the live prep server (the Switch
+  panel emptied, the relay banks nested in the DC panel, ratings on the bus
+  bars). All of it is in `demo/source/boat.json`.
+- **SignalK paths** were checked against the SignalK demo server
+  (signalk-showcase.fly.dev): all 26 switch paths and the battery paths exist
+  there, the solar arrays read `.panelPower`, and the two chargers read
+  `electrical.chargers.orionStarter` and `.orionThruster`. The demo server has no
+  shore, alternator, inverter or consumer power meters.
+- **The cable check findings** are two on purpose (B13-3 voltage drop on the
+  bilge pump, B11-6 deck wash pump too small); with the PV fuses no cable
+  "cannot be checked" any more.
 
 ## Follow-ups (not in this plan)
 
@@ -148,6 +178,5 @@ gets read access for read-only visitors, which the demo needs first.
 
 ## Open questions
 
-The format of the device positions and the calibration of the three drawings,
-settled when the user delivers them. Everything else is decided above; the
-defaults list is for review.
+None. The format of the positions and the calibration of the drawings were
+settled when the drawings arrived (see `demo/README.md`).
