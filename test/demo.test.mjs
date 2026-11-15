@@ -123,11 +123,15 @@ test('the relay channels light up in the live view: each consumer is switchable 
 })
 
 test('the deliberate findings are there and every other cable passes', async () => {
-  const { bad, results } = await checkResults(rebuilt)
+  const { bad, results, cables } = await checkResults(rebuilt)
   const summary = Object.fromEntries(bad.map((b) => [b.label, b]))
-  // The three PV input cables (array to charge controller) have no fuse of their own, so they cannot be checked.
-  assert.deepEqual(Object.keys(summary).sort(), ['B11-6', 'B13-3', 'S-01', 'S-11', 'S-21'], JSON.stringify(bad.map((b) => [b.label, b.verdict, b.missing])))
-  for (const l of ['S-01', 'S-11', 'S-21']) assert.equal(summary[l].verdict, 'cannot', l)
+  // The PV input cables (array to PV fuse to charge controller) are protected by a 10 A fuse each, so every cable can be checked.
+  assert.deepEqual(Object.keys(summary).sort(), ['B11-6', 'B13-3'], JSON.stringify(bad.map((b) => [b.label, b.verdict, b.missing])))
+  for (const l of ['S-01', 'S-02', 'S-11', 'S-12', 'S-21', 'S-22']) {
+    const cable = cables.find((c) => c.cableLabel === l)
+    assert.ok(cable, `${l} exists`)
+    assert.equal(results.get(cable.id).verdict, 'ok', l)
+  }
   // B13-3: bilge pump, long and thin, drop above the critical limit.
   assert.equal(summary['B13-3'].result.drop.verdict, 'warning')
   assert.equal(summary['B13-3'].result.drop.limitKind, 'critical')
@@ -136,7 +140,7 @@ test('the deliberate findings are there and every other cable passes', async () 
   assert.equal(summary['B11-6'].result.ampacity.verdict, 'fail')
   assert.ok(summary['B11-6'].result.ampacity.issues.includes('protection'))
   const counts = countVerdicts(results)
-  assert.equal(counts.cannot, 3)
+  assert.equal(counts.cannot, 0)
   assert.equal(counts.fail + counts.warning, 2)
   assert.ok(counts.ok > 60)
 })
