@@ -49,6 +49,19 @@ to someone else doesn't depend on the current owner being present.
   by switching it on and off, or watching it run, against a meter on its
   circuit; accepted figures sit beside the nameplate rating and feed the load
   check.
+- **NMEA 2000 buses (advisory)**: record each NMEA 2000 backbone as one record
+  with its taps (the device, its port, the drop length, the place along the
+  backbone and an optional power feed from a named fuse or source), its cable
+  class, length, terminators and supply rating. The Buses tab lists them with a
+  verdict and shows the taps and the checks with their reasoning: backbone
+  length, each drop (6 m), all drops together (78 m), 50 devices, two
+  terminators, the bus current from the devices' LEN (1 LEN is 50 mA) against
+  the supply rating, and a power feed. The checks are advice, not a guarantee;
+  the limits and their sources are in `docs/bus-checks.md`. The bus load counts
+  on the circuit that feeds it. A backbone can be placed on schematic pages (a
+  thick line with a drop to each device) and drawn as a route on the floorplan,
+  and a device's page says which bus it is on. Cables can also carry an optional
+  protocol label (NMEA 2000, Seatalk-1, NMEA 0183, sensor) that colours them.
 - **Conduits**: record the conduits, hoses, looms, trunking and cable trays
   that cables share, with an optional route on the floorplan. Add cables to
   a conduit from its page; a cable can pass through several in order. A cable

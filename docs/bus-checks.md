@@ -100,6 +100,6 @@ Only the figures were taken; no text is copied.
 ## Where it shows
 
 `GET /buses` returns each backbone with its derived data and checks. The web
-app (a later step) reads that route; it keeps no second copy of the rules. The
+app (the Buses tab) reads that route; it keeps no second copy of the rules. The
 code is `src/buses.js`; the tests (`test/buses.test.js`) work each case out by
 hand in comments.

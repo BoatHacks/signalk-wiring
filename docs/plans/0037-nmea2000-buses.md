@@ -105,11 +105,12 @@ and sensor wiring get only a protocol label and standard ports for now.
 
 - [x] Migration 18, the store, the resource type and the OpenAPI entry, with tests.
 - [x] The derivation, the bus load on circuits and the checks, with tests.
-- [ ] The Buses tab, the device page section and the LEN field.
-- [ ] The backbone on schematics and the floorplan.
-- [ ] The cable protocol label and the NMEA 2000 port preset.
-- [ ] SPEC.md, ARCHITECTURE.md, README, CHANGELOG, a comment on issue #4, and the
-      user's review of the limits table before a release.
+- [x] The Buses tab, the device page section and the LEN field.
+- [x] The backbone on schematics and the floorplan.
+- [x] The cable protocol label and the NMEA 2000 port preset.
+- [x] SPEC.md, ARCHITECTURE.md, README, CHANGELOG and a comment on issue #4.
+- [ ] The user's review of the limits table before a release (the maxi backbone
+      is 100 m and all drops together 78 m, decided; the rest is still to review).
 
 ## Files to Create/Modify
 

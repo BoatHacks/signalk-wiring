@@ -816,7 +816,7 @@ drop, device count, terminator count, LEN total (a device without a LEN is
 unknown) and the implied current (LEN times 0.05 A), the power feed and the
 circuit it joins. Advisory checks, each ok, warning, fail or cannot check with
 its numbers, reasoning and sources: backbone length for the class, each drop at
-most 6 m, all drops at most 76 m, at most 50 devices, exactly two terminators,
+most 6 m, all drops at most 78 m, at most 50 devices, exactly two terminators,
 bus current against the supply rating, and a power feed present. The limits are
 in `src/busLimits.json` with their sources and are explained, with the
 assumptions, in `docs/bus-checks.md`. `GET /buses` serves it (read-only).
@@ -826,6 +826,41 @@ Bus load: the circuit of the power feed's source gets the bus load, LEN times
 device without a LEN. The circuit shows `busLoads`, the Load Summary and the
 cable checks count it (`fromBus` in the load figures). Boats without
 backbones are unchanged.
+
+The screens (plan 0037, steps 3 to 5):
+
+- **Buses tab** (`#/buses`, `#/buses/<id>`): the list shows name, cable class,
+  length, device count, LEN total and a verdict badge from `GET /buses`, worst
+  first. The detail view shows the taps (device, port, drop length, place along
+  the backbone, LEN, power feed and its source), the checks as sections with
+  their reasoning and sources, the assumptions and the advisory note. Forms edit
+  every field, with a tap editor (device, port, drop length, along, power feed
+  and its fed-from device). Duplicate copies the settings without taps or route.
+  Remove has Undo, history and attachments work as for conduits.
+- **Device page**: an "On the bus" section (bus name linking to the Buses tab,
+  port, drop length, place along, power feed, LEN) and the LEN field, labelled
+  "LEN (load equivalency number)", with the hint that 1 LEN is 50 mA.
+- **Schematic**: a backbone is placed on a page by "Add bus" and stored with the
+  page (`backboneBoxes`: backbone id, x and y of the left end, hand placed). It is
+  one thick horizontal line, long enough to reach the last tapped device on the
+  page, with a vertical drop from the line to the nearest edge of each tapped
+  device, a terminator bar at an end that has one (an open ring at one that has
+  not) and a mark at a power feed. It is selectable, draggable and removable from
+  the page with Undo. It is not routed with the cables. Auto-arrange treats the
+  backbone and the devices that are not hand placed as a group: the devices are
+  set in a row, in tap order, under the line, and the groups are stacked below
+  the rest of the page.
+- **Floorplan**: a backbone has a route like a cable (Draw route, Backbone
+  choice, waypoints, midpoint handles). The line is thicker, in the signal colour,
+  with a mark at each tap at its place along the backbone (evenly spread when the
+  place or length is missing) and the drop length on hover. The first tap at 0 and
+  the last one at the full backbone length make the line start or end at that
+  device while it is placed. A backbone without a route is listed as not drawn.
+- **Cable protocol**: cables have an optional `protocol` label (`nmea2000`,
+  `seatalk1`, `nmea0183`, `sensor`, `other`). It changes nothing in the checks and
+  the circuits; it colours the cable on schematics and the floorplan and shows as
+  a badge in the cable table. The port preset "NMEA 2000" can be added to any
+  device from the terminals editor.
 
 ## 9. Configuration
 

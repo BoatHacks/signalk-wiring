@@ -840,6 +840,36 @@ sources. `deriveAll` calls `attachBusLoads`, which adds `busLoads` to the circui
 the power feed joins; `public/loadCalc.js` and `public/cableChecks.js` add them
 to the load and the rated current. `docs/bus-checks.md` is the review page.
 
+The screens. `public/buses.js` holds the pure helpers (list rows joined with the
+`GET /buses` entries, verdict words, sorting, tap rows, the buses of a device,
+tap form rows and their clean-up), `public/busesView.js` the verdict badge and the
+checks section, and `app.js` the list, the detail view, the tap editor (a form
+field type `busTaps`) and the "On the bus" section of the device page; the
+`buses` tab is in `router.js`.
+
+A backbone on a schematic page: migration 19 adds `schematic_backbones`
+(schematic, position, backbone, x, y, hand placed, one row per backbone per page),
+written and read with the page like the zone shapes (`backbone_boxes` in the
+store, `backboneBoxes` in the resource; a list that is not sent is left alone).
+Purging the page or the backbone removes the rows. A new table was chosen over
+reusing `schematic_devices` so a device row never points at a backbone. The
+geometry is pure in `public/schematicBus.js` (`busGeometry`, `hitBus`, `placeBus`,
+`arrangeBuses`); `schematicView.js` draws it as `BusShape` between the wires and
+the device boxes, with its own drag kind and selection type `bus`. The backbone
+is not given to the wire router: its drops are straight lines at the centre of
+each device box, so a cable can cross it. `arrangeBuses` runs after the dagre
+layout, so the backbone is a group placed under the rest rather than a dagre node.
+
+On the floorplan the backbone is a third route owner next to the wire run and the
+conduit (`busId` in `floorplanView.js`, route saved on `wiringBackbones`).
+`busRoutePoints`, `unroutedBuses` and `busTapMarks` in `floorplan.js` are pure; a
+route end that follows a device is derived, not stored.
+
+Migration 20 adds the nullable `wire_runs.protocol`, validated by
+`Store._checkProtocol` against `CABLE_PROTOCOLS`; `public/cableForm.js` has the
+matching `PROTOCOLS` list, and the colours are the `--proto-*` tokens in both
+themes.
+
 ## Cable checks (plan 0034)
 
 `public/cableAmpacity.js` is the data file: the ampacity table (AWG and mm2),
