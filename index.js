@@ -3,11 +3,32 @@
 const path = require('path')
 const { Store } = require('./src/store')
 const { createResourceProvider } = require('./src/resources')
-const { resolveSettings, createSettingsProvider } = require('./src/settings')
+const { resolveSettings, settingsWarnings, createSettingsProvider } = require('./src/settings')
 const { registerRoutes } = require('./src/routes')
 const { registerLiveRoutes } = require('./src/liveRoutes')
 const { getOpenApi } = require('./src/openapi')
 const { version: PLUGIN_VERSION } = require('./package.json')
+
+// The admin UI form for one Dashboard source list.
+function dashboardList (title, description) {
+  return {
+    type: 'array',
+    title,
+    description,
+    maxItems: 12,
+    items: {
+      type: 'object',
+      required: ['label', 'path', 'unit'],
+      properties: {
+        label: { type: 'string', title: 'Label', minLength: 1, maxLength: 40 },
+        path: { type: 'string', title: 'SignalK path', description: 'For example electrical.solar.power' },
+        unit: { type: 'string', title: 'Unit', enum: ['W', 'A'], enumNames: ['Watts', 'Amps'], default: 'W' },
+        voltage: { type: 'number', title: 'Voltage (amps only)', description: 'Fixed voltage that turns amps into watts. 1 to 100.', minimum: 1, maximum: 100 },
+        voltagePath: { type: 'string', title: 'Voltage path (amps only)', description: 'A SignalK voltage reading used instead of a fixed voltage.' }
+      }
+    }
+  }
+}
 
 module.exports = function (app) {
   const plugin = {}
@@ -65,7 +86,9 @@ module.exports = function (app) {
         minimum: 0.5,
         maximum: 20,
         default: 10
-      }
+      },
+      dashboardInputs: dashboardList('Dashboard inputs', 'Where the Dashboard reads live power in (Shore, Solar, Alternator ...), in the order shown. A filled list replaces the automatic rule that uses the device paths. Up to 12.'),
+      dashboardOutputs: dashboardList('Dashboard outputs', 'Where the Dashboard reads live power out (Total load, Inverter ...), in the order shown. A filled list replaces the automatic rule that uses the device paths. Up to 12.')
     }
   }
 
@@ -75,6 +98,10 @@ module.exports = function (app) {
 
   plugin.start = function (options) {
     settings = resolveSettings(options)
+    const dropped = settingsWarnings(options)
+    if (dropped.length && typeof app.setPluginStatus === 'function') {
+      app.setPluginStatus(`Ignored Dashboard entries: ${dropped.join('; ')}`)
+    }
     const dbPath = path.join(app.getDataDirPath(), 'wiring.db')
     store = new Store(dbPath)
     store.abandonRunningRuns()

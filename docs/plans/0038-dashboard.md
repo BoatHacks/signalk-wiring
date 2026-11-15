@@ -133,7 +133,7 @@ These are my proposals, to be reviewed before the build:
 
 ## Implementation Steps
 
-- [ ] The `dashboardInputs` and `dashboardOutputs` settings (schema, validation,
+- [x] The `dashboardInputs` and `dashboardOutputs` settings (schema, validation,
       served to the web app), with tests.
 - [ ] The pure derivation (statistics, checks, live input and output) with tests.
 - [ ] The history client and the paused, shared live subscription, with tests.

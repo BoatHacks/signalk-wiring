@@ -6,7 +6,9 @@ export const DEFAULT_SETTINGS = {
   defaultLengthUnit: 'm',
   autoTheme: false,
   voltageDropLimitCritical: 3,
-  voltageDropLimitNormal: 10
+  voltageDropLimitNormal: 10,
+  dashboardInputs: [],
+  dashboardOutputs: []
 }
 
 // Values a new wire run form starts with. Edits use the record's own

@@ -26,3 +26,8 @@ test('the webapp defaults carry the 3 and 10 percent voltage drop limits', () =>
   assert.equal(DEFAULT_SETTINGS.voltageDropLimitCritical, 3)
   assert.equal(DEFAULT_SETTINGS.voltageDropLimitNormal, 10)
 })
+
+test('the webapp defaults have empty dashboard source lists', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.dashboardInputs, [])
+  assert.deepEqual(DEFAULT_SETTINGS.dashboardOutputs, [])
+})
