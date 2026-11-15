@@ -17,6 +17,7 @@ const { nameUuid } = require('../scripts/build-demo.js')
 const { createResourceProvider } = require('../src/resources')
 
 const spec = JSON.parse(fs.readFileSync(SPEC_PATH, 'utf8'))
+const layoutFile = JSON.parse(fs.readFileSync(path.join(path.dirname(SPEC_PATH), 'layout.json'), 'utf8'))
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'demo-test-'))
 const rebuilt = path.join(tmp, 'wiring.db')
 const info = buildDemo(rebuilt)
@@ -157,16 +158,23 @@ test('the enclosures have inside pages with their contents', () => {
   const devices = store.list('device')
   const pages = store.list('schematic')
   const enclosures = devices.filter((d) => d.role === 'enclosure')
-  assert.deepEqual(enclosures.map((d) => d.name).sort(), ['AC panel', 'DC distribution panel', 'Relay bank 10', 'Relay bank 11', 'Relay bank 12', 'Relay bank 13', 'Switch panel'])
+  assert.deepEqual(enclosures.map((d) => d.name).sort(), ['AC panel', 'DC distribution panel', 'Relay bank 10', 'Relay bank 11', 'Relay bank 12', 'Relay bank 13'])
   for (const e of enclosures) {
     const page = pages.find((p) => p.enclosure_id === e.id)
     assert.ok(page, `${e.name} has an inside page`)
     const held = devices.filter((d) => d.parent_id === e.id)
-    // The Switch panel was emptied on the live demo (its switches stand on
-    // their own); every other enclosure holds at least three devices.
-    if (e.name !== 'Switch panel') assert.ok(held.length >= 3, `${e.name} holds devices`)
-    assert.deepEqual(page.devices.map((d) => d.deviceId).sort(), held.map((d) => d.id).sort(), e.name)
-    if (held.length > 0) assert.ok(store.enclosureInfo(e.id).boundaryCables.length >= 1, `${e.name} has boundary cables`)
+    assert.ok(held.length >= 3, `${e.name} holds devices`)
+    // The page shows what the enclosure holds, plus devices added by hand
+    // (listed in demo/source/layout.json), such as the inverter/charger on the AC panel page.
+    const onPage = page.devices.map((d) => d.deviceId)
+    for (const h of held) assert.ok(onPage.includes(h.id), `${e.name} page shows ${h.name}`)
+    const added = Object.keys((layoutFile[`${e.name} (inside)`] || {}).devices || {})
+    const heldNames = new Set(held.map((h) => h.name))
+    for (const id of onPage) {
+      const name = devices.find((d) => d.id === id).name
+      assert.ok(heldNames.has(name) || added.includes(name), `${e.name} page: ${name} is neither inside it nor listed in the layout`)
+    }
+    assert.ok(store.enclosureInfo(e.id).boundaryCables.length >= 1, `${e.name} has boundary cables`)
   }
   assert.ok(pages.some((p) => p.name === '12 V DC' && !p.enclosure_id && p.zone_shapes.length >= 5))
   assert.ok(pages.some((p) => p.name === '230 V AC' && !p.enclosure_id))
@@ -387,6 +395,45 @@ test('the demo has one NMEA 2000 bus and every one of its checks passes', async 
   // the bus is fed from the DC panel main fuse
   const tap = backbones[0].taps.find((t) => t.powerFeed)
   assert.equal(devices.find((d) => d.id === tap.fedFromDeviceId).name, 'DC panel main fuse')
+})
+
+test('the schematic layout of demo/source/layout.json is applied to the pages', () => {
+  const layout = JSON.parse(fs.readFileSync(path.join(path.dirname(SPEC_PATH), 'layout.json'), 'utf8'))
+  const copy = path.join(tmp, 'layout.db')
+  fs.copyFileSync(rebuilt, copy)
+  const store = new Store(copy)
+  const devices = store.list('device')
+  const zones = store.list('zone')
+  const pages = store.list('schematic')
+  for (const [pageName, entry] of Object.entries(layout)) {
+    const page = pages.find((p) => p.name === pageName)
+    assert.ok(page, `page ${pageName} exists`)
+    for (const [deviceName, at] of Object.entries(entry.devices)) {
+      const device = devices.find((d) => d.name === deviceName)
+      const placed = page.devices.find((p) => p.deviceId === device.id)
+      assert.deepEqual({ x: placed.x, y: placed.y }, at, `${pageName}: ${deviceName}`)
+    }
+    for (const [zoneName, at] of Object.entries(entry.zones)) {
+      const zone = zones.find((z) => z.name === zoneName)
+      const shape = page.zone_shapes.find((s) => s.zoneId === zone.id)
+      assert.deepEqual({ x: shape.x, y: shape.y, width: shape.width, height: shape.height }, at, `${pageName}: zone ${zoneName}`)
+    }
+  }
+  store.close()
+})
+
+test('read-layout turns a server\'s schematics into a layout by name and formats it', () => {
+  const { layoutOf, format } = require('../scripts/read-layout.js')
+  const layout = layoutOf(
+    {
+      p1: { name: 'Page', status: 'active', devices: [{ deviceId: 'd2', x: 10, y: 20 }, { deviceId: 'd1', x: 1, y: 2 }, { deviceId: 'gone', x: 5, y: 5 }], zoneShapes: [{ zoneId: 'z1', kind: 'rect', x: 0, y: 0, width: 100, height: 50 }] },
+      p2: { name: 'Removed page', status: 'removed', devices: [] }
+    },
+    { d1: { name: 'Alpha' }, d2: { name: 'Beta' } },
+    { z1: { name: 'Saloon' } }
+  )
+  assert.deepEqual(layout, { Page: { devices: { Alpha: { x: 1, y: 2 }, Beta: { x: 10, y: 20 } }, zones: { Saloon: { x: 0, y: 0, width: 100, height: 50 } } } })
+  assert.deepEqual(JSON.parse(format(layout)), layout)
 })
 
 test('cleanup', () => { fs.rmSync(tmp, { recursive: true, force: true }) })

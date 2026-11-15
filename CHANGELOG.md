@@ -5,6 +5,11 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- The demo builder reads `demo/source/layout.json`, the position of every schematic box and zone block, so a hand-arranged layout survives a rebuild. `scripts/read-layout.js` captures it from a running server (the schematic counterpart of `read-positions.js`). The demo now carries the current layout of the 12 V DC, 230 V AC and DC distribution panel pages.
+- The demo boat no longer has the empty "Switch panel" enclosure (and its empty inside page).
+
 ## [0.9.0] - 2026-11-15
 
 ### Changed

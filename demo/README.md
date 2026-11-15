@@ -19,6 +19,14 @@ not part of the npm package (`package.json` `files` is `index.js`, `src` and
   byte for byte; the builder copies them into `plans/`.
 - `source/positions.json`: device name to `x`, `y`, `z` in meters, read by the
   builder (see "Floorplans and positions").
+- `source/layout.json`: the position of every schematic box (by device name) and
+  zone block (by zone name) on each schematic page, read by the builder; it
+  overrides the automatic layout. Capture it from a server where the pages were
+  arranged by hand with `node scripts/read-layout.js [token] [baseUrl]`, then
+  rebuild. A device missing from the file gets the automatic position; a device
+  in the file that the spec does not put on the page was added to it by hand and
+  is added too; a page or a device name the boat no longer has makes the build
+  stop, so rerun the script after removing or renaming things.
 
 ## How it reaches a server
 
@@ -76,7 +84,7 @@ spec.
   NMEA 2000 backbone ("Main NMEA2000", 11 m, two terminators, fed from the DC
   panel main fuse, all seven bus checks pass), with signal cables besides.
 - The battery switch, the starter switch and the bow thruster contactor stand on
-  their own; the Switch panel enclosure exists but is empty.
+  their own on the 12 V DC page.
 - 230 V AC: shore power inlet, an AC panel with breakers, the inverter/charger,
   a water heater and two outlet circuits.
 - Conduits: mast, engine room and forepeak, each with assigned cables.

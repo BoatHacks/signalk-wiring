@@ -21,6 +21,7 @@ const { calibrationFor } = require('./demo-geometry')
 const SPEC_PATH = path.join(__dirname, '..', 'demo', 'source', 'boat.json')
 const DEFAULT_OUT = path.join(__dirname, '..', 'demo', 'wiring.db')
 const POSITIONS_PATH = path.join(__dirname, '..', 'demo', 'source', 'positions.json')
+const LAYOUT_PATH = path.join(__dirname, '..', 'demo', 'source', 'layout.json')
 const DRAWINGS_DIR = path.join(__dirname, '..', 'demo', 'source', 'drawings')
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -146,6 +147,9 @@ function layoutPage (devices, cables, zoneBlocks) {
 function buildDemo (outFile = DEFAULT_OUT) {
   const spec = JSON.parse(fs.readFileSync(SPEC_PATH, 'utf8'))
   const positions = fs.existsSync(POSITIONS_PATH) ? JSON.parse(fs.readFileSync(POSITIONS_PATH, 'utf8')) : {}
+  // Schematic boxes moved by hand (scripts/read-layout.js): page name to the
+  // position of its devices and zone blocks, overriding the automatic layout.
+  const layout = fs.existsSync(LAYOUT_PATH) ? JSON.parse(fs.readFileSync(LAYOUT_PATH, 'utf8')) : {}
   const { Store } = require('../src/store')
 
   fs.mkdirSync(path.dirname(outFile), { recursive: true })
@@ -161,14 +165,15 @@ function buildDemo (outFile = DEFAULT_OUT) {
 
   const store = new Store(outFile)
   try {
-    return populate(store, spec, positions, path.join(path.dirname(outFile), 'plans'))
+    return populate(store, spec, positions, layout, path.join(path.dirname(outFile), 'plans'))
   } finally {
     Store.prototype._logChange = realLog
     crypto.randomUUID = realRandomUuid
   }
 }
 
-function populate (store, spec, positions, plansDir) {
+function populate (store, spec, positions, layout, plansDir) {
+  const layoutPagesUsed = new Set()
   const banks = expandBanks(spec)
   // A consumer fed through a remotely controlled relay channel carries that
   // channel's switch path too, so its page shows how it is switched.
@@ -311,11 +316,31 @@ function populate (store, spec, positions, plansDir) {
     const id = nameUuid(`schematic:${name}`)
     schematicId.set(name, id)
     const { pos, shapes } = layoutPage(page.devices, cables, page.zoneBlocks)
+    const saved = layout[name]
+    const extraDevices = []
+    if (saved) {
+      layoutPagesUsed.add(name)
+      for (const [deviceName, at] of Object.entries(saved.devices || {})) {
+        // A device the spec does not put on the page was added to it by hand
+        // ("Add existing device"): it is placed too, if the boat has it.
+        if (!pos.has(deviceName)) {
+          if (!deviceId.has(deviceName)) throw new Error(`layout: ${deviceName} is not a device of the boat (page ${name})`)
+          extraDevices.push({ deviceId: deviceId.get(deviceName), x: at.x, y: at.y })
+          continue
+        }
+        pos.set(deviceName, { x: at.x, y: at.y })
+      }
+      for (const [zoneName, at] of Object.entries(saved.zones || {})) {
+        const shape = shapes.find((s) => s.zone === zoneName)
+        if (!shape) throw new Error(`layout: zone ${zoneName} is not on page ${name}`)
+        Object.assign(shape, { x: at.x, y: at.y, width: at.width, height: at.height })
+      }
+    }
     store.create('schematic', {
       id,
       name,
       ...fields,
-      devices: page.devices.map((d) => ({ deviceId: deviceId.get(d.name), x: pos.get(d.name).x, y: pos.get(d.name).y })),
+      devices: [...page.devices.map((d) => ({ deviceId: deviceId.get(d.name), x: pos.get(d.name).x, y: pos.get(d.name).y })), ...extraDevices],
       zone_shapes: shapes.map((s) => ({ zoneId: zoneId.get(s.zone), kind: s.kind, x: s.x, y: s.y, width: s.width, height: s.height }))
     })
   }
@@ -326,6 +351,9 @@ function populate (store, spec, positions, plansDir) {
     makePage(`${e.name} (inside)`, { devices: devices.filter((d) => d.parent === e.name) }, { enclosure_id: deviceId.get(e.name) })
   }
 
+  for (const pageName of Object.keys(layout)) {
+    if (!layoutPagesUsed.has(pageName)) throw new Error(`layout: there is no page ${pageName} (run scripts/read-layout.js again)`)
+  }
   replaceHistory(store, spec, { deviceId, cableId, conduitId, schematicId, zoneId, byName })
 
   // Leave a single file: no -wal or -shm next to it.

@@ -53,7 +53,6 @@
     {"name": "Deck starboard solar fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 30, "page": ["dc"]},
 
     {"name": "DC distribution panel", "type": "DC panel", "role": "enclosure", "zone": "Nav station", "page": ["dc"], "box": "#37474f"},
-    {"name": "Switch panel", "type": "Switch panel", "role": "enclosure", "zone": "Nav station", "notes": "Holds the battery and starter switches and the bow thruster contactor.", "box": "#6d4c41"},
     {"name": "DC panel main fuse", "type": "Fuse", "role": "distribution", "zone": "Nav station", "trip": 100, "parent": "DC distribution panel"},
     {"name": "DC panel bus", "type": "Bus bar", "role": "distribution", "zone": "Nav station", "dcA": 300, "dcV": 12, "parent": "DC distribution panel"},
     {"name": "DC negative bus", "type": "Bus bar", "role": "distribution", "zone": "Nav station", "parent": "DC distribution panel"},

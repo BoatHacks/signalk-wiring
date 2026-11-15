@@ -1,0 +1,194 @@
+{
+  "12 V DC": {
+    "devices": {
+      "AIS power": {"x": 3980, "y": 368},
+      "AIS silent": {"x": 3980, "y": 560},
+      "Alternator fuse": {"x": 320, "y": 136},
+      "Ambilight TV": {"x": 3380, "y": 80},
+      "Anchor light": {"x": 5480, "y": 368},
+      "Autopilot": {"x": 3980, "y": 176},
+      "Battery charger": {"x": 40, "y": 40},
+      "Battery switch": {"x": 1720, "y": 40},
+      "Bilge pump": {"x": 6380, "y": 272},
+      "Bimini charge controller": {"x": 600, "y": 40},
+      "Bimini PV fuse": {"x": 320, "y": 328},
+      "Bimini solar array": {"x": 40, "y": 232},
+      "Bimini solar fuse": {"x": 880, "y": 40},
+      "Black water valve": {"x": 4580, "y": 80},
+      "Bow thruster": {"x": 6080, "y": 80},
+      "Bow thruster battery": {"x": 2280, "y": 136},
+      "Bow thruster contactor": {"x": 2840, "y": 40},
+      "Bow thruster fuse": {"x": 2560, "y": 232},
+      "Cabin lights": {"x": 4280, "y": 80},
+      "Charger fuse house": {"x": 320, "y": 40},
+      "Charger fuse starter": {"x": 2000, "y": 136},
+      "Charger fuse thruster": {"x": 2000, "y": 232},
+      "Chartplotter": {"x": 3980, "y": 80},
+      "Cockpit alarm": {"x": 5180, "y": 176},
+      "DC distribution panel": {"x": 1664, "y": 480},
+      "Deck light": {"x": 5780, "y": 176},
+      "Deck port charge controller": {"x": 600, "y": 136},
+      "Deck port PV fuse": {"x": 320, "y": 424},
+      "Deck port solar array": {"x": 40, "y": 328},
+      "Deck port solar fuse": {"x": 880, "y": 136},
+      "Deck starboard charge controller": {"x": 600, "y": 232},
+      "Deck starboard PV fuse": {"x": 320, "y": 520},
+      "Deck starboard solar array": {"x": 40, "y": 424},
+      "Deck starboard solar fuse": {"x": 880, "y": 232},
+      "Deck wash pump": {"x": 6380, "y": 176},
+      "Depth sensor": {"x": 6080, "y": 176},
+      "Engine alternator": {"x": 40, "y": 136},
+      "Freezer": {"x": 3680, "y": 272},
+      "Fresh water pump": {"x": 4880, "y": 272},
+      "Fridge": {"x": 3680, "y": 176},
+      "Fuel transfer": {"x": 4880, "y": 176},
+      "House battery": {"x": 1160, "y": 40},
+      "House main fuse": {"x": 1440, "y": 40},
+      "Instruments": {"x": 5180, "y": 272},
+      "Inverter fuse": {"x": 2280, "y": 232},
+      "Inverter/charger": {"x": 2560, "y": 40},
+      "Main positive bus": {"x": 2000, "y": 40},
+      "Nav instruments": {"x": 3980, "y": 272},
+      "Navigation lights": {"x": 5780, "y": 80},
+      "NMEA 2000 backbone": {"x": 3888, "y": -192},
+      "Orion starter input fuse": {"x": 1440, "y": 136},
+      "Orion thruster input fuse": {"x": 1440, "y": 232},
+      "Orion to starter": {"x": 1720, "y": 136},
+      "Orion to thruster": {"x": 1720, "y": 232},
+      "Radio galley": {"x": 3680, "y": 80},
+      "Radio saloon": {"x": 3380, "y": 176},
+      "Saloon lights": {"x": 3380, "y": 272},
+      "Starter battery": {"x": 2280, "y": 40},
+      "Starter charge fuse": {"x": 320, "y": 232},
+      "Starter motor": {"x": 4880, "y": 80},
+      "Starter switch": {"x": 2560, "y": 136},
+      "Steaming light": {"x": 5480, "y": 176},
+      "Stern light": {"x": 5180, "y": 80},
+      "Tender remote": {"x": 6380, "y": 80},
+      "Tricolour": {"x": 5480, "y": 272},
+      "VHF power": {"x": 3980, "y": 464},
+      "Wind sensor": {"x": 5480, "y": 80}
+    },
+    "zones": {
+      "Aft cabin": {"x": 4550, "y": 20, "width": 260, "height": 176},
+      "Cockpit": {"x": 5150, "y": 20, "width": 260, "height": 368},
+      "Deck": {"x": 5750, "y": 20, "width": 260, "height": 272},
+      "Engine room": {"x": 4850, "y": 20, "width": 260, "height": 368},
+      "Forepeak": {"x": 6050, "y": 20, "width": 260, "height": 272},
+      "Forward cabin": {"x": 4250, "y": 20, "width": 260, "height": 176},
+      "Galley": {"x": 3650, "y": 20, "width": 260, "height": 368},
+      "Lazarette": {"x": 6350, "y": 20, "width": 260, "height": 368},
+      "Mast": {"x": 5450, "y": 20, "width": 260, "height": 464},
+      "Nav station": {"x": 3950, "y": 20, "width": 260, "height": 656},
+      "Saloon": {"x": 3350, "y": 20, "width": 260, "height": 368}
+    }
+  },
+  "230 V AC": {
+    "devices": {
+      "AC panel": {"x": 40, "y": 328},
+      "Battery charger": {"x": 448, "y": 512},
+      "Galley outlets": {"x": 880, "y": 80},
+      "Inverter/charger": {"x": -336, "y": 352},
+      "Saloon outlets": {"x": 580, "y": 80},
+      "Shore power inlet": {"x": -144, "y": 560},
+      "Water heater": {"x": 1180, "y": 80}
+    },
+    "zones": {
+      "Engine room": {"x": 1150, "y": 20, "width": 260, "height": 176},
+      "Galley": {"x": 850, "y": 20, "width": 260, "height": 176},
+      "Saloon": {"x": 550, "y": 20, "width": 260, "height": 176}
+    }
+  },
+  "AC panel (inside)": {
+    "devices": {
+      "AC bus": {"x": 320, "y": 32},
+      "AC main breaker": {"x": 112, "y": 32},
+      "Charger breaker": {"x": 608, "y": 224},
+      "Galley outlets breaker": {"x": 608, "y": 320},
+      "Inverter/charger": {"x": -96, "y": -32},
+      "Saloon outlets breaker": {"x": 608, "y": 128},
+      "Shore breaker": {"x": -400, "y": 32},
+      "Water heater breaker": {"x": 608, "y": 32}
+    },
+    "zones": {
+
+    }
+  },
+  "DC distribution panel (inside)": {
+    "devices": {
+      "Autopilot fuse": {"x": 486, "y": 724},
+      "Bank 10 feed fuse": {"x": 486, "y": 648},
+      "Bank 11 feed fuse": {"x": 486, "y": 463},
+      "Bank 12 feed fuse": {"x": 486, "y": 278},
+      "Bank 13 feed fuse": {"x": 486, "y": 84},
+      "Chartplotter fuse": {"x": 486, "y": 800},
+      "DC negative bus": {"x": 0, "y": 631},
+      "DC panel bus": {"x": 243, "y": 555},
+      "DC panel main fuse": {"x": 0, "y": 555},
+      "Relay bank 10": {"x": 756, "y": 593},
+      "Relay bank 11": {"x": 756, "y": 408},
+      "Relay bank 12": {"x": 762, "y": 223},
+      "Relay bank 13": {"x": 759, "y": 20}
+    },
+    "zones": {
+
+    }
+  },
+  "Relay bank 10 (inside)": {
+    "devices": {
+      "Anchor light relay (10.5)": {"x": 320, "y": 424},
+      "Deck light relay (10.6)": {"x": 320, "y": 520},
+      "Navigation lights relay (10.1)": {"x": 320, "y": 40},
+      "Relay bank 10 bus": {"x": 40, "y": 40},
+      "Steaming light relay (10.3)": {"x": 320, "y": 232},
+      "Stern light relay (10.2)": {"x": 320, "y": 136},
+      "Tricolour relay (10.4)": {"x": 320, "y": 328}
+    },
+    "zones": {
+
+    }
+  },
+  "Relay bank 11 (inside)": {
+    "devices": {
+      "Ambilight TV relay (11.3)": {"x": 320, "y": 232},
+      "Black water valve relay (11.1)": {"x": 320, "y": 40},
+      "Cockpit alarm relay (11.2)": {"x": 320, "y": 136},
+      "Deck wash pump relay (11.6)": {"x": 320, "y": 520},
+      "Fuel transfer relay (11.4)": {"x": 320, "y": 328},
+      "Relay bank 11 bus": {"x": 40, "y": 40},
+      "Tender remote relay (11.5)": {"x": 320, "y": 424}
+    },
+    "zones": {
+
+    }
+  },
+  "Relay bank 12 (inside)": {
+    "devices": {
+      "AIS power relay (12.3)": {"x": 320, "y": 232},
+      "AIS silent relay (12.6)": {"x": 320, "y": 520},
+      "Nav instruments relay (12.2)": {"x": 320, "y": 136},
+      "Radio galley relay (12.1)": {"x": 320, "y": 40},
+      "Radio saloon relay (12.5)": {"x": 320, "y": 424},
+      "Relay bank 12 bus": {"x": 40, "y": 40},
+      "VHF power relay (12.4)": {"x": 320, "y": 328}
+    },
+    "zones": {
+
+    }
+  },
+  "Relay bank 13 (inside)": {
+    "devices": {
+      "Bilge pump relay (13.3)": {"x": 320, "y": 136},
+      "Cabin lights relay (13.7)": {"x": 320, "y": 520},
+      "Freezer relay (13.5)": {"x": 320, "y": 328},
+      "Fresh water pump relay (13.2)": {"x": 320, "y": 40},
+      "Fridge relay (13.4)": {"x": 320, "y": 232},
+      "Instruments relay (13.8)": {"x": 320, "y": 616},
+      "Relay bank 13 bus": {"x": 40, "y": 40},
+      "Saloon lights relay (13.6)": {"x": 320, "y": 424}
+    },
+    "zones": {
+
+    }
+  }
+}
