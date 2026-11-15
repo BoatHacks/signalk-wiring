@@ -201,7 +201,8 @@ test('the bus load reaches the circuit, the load summary and the cable checks; t
   const { fuse1, fuse2, mk } = boat(store)
   const mfd = mk('MFD', { len: 4 })
   const gps = mk('GPS', { len: 2 })
-  const radio = mk('Radio', { rated_power_w: 10 })
+  // a device whose LEN is unknown (null, not the default 0) counts its rated power
+  const radio = mk('Radio', { rated_power_w: 10, len: null })
   const depth = mk('Depth', { len: 10 })
   const gate = mk('Gateway', { len: 3 })
   // Bus 1 is fed from fuse 1: LEN 4 + 2 + 3 (gateway) = 9 = 0.45 A; at 12 V that is 5.4 W;

@@ -54,7 +54,7 @@ const DEVICE_FIELDS = {
   cap: 'capacity_ah', usable: 'usable_fraction', chem: 'chemistry', purpose: 'purpose', make: 'make_model',
   installed: 'installed_on', vPath: 'voltage_path', cPath: 'current_path', sPath: 'soc_path',
   path: 'signalk_path', meter: 'meter_path', meterUnit: 'meter_unit', notes: 'notes', switch: 'switch_path',
-  confirm: 'confirm_switching', dcA: 'rated_dc_a', dcV: 'rated_dc_v'
+  confirm: 'confirm_switching', dcA: 'rated_dc_a', dcV: 'rated_dc_v', len: 'len'
 }
 
 // Expands the relay banks of the spec into devices and cables. A channel is a
@@ -254,6 +254,33 @@ function populate (store, spec, positions, plansDir) {
     }
     if (c.switchRef) row.switch_ref = c.switchRef
     store.create('wireRun', row)
+  }
+
+  // NMEA 2000 backbones: one record with its taps, through the Store so the
+  // validation is the real one. Devices and the feeding device are named.
+  for (const b of spec.backbones || []) {
+    const need = (name) => {
+      if (!deviceId.has(name)) throw new Error(`backbone ${b.name}: unknown device ${name}`)
+      return deviceId.get(name)
+    }
+    store.create('backbone', {
+      id: nameUuid(`backbone:${b.name}`),
+      name: b.name,
+      cable_class: b.cableClass,
+      length: b.length,
+      length_unit: 'm',
+      terminator_a: b.terminatorA !== false,
+      terminator_b: b.terminatorB !== false,
+      supply_rating_a: b.supplyRatingA,
+      taps: b.taps.map((t) => ({
+        deviceId: need(t.device),
+        port: t.port || 'NMEA 2000',
+        dropLength: t.drop,
+        along: t.along,
+        powerFeed: Boolean(t.powerFeed),
+        fedFromDeviceId: t.fedFrom ? need(t.fedFrom) : null
+      }))
+    })
   }
 
   // A circuit with no fuse is named when its first cable exists, before the

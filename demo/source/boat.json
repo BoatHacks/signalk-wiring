@@ -59,8 +59,8 @@
     {"name": "Autopilot", "type": "Autopilot", "role": "consumer", "zone": "Nav station", "w": 40, "current": "dc", "page": ["dc"]},
 
     {"name": "NMEA 2000 backbone", "type": "NMEA 2000 backbone", "role": "distribution", "zone": "Nav station", "page": ["dc"]},
-    {"name": "Wind sensor", "type": "Instrument", "role": "consumer", "zone": "Mast", "w": 2, "current": "dc", "page": ["dc"], "notes": "Powered from the data bus."},
-    {"name": "Depth sensor", "type": "Instrument", "role": "consumer", "zone": "Forepeak", "w": 1, "current": "dc", "page": ["dc"], "notes": "Powered from the data bus."},
+    {"name": "Wind sensor", "type": "Instrument", "role": "consumer", "zone": "Mast", "w": 2, "len": 2, "current": "dc", "page": ["dc"], "notes": "Powered from the data bus."},
+    {"name": "Depth sensor", "type": "Instrument", "role": "consumer", "zone": "Forepeak", "w": 1, "len": 3, "current": "dc", "page": ["dc"], "notes": "Powered from the data bus."},
 
     {"name": "Navigation lights", "type": "Navigation light", "role": "consumer", "zone": "Deck", "w": 20, "current": "dc", "page": ["dc"], "notes": "Port and starboard bow lights.", "icon": "#2e7d32"},
     {"name": "Stern light", "type": "Navigation light", "role": "consumer", "zone": "Cockpit", "w": 10, "current": "dc", "page": ["dc"]},
@@ -199,6 +199,15 @@
     {"label": "A-10", "from": "Galley outlets breaker", "to": "Galley outlets", "gauge": 2.5, "len": 9, "kind": "ac"},
     {"label": "A-11", "from": "AC bus", "to": "Charger breaker", "gauge": 1.5, "len": 0.3, "kind": "ac"},
     {"label": "A-12", "from": "Charger breaker", "to": "Battery charger", "toTerm": {"line": "AC in L", "neutral": "AC in N", "earth": "AC in PE"}, "gauge": 1.5, "len": 3, "kind": "ac"}
+  ],
+
+  "backbones": [
+    {"name": "Main NMEA2000", "cableClass": "micro", "length": 11, "terminatorA": true, "terminatorB": true, "supplyRatingA": 5, "taps": [
+      {"device": "NMEA 2000 backbone", "drop": 4, "along": 5, "powerFeed": true, "fedFrom": "DC panel main fuse"},
+      {"device": "Autopilot", "drop": 3, "along": 1},
+      {"device": "Chartplotter", "drop": 2, "along": 5},
+      {"device": "Wind sensor", "drop": 3, "along": 6},
+      {"device": "Depth sensor", "drop": 3, "along": 6}]}
   ],
 
   "conduits": [

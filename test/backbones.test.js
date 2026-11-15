@@ -141,3 +141,14 @@ test('the wiringBackbones resource lists, reads, writes and deletes', async () =
   assert.equal((await p.methods.getResource('bb1')).status, 'removed')
   store.close()
 })
+
+test('a new device starts with a LEN of 0; an explicit empty value keeps it unknown', () => {
+  const store = new Store(':memory:')
+  assert.equal(store.create('device', { name: 'New' }).len, 0)
+  assert.equal(store.create('device', { name: 'Explicit', len: 3 }).len, 3)
+  assert.equal(store.create('device', { name: 'Unknown', len: null }).len, null)
+  // an update that leaves LEN out never changes it
+  const a = store.create('device', { name: 'Keep', len: null })
+  assert.equal(store.update('device', a.id, { notes: 'x' }).len, null)
+  store.close()
+})

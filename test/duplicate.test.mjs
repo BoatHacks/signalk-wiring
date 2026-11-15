@@ -53,7 +53,8 @@ test('a battery copy keeps its details and monitoring paths through the resource
   await devices.methods.setResource('source', battery)
   const source = await devices.methods.getResource('source')
   const copy = duplicateDevicePayload(source, [battery.name])
-  assert.deepEqual(copy, { ...battery, name: 'House battery copy', confirmSwitching: false, neverRemote: false, terminals: [] })
+  // a new device starts with a LEN of 0, and the copy keeps it
+  assert.deepEqual(copy, { ...battery, len: 0, name: 'House battery copy', confirmSwitching: false, neverRemote: false, terminals: [] })
   await devices.methods.setResource('copy', copy)
   const saved = await devices.methods.getResource('copy')
   for (const [key, value] of Object.entries(copy)) assert.deepEqual(saved[key], value, key)

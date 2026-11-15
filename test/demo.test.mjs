@@ -362,4 +362,25 @@ test('npm pack leaves out demo/ and the files list is unchanged', () => {
   assert.ok(files.includes('index.js'))
 })
 
+test('the demo has one NMEA 2000 bus and every one of its checks passes', async () => {
+  const { describeBuses } = require('../src/buses')
+  const copy = path.join(tmp, 'bus.db')
+  fs.copyFileSync(rebuilt, copy)
+  const store = new Store(copy)
+  const list = async (kind, type) => Object.values(await createResourceProvider(store, kind, type).methods.listResources())
+  const backbones = await list('backbone', 'wiringBackbones')
+  const devices = await list('device', 'wiringDevices')
+  const circuits = await list('circuit', 'wiringCircuits')
+  store.close()
+  const buses = describeBuses(backbones, devices, circuits)
+  assert.equal(buses.length, 1)
+  assert.equal(buses[0].name, 'Main NMEA2000')
+  assert.equal(buses[0].checks.length, 7)
+  for (const c of buses[0].checks) assert.equal(c.verdict, 'ok', `${c.title}: ${(c.reasoning || [])[0]}`)
+  assert.equal(buses[0].verdict, 'ok')
+  // the bus is fed from the DC panel main fuse
+  const tap = backbones[0].taps.find((t) => t.powerFeed)
+  assert.equal(devices.find((d) => d.id === tap.fedFromDeviceId).name, 'DC panel main fuse')
+})
+
 test('cleanup', () => { fs.rmSync(tmp, { recursive: true, force: true }) })

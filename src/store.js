@@ -741,6 +741,8 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
+    // A new device starts with a LEN of 0; null stays the value for "unknown".
+    if (kind === 'device' && !('len' in row)) row = { ...row, len: 0 }
     if (kind === 'device') row = this._checkLen(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true))))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'backbone') row = this._checkBackbone(kind, row, true)

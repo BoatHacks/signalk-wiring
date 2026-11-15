@@ -40,7 +40,9 @@ sources; each limit is one line there and can be changed later.
    (the fuse or the supply device). Without one the check says "cannot check".
    The 3 A figure is only a warning level, because the guides differ by
    connector size.
-5. **A device without a LEN counts as unknown**, never as zero. A sum that is
+5. **A device without a LEN counts as unknown**, never as zero. (A new device is
+   created with a LEN of 0, which is a number and counts as zero load; only a
+   device whose LEN was cleared, or that predates the field, is unknown.) A sum that is
    already over the rating fails even when some LENs are missing, because the
    known part is a lower bound.
 6. **Drop lengths are in metres.** The backbone length uses its own unit (m, ft,

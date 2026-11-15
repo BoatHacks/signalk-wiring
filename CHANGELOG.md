@@ -5,6 +5,11 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- A new device starts with a LEN of 0 (the New device form shows 0, and a device created without a LEN through the resource API gets 0), so it no longer makes the bus checks say they cannot check. An empty LEN still means unknown, and existing devices are not changed. A bus device with a LEN of 0 counts no load on the bus; only an unknown LEN falls back to the rated power.
+- The demo boat has a real NMEA 2000 backbone, "Main NMEA2000", with its five taps, a power feed from the DC panel main fuse and LENs on the sensors, so all seven bus checks pass. The demo builder reads `backbones` and `len` from `boat.json`.
+
 ### Added
 
 - Demo mode. A file named `demo-mode-active` in the plugin data directory turns it on. On every plugin start the plugin then checks GitHub (`BoatHacks/signalk-wiring`, branch `main`) for newer demo files, updates its local `demo/` folder after verifying every file, and resets `wiring.db`, `plans/` and `attachments/` to the demo boat. The first reset keeps the previous database as `wiring.db.before-demo`. A server without the file behaves as before. The plugin status says what happened.

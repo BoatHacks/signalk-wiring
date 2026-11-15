@@ -419,7 +419,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
       if (f.type === 'terminals') { v[f.key] = Array.isArray(raw) ? raw.map((t) => ({ ...t })) : []; continue }
       if (f.type === 'busTaps') { v[f.key] = tapsToForm(raw); continue }
       if (f.type === 'checkbox') { v[f.key] = initial ? Boolean(raw) : Boolean(f.defaultValue); continue }
-      v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : (f.defaultValue ?? '')
+      v[f.key] = f.type === 'tags' ? tagsToText(raw) : raw != null ? String(raw) : (!initial && f.newDefault !== undefined ? String(f.newDefault) : (f.defaultValue ?? ''))
     }
     return v
   })
@@ -847,8 +847,9 @@ const DEVICE_FIELDS = [
     label: 'LEN (load equivalency number)',
     type: 'number',
     clearable: true,
+    newDefault: 0,
     showWhen: (values, ctx) => deviceFieldVisible('len', values, ctx),
-    hint: 'For an NMEA 2000 device, printed on it or in its manual. 1 LEN is 50 mA. Leave it empty when unknown; the bus checks then say they cannot check.'
+    hint: 'For an NMEA 2000 device, printed on it or in its manual. 1 LEN is 50 mA. A new device starts at 0. Empty means unknown; the bus checks then say they cannot check.'
   },
   {
     key: 'tripRatingA',
