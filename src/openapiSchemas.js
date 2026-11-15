@@ -52,6 +52,7 @@ const schemas = {
     type: nullable(str('Free-text kind of device, for example "Bilge pump", "Fuse", "Battery". Suggestions exist per role; any text is allowed. Some words (bilge pump, refrigerator, autopilot, navigation light, windlass) mark the device as critical for the cable checks.')),
     role: str('Part the device plays in the electrical system. "consumer" draws power; "source" makes it; "storage" is a battery; "distribution" is a fuse, breaker, switch, bus bar or splice; "converter" is an inverter, charger or DC-DC unit (it joins separate circuits); "enclosure" is a box that holds other devices (cables go to what is inside, never to the box).', { enum: DEVICE_ROLES, default: 'consumer' }),
     iconAttachmentId: nullable(str('Id of the attachment used as the device icon. The image is served by GET /plugins/signalk-wiring/devices/{id}/icon.')),
+    len: nullable(num('Load equivalency number (LEN) of an NMEA 2000 device; one LEN is 50 mA. Empty when unknown.')),
     schematicBoxColor: nullable(str('Colour of the device box on schematics, a CSS colour.')),
     schematicIconColor: nullable(str('Colour of the device icon on schematics, a CSS colour.')),
     zone: nullable(str('Name of the zone (place on the boat) the device is in. Writes accept a zone name or a zoneId.')),
@@ -185,6 +186,30 @@ const schemas = {
     cableIds: idList('Cables that pass through it.')
   }, 'A conduit, trunking or cable tray that carries cables.', { required: ['id', 'name'] }),
 
+  BackboneTap: obj({
+    deviceId: str('Id of the device that sits on the backbone.'),
+    port: nullable(str('Name of the device port, for example "NMEA 2000".')),
+    dropLength: nullable(num('Length of the drop from the backbone to the device, in metres.', { unit: 'm' })),
+    along: nullable(num('Distance of the tap along the backbone, in the backbone length unit.')),
+    powerFeed: bool('True when this tap feeds power into the backbone.'),
+    fedFromDeviceId: nullable(str('Id of the fuse, breaker or source a power feed tap comes from. Required when powerFeed is true.'))
+  }, 'One drop of a device onto a backbone.', { required: ['deviceId'] }),
+
+  Backbone: obj({
+    id: id(),
+    name: str('Name of the backbone.'),
+    cableClass: nullable(str('Cable class, which sets the length limit.', { enum: ['micro', 'mini', 'maxi'] })),
+    length: nullable(num('Length of the backbone. The unit is lengthUnit.')),
+    lengthUnit: nullable(str('Unit of the length, for example m.')),
+    route: nullable(list(ref('RoutePoint'), 'Path of the backbone through the boat, as points.')),
+    terminatorA: bool('True when the first end has a terminator.'),
+    terminatorB: bool('True when the second end has a terminator.'),
+    supplyRatingA: nullable(num('Current the supply of the bus is rated for, in amperes.', { unit: 'A' })),
+    status: status(),
+    notes: nullable(str('Free-text notes.')),
+    taps: list(ref('BackboneTap'), 'The drops, in order along the backbone.')
+  }, 'An NMEA 2000 backbone with its taps.', { required: ['id', 'name'] }),
+
   Zone: obj({
     id: id(),
     name: str('Name of the place on the boat. Unique, ignoring case.')
@@ -245,7 +270,7 @@ const schemas = {
 
   Attachment: obj({
     id: id(),
-    ownerType: str('What the file belongs to.', { enum: ['wireRun', 'device', 'conduit'] }),
+    ownerType: str('What the file belongs to.', { enum: ['wireRun', 'device', 'conduit', 'backbone'] }),
     ownerId: str('Id of the owner.'),
     filename: str('Original file name.'),
     mimeType: str('Content type.', { enum: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'] }),
@@ -255,7 +280,7 @@ const schemas = {
   ChangeEntry: obj({
     seq: int('Order of the entry.'),
     id: str('Id of the entry.'),
-    recordType: str('Kind of record changed.', { enum: ['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit', 'schematic'] }),
+    recordType: str('Kind of record changed.', { enum: ['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit', 'schematic', 'backbone'] }),
     recordId: str('Id of the record changed.'),
     timestamp: str('When, ISO 8601.', { format: 'date-time' }),
     summary: str('Short statement: created, updated, removed, restored and similar.'),

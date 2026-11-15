@@ -34,7 +34,7 @@ const TABLES = {
       'trip_rating_a', 'rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
       'meter_path', 'meter_unit', 'chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
       'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path',
-      'schematic_box_color', 'schematic_icon_color',
+      'schematic_box_color', 'schematic_icon_color', 'len',
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'parent_id', 'tags', 'status', 'notes'
     ]
   },
@@ -43,6 +43,13 @@ const TABLES = {
     columns: [
       'id', 'name', 'kind', 'inner_diameter', 'diameter_unit', 'zone', 'zone_id', 'route',
       'status', 'notes'
+    ]
+  },
+  backbone: {
+    table: 'backbones',
+    columns: [
+      'id', 'name', 'cable_class', 'length', 'length_unit', 'route', 'terminator_a', 'terminator_b',
+      'supply_rating_a', 'status', 'notes'
     ]
   },
   zone: {
@@ -483,9 +490,36 @@ const MIGRATIONS = [
       if (!has('devices', 'schematic_box_color')) db.exec('ALTER TABLE devices ADD COLUMN schematic_box_color TEXT')
       if (!has('devices', 'schematic_icon_color')) db.exec('ALTER TABLE devices ADD COLUMN schematic_icon_color TEXT')
     }
+  },
+  {
+    version: 18,
+    description: 'plan 0037: backbones and backbone_taps (NMEA 2000), devices + len (load equivalency number)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      const exists = (name) =>
+        db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name)
+      if (!has('devices', 'len')) db.exec('ALTER TABLE devices ADD COLUMN len REAL')
+      // schema.sql has created the tables by now; guard in case it was skipped.
+      if (!exists('backbones')) {
+        db.exec(`CREATE TABLE backbones (
+          id TEXT PRIMARY KEY, name TEXT NOT NULL, cable_class TEXT, length REAL, length_unit TEXT,
+          route TEXT, terminator_a INTEGER NOT NULL DEFAULT 0, terminator_b INTEGER NOT NULL DEFAULT 0,
+          supply_rating_a REAL, status TEXT NOT NULL DEFAULT 'active', notes TEXT)`)
+      }
+      if (!exists('backbone_taps')) {
+        db.exec(`CREATE TABLE backbone_taps (
+          id TEXT PRIMARY KEY, backbone_id TEXT NOT NULL REFERENCES backbones(id),
+          position INTEGER NOT NULL, device_id TEXT NOT NULL REFERENCES devices(id), port TEXT,
+          drop_length REAL, along REAL, power_feed INTEGER NOT NULL DEFAULT 0,
+          fed_from_device_id TEXT REFERENCES devices(id))`)
+      }
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_backbone_taps_device_port ON backbone_taps (backbone_id, device_id, COALESCE(port, ''))")
+      db.exec('CREATE INDEX IF NOT EXISTS idx_backbone_taps_device ON backbone_taps (device_id)')
+    }
   }
 ]
 
+const BACKBONE_CLASSES = ['micro', 'mini', 'maxi']
 const ZONE_SHAPE_KINDS = ['rect', 'oval', 'polygon']
 const RATING_COLUMNS = ['rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v']
 const METER_UNITS = ['A', 'W']
@@ -548,6 +582,49 @@ const CHILDREN = {
         if (out[key] && !store.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(out[key])) {
           throw new Error(`device not found: ${out[key]}`)
         }
+      }
+      return out
+    }
+  },
+  backbone: {
+    field: 'taps',
+    table: 'backbone_taps',
+    parent: 'backbone_id',
+    columns: ['device_id', 'port', 'drop_length', 'along', 'power_feed', 'fed_from_device_id'],
+    toKey: (column) => column.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+    fromRow: (r) => ({
+      deviceId: r.device_id,
+      port: r.port,
+      dropLength: r.drop_length,
+      along: r.along,
+      powerFeed: Boolean(r.power_feed),
+      fedFromDeviceId: r.fed_from_device_id
+    }),
+    normalize: (i) => ({
+      deviceId: textOrNull(i.deviceId),
+      port: textOrNull(i.port),
+      dropLength: numberOrNull(i.dropLength),
+      along: numberOrNull(i.along),
+      powerFeed: i.powerFeed === true || i.powerFeed === 1 ? 1 : 0,
+      fedFromDeviceId: textOrNull(i.fedFromDeviceId)
+    }),
+    check (item, store) {
+      const out = CHILDREN.backbone.normalize(item)
+      if (!out.deviceId) throw new Error('a tap needs a device')
+      if (!store.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(out.deviceId)) {
+        throw new Error(`device not found: ${out.deviceId}`)
+      }
+      for (const key of ['dropLength', 'along']) {
+        const v = out[key]
+        if (v !== null && (!Number.isFinite(v) || v < 0)) throw new Error(`a tap ${key === 'dropLength' ? 'drop length' : 'position along the backbone'} must be a number of 0 or more`)
+      }
+      if (out.powerFeed) {
+        if (!out.fedFromDeviceId) throw new Error('a power feed tap needs the fuse, breaker or source it is fed from')
+        if (!store.db.prepare('SELECT 1 FROM devices WHERE id = ?').get(out.fedFromDeviceId)) {
+          throw new Error(`device not found: ${out.fedFromDeviceId}`)
+        }
+      } else if (out.fedFromDeviceId) {
+        throw new Error('only a power feed tap names what it is fed from')
       }
       return out
     }
@@ -642,8 +719,9 @@ class Store {
     let row = { ...fields, id, status: fields.status || 'active' }
     if (kind === 'zone') row.name = this._checkZoneName(row.name, id)
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
-    if (kind === 'device') row = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true)))
+    if (kind === 'device') row = this._checkLen(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true))))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
+    if (kind === 'backbone') row = this._checkBackbone(kind, row, true)
     if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkLink(row, null); row = this._checkGauge(row, null) }
     if (kind === 'schematic') { row.name = this._checkSchematicName(row.name); row = this._checkEnclosureId(row, null) }
     const lists = kind === 'schematic' ? this._checkSchematicLists(row) : null
@@ -915,8 +993,67 @@ class Store {
     if (value === undefined) return null
     if (!Array.isArray(value)) throw new Error(`${children.field} must be a list`)
     const list = value.map((item) => children.check(item || {}, this, owner))
+    if (kind === 'backbone') this._checkTapsUnique(list, owner)
     if (kind === 'wireRun' && mixesAcAndDc(list)) throw new Error('A cable cannot carry both AC and DC')
     return list
+  }
+
+  // A device and port sit on one backbone once: not twice on this one, and
+  // not on another live backbone either.
+  _checkTapsUnique (list, owner) {
+    const seen = new Set()
+    for (const t of list) {
+      const key = `${t.deviceId}\u0000${t.port || ''}`
+      if (seen.has(key)) throw new Error(`device ${t.deviceId}${t.port ? ` port ${t.port}` : ''} is already a tap on this backbone`)
+      seen.add(key)
+      const other = this.db.prepare(
+        `SELECT b.name FROM backbone_taps t JOIN backbones b ON b.id = t.backbone_id
+          WHERE t.device_id = ? AND COALESCE(t.port, '') = ? AND b.id != ? AND b.status != 'removed'`
+      ).get(t.deviceId, t.port || '', owner && owner.id || '')
+      if (other) throw new Error(`device ${t.deviceId}${t.port ? ` port ${t.port}` : ''} is already a tap on the backbone ${other.name}`)
+    }
+  }
+
+  // A backbone needs a name; its class is micro, mini or maxi; length and
+  // supply rating are numbers of 0 or more; the terminator flags are stored
+  // as 0 and 1.
+  _checkBackbone (kind, fields, creating) {
+    if (kind !== 'backbone') return fields
+    let out = fields
+    if (creating || 'name' in fields) {
+      const name = typeof fields.name === 'string' ? fields.name.trim() : ''
+      if (!name) throw new Error('a backbone needs a name')
+      out = { ...out, name }
+    }
+    if ('cable_class' in out) {
+      if (out.cable_class === '' || out.cable_class === undefined) out = { ...out, cable_class: null }
+      else if (out.cable_class !== null && !BACKBONE_CLASSES.includes(out.cable_class)) {
+        throw new Error(`cable class must be one of: ${BACKBONE_CLASSES.join(', ')}`)
+      }
+    }
+    for (const key of ['length', 'supply_rating_a']) {
+      if (!(key in out)) continue
+      const v = out[key]
+      if (v === null || v === undefined || v === '') { out = { ...out, [key]: null }; continue }
+      const n = typeof v === 'string' ? Number(v) : v
+      if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) throw new Error(`${key} must be a number of 0 or more`)
+      out = { ...out, [key]: n }
+    }
+    if ('length_unit' in out && typeof out.length_unit === 'string') out = { ...out, length_unit: out.length_unit.trim() || null }
+    for (const key of ['terminator_a', 'terminator_b']) {
+      if (key in out) out = { ...out, [key]: out[key] === true || out[key] === 1 ? 1 : 0 }
+    }
+    return out
+  }
+
+  // A device's LEN is a number of 0 or more, or empty.
+  _checkLen (fields) {
+    if (!('len' in fields)) return fields
+    const v = fields.len
+    if (v === null || v === undefined || v === '') return { ...fields, len: null }
+    const n = typeof v === 'string' ? Number(v) : v
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) throw new Error('len must be a number of 0 or more')
+    return { ...fields, len: n }
   }
 
   // A gauge is a real number. Zero and below only exist in AWG, where 0 to -3
@@ -1095,9 +1232,16 @@ class Store {
     }
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing))), false)))
+    if (kind === 'device') patch = this._checkLen(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing))), false))))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
+    if (kind === 'backbone') {
+      patch = this._checkBackbone(kind, patch, false)
+      // Undo must not bring back a tap that another backbone took meanwhile.
+      if (patch.status === 'active' && existing.status === REMOVED_STATUS && patch.taps === undefined) {
+        this._checkTapsUnique(existing.taps.map((t) => CHILDREN.backbone.normalize(t)), existing)
+      }
+    }
     if (kind === 'wireRun') {
       this._checkWireRunEnds(patch)
       patch = this._checkGauge(this._checkLink(patch, existing), existing)
@@ -1823,6 +1967,8 @@ class Store {
       const title = (c) => c.cable_label || `${names.get(c.from_device_id) || '?'} to ${names.get(c.to_device_id) || '?'}`
       throw new Error(`Delete these cables first: ${blocking.map(title).join('; ')}`)
     }
+    const onBus = this.backbonesOfDevice(id)
+    if (onBus.length > 0) throw new Error(`Take it off or delete these backbones first: ${onBus.map((b) => b.name).join('; ')}`)
     let attachments = []
     const insidePages = this.db.prepare('SELECT id FROM schematics WHERE enclosure_id = ?').all(id)
     this.db.transaction(() => {
@@ -1851,6 +1997,26 @@ class Store {
       this.db.prepare('DELETE FROM conduits WHERE id = ?').run(id)
     })()
     return attachments
+  }
+
+  // Erases a removed backbone with its taps, attachments and history.
+  purgeBackbone (id) {
+    this._purgeCheck('backbone', id, 'backbone')
+    let attachments = []
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM backbone_taps WHERE backbone_id = ?').run(id)
+      attachments = this._purgeOwned('backbone', id)
+      this.db.prepare('DELETE FROM backbones WHERE id = ?').run(id)
+    })()
+    return attachments
+  }
+
+  // The backbones, live or removed, a device sits on or feeds.
+  backbonesOfDevice (deviceId) {
+    return this.db.prepare(
+      `SELECT DISTINCT b.id, b.name FROM backbones b JOIN backbone_taps t ON t.backbone_id = b.id
+        WHERE t.device_id = @d OR t.fed_from_device_id = @d ORDER BY b.rowid`
+    ).all({ d: deviceId })
   }
 
   // Erases a removed schematic page with its devices, wires and history.

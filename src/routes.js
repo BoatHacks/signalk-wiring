@@ -19,7 +19,7 @@ const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024 // 15MB
 
 const MAX_PLAN_IMAGE_BYTES = 15 * 1024 * 1024 // 15MB, same cap as attachments
 
-const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit', 'schematic'])
+const CHANGE_LOG_KINDS = new Set(['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit', 'schematic', 'backbone'])
 
 // Locked down in case someone opens the download URL directly: no scripts,
 // no network, no framing. In the webapp the file only ever loads through an
@@ -157,8 +157,8 @@ function registerRoutes (router, getStore, dataDir, getSettings = () => resolveS
 
   router.post('/attachments', requireStore, (req, res) => {
     const { ownerType, ownerId, filename } = req.query
-    if (!['wireRun', 'device', 'conduit'].includes(ownerType) || !ownerId || !filename) {
-      res.status(400).json({ error: 'ownerType (wireRun|device|conduit), ownerId, and filename query params are required' })
+    if (!['wireRun', 'device', 'conduit', 'backbone'].includes(ownerType) || !ownerId || !filename) {
+      res.status(400).json({ error: 'ownerType (wireRun|device|conduit|backbone), ownerId, and filename query params are required' })
       return
     }
 
@@ -233,7 +233,7 @@ function registerRoutes (router, getStore, dataDir, getSettings = () => resolveS
 
   // The same for devices, conduits and schematic pages: 204 when erased, 404
   // for an unknown record, 409 when it is not removed or something blocks it.
-  const purgeRoutes = { devices: 'purgeDevice', conduits: 'purgeConduit', schematics: 'purgeSchematic' }
+  const purgeRoutes = { devices: 'purgeDevice', conduits: 'purgeConduit', backbones: 'purgeBackbone', schematics: 'purgeSchematic' }
   for (const [path, method] of Object.entries(purgeRoutes)) {
     router.delete(`/${path}/:id/purge`, requireStore, (req, res) => {
       try {

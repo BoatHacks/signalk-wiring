@@ -80,7 +80,12 @@ const ac = (port) => [
 ]
 const signal = (port) => [{ name: port, conductor: 'signal', port }]
 
+// The signal port name of an NMEA 2000 device (plan 0037). Taps on a backbone
+// name this port.
+export const NMEA2000_PORT = 'NMEA 2000'
+
 const TERMINAL_PRESETS = [
+  { match: /^\s*nmea\s*2000( device)?\s*$/i, label: 'NMEA 2000 device', terminals: () => signal(NMEA2000_PORT) },
   { match: /multi\s*plus/i, label: 'MultiPlus', terminals: () => [
     ...dc('DC in'), ...ac('AC in'), ...ac('AC out 1'), ...ac('AC out 2'),
     ...signal('VE.Bus'), ...signal('Relay 1'), ...signal('Relay 2')

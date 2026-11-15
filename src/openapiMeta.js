@@ -31,6 +31,10 @@ const RESOURCE_TYPES = [
     about: 'Conduits, trunking and cable trays that carry cables.'
   },
   {
+    type: 'wiringBackbones', schema: 'Backbone', noun: 'backbone', plural: 'NMEA 2000 backbones', write: ['PUT', 'POST', 'DELETE'],
+    about: 'NMEA 2000 backbones. Each record holds the cable class, length, terminators, supply rating and the taps: one per device drop, with the drop length, the place along the backbone and an optional power feed.'
+  },
+  {
     type: 'wiringZones', schema: 'Zone', noun: 'zone', plural: 'zones (places on the boat)', write: ['PUT', 'POST', 'DELETE'],
     about: 'Named places on the boat. Devices, cables and conduits belong to a zone.'
   },
@@ -55,6 +59,7 @@ const resourceExample = {
   wiringWireRuns: { id: 'w-12', fromDeviceId: 'a1b2c3', toDeviceId: 'f9e8d7', gauge: 10, gaugeUnit: 'AWG', length: 3.5, lengthUnit: 'm', cableLabel: 'Pump feed', status: 'active', conductors: [{ conductor: 'positive', color: 'red' }], conduitIds: [] },
   wiringCircuits: { id: 'c-4', name: 'Bilge pump circuit', key: 'protector:f9e8d7', status: 'active', cableIds: ['w-12'], derived: { protectorId: 'f9e8d7', ratingA: 10, voltage: 12, ac: false, unprotected: false, endDeviceIds: ['a1b2c3'] } },
   wiringConduits: { id: 'k-1', name: 'Port conduit', kind: 'conduit', innerDiameter: 25, diameterUnit: 'mm', status: 'active', cableIds: ['w-12'] },
+  wiringBackbones: { id: 'bb-1', name: 'Main backbone', cableClass: 'mini', length: 12, lengthUnit: 'm', terminatorA: true, terminatorB: true, supplyRatingA: 4, status: 'active', taps: [{ deviceId: 'a1b2c3', port: 'NMEA 2000', dropLength: 0.5, along: 2, powerFeed: false }] },
   wiringZones: { id: 'z-1', name: 'Bilge' },
   wiringPlans: { id: 'p-1', name: 'Deck', view: 'top', status: 'active' },
   wiringSchematics: { id: 's-1', name: '12 V DC', enclosureId: null, status: 'active', devices: [{ deviceId: 'a1b2c3', x: 40, y: 40 }], wires: [], stubs: [], zoneShapes: [] },
@@ -266,7 +271,7 @@ const META = {
     summary: 'The change log of one record',
     description: 'All changes of one record, oldest first, each with the fields that changed (before and after).',
     parameters: [
-      { name: 'kind', in: 'path', required: true, description: 'Kind of record.', schema: { type: 'string', enum: ['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit', 'schematic'] } },
+      { name: 'kind', in: 'path', required: true, description: 'Kind of record.', schema: { type: 'string', enum: ['circuit', 'wireRun', 'device', 'plan', 'zone', 'conduit', 'schematic', 'backbone'] } },
       idParam('record')
     ],
     responses: { 200: json({ type: 'array', items: ref('ChangeEntry') }, 'The entries.', []) },
@@ -278,7 +283,7 @@ const META = {
     summary: 'List the files attached to a record',
     description: 'Lists the photos and documents attached to one cable, device or conduit. The files themselves come from the download operation.',
     parameters: [
-      { name: 'ownerType', in: 'query', required: true, description: 'Kind of owner.', schema: { type: 'string', enum: ['wireRun', 'device', 'conduit'] } },
+      { name: 'ownerType', in: 'query', required: true, description: 'Kind of owner.', schema: { type: 'string', enum: ['wireRun', 'device', 'conduit', 'backbone'] } },
       { name: 'ownerId', in: 'query', required: true, description: 'Id of the owner.', schema: { type: 'string' } }
     ],
     responses: { 200: json({ type: 'array', items: ref('Attachment') }, 'The attachments.', [{ id: 'at-1', ownerType: 'device', ownerId: 'a1b2c3', filename: 'pump.jpg', mimeType: 'image/jpeg', uploadedAt: '2026-11-01T10:00:00.000Z' }]) },
@@ -299,7 +304,7 @@ const META = {
     summary: 'Attach a file to a record',
     description: 'Uploads a photo (JPEG, PNG, WebP or HEIC) or a PDF, up to 15 MB, and attaches it to a cable, device or conduit. The request body is the raw file and its content type must be the file type. Needs the admin login. Only do this when the user gives you a file to attach.',
     parameters: [
-      { name: 'ownerType', in: 'query', required: true, description: 'Kind of owner.', schema: { type: 'string', enum: ['wireRun', 'device', 'conduit'] } },
+      { name: 'ownerType', in: 'query', required: true, description: 'Kind of owner.', schema: { type: 'string', enum: ['wireRun', 'device', 'conduit', 'backbone'] } },
       { name: 'ownerId', in: 'query', required: true, description: 'Id of the owner.', schema: { type: 'string' } },
       { name: 'filename', in: 'query', required: true, description: 'Name of the file.', schema: { type: 'string' } }
     ],
@@ -357,6 +362,7 @@ const META = {
   'DELETE /cables/:id/purge': purge('cable', true),
   'DELETE /devices/:id/purge': purge('device', true),
   'DELETE /conduits/:id/purge': purge('conduit', true),
+  'DELETE /backbones/:id/purge': purge('backbone', true),
   'DELETE /schematics/:id/purge': purge('schematic page', false),
 
   ...resourceMeta()

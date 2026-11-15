@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS devices (
   type TEXT,
   role TEXT NOT NULL DEFAULT 'consumer',
   icon_attachment_id TEXT,
+  len REAL,
   schematic_box_color TEXT,
   schematic_icon_color TEXT,
   zone TEXT,
@@ -165,6 +166,37 @@ CREATE TABLE IF NOT EXISTS wire_run_conduits (
 );
 
 CREATE INDEX IF NOT EXISTS idx_wire_run_conduits_conduit ON wire_run_conduits (conduit_id);
+
+-- NMEA 2000 backbones (plan 0037): one record with its taps. A tap is the
+-- drop of one device (and its port) onto the backbone.
+CREATE TABLE IF NOT EXISTS backbones (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  cable_class TEXT,
+  length REAL,
+  length_unit TEXT,
+  route TEXT,
+  terminator_a INTEGER NOT NULL DEFAULT 0,
+  terminator_b INTEGER NOT NULL DEFAULT 0,
+  supply_rating_a REAL,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS backbone_taps (
+  id TEXT PRIMARY KEY,
+  backbone_id TEXT NOT NULL REFERENCES backbones(id),
+  position INTEGER NOT NULL,
+  device_id TEXT NOT NULL REFERENCES devices(id),
+  port TEXT,
+  drop_length REAL,
+  along REAL,
+  power_feed INTEGER NOT NULL DEFAULT 0,
+  fed_from_device_id TEXT REFERENCES devices(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_backbone_taps_device_port ON backbone_taps (backbone_id, device_id, COALESCE(port, ''));
+CREATE INDEX IF NOT EXISTS idx_backbone_taps_device ON backbone_taps (device_id);
 
 -- Schematics (plan 0016): named diagrams of the electrical system. A device
 -- can sit on several pages, each with its own position. Wires are not stored:

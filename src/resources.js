@@ -14,7 +14,7 @@ function toSnakeKey (key) {
 const JSON_COLUMNS = new Set(['route', 'calibration', 'tags', 'cable_ids'])
 
 // Flags kept as 0/1 in the database and served as true/false.
-const BOOLEAN_COLUMNS = new Set(['confirm_switching', 'never_remote'])
+const BOOLEAN_COLUMNS = new Set(['confirm_switching', 'never_remote', 'terminator_a', 'terminator_b'])
 
 function rowToResource (row) {
   if (!row) return row
