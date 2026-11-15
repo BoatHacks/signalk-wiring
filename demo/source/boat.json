@@ -6,9 +6,9 @@
   "zones": ["Saloon", "Galley", "Nav station", "Forward cabin", "Aft cabin", "Engine room", "Cockpit", "Mast", "Deck", "Forepeak", "Lazarette"],
 
   "devices": [
-    {"name": "House battery", "type": "Battery", "role": "storage", "zone": "Engine room", "v": 12, "page": ["dc"], "chem": "lifepo4", "purpose": "house", "cap": 400, "usable": 0.8, "make": "LiFePO4 12.8 V 400 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.house.voltage", "cPath": "electrical.batteries.house.current", "sPath": "electrical.batteries.house.capacity.stateOfCharge", "tPath": "electrical.batteries.house.capacity.timeRemaining", "box": "#2e7d32"},
-    {"name": "Starter battery", "type": "Battery", "role": "storage", "zone": "Engine room", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "starter", "cap": 90, "usable": 0.5, "make": "AGM 12 V 90 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.starter.voltage", "cPath": "electrical.batteries.starter.current", "sPath": "electrical.batteries.starter.capacity.stateOfCharge", "box": "#c62828"},
-    {"name": "Bow thruster battery", "type": "Battery", "role": "storage", "zone": "Forepeak", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "thruster", "cap": 120, "usable": 0.5, "make": "AGM 12 V 120 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.bowThruster.voltage", "cPath": "electrical.batteries.bowThruster.current", "sPath": "electrical.batteries.bowThruster.capacity.stateOfCharge", "box": "#ef6c00"},
+    {"name": "House battery", "type": "Battery", "role": "storage", "zone": "Engine room", "v": 12, "page": ["dc"], "chem": "lifepo4", "purpose": "house", "cap": 5120, "usable": 0.8, "make": "LiFePO4 12.8 V 5120 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.house.voltage", "cPath": "electrical.batteries.house.current", "sPath": "electrical.batteries.house.capacity.stateOfCharge", "tPath": "electrical.batteries.house.capacity.timeRemaining", "box": "#2e7d32"},
+    {"name": "Starter battery", "type": "Battery", "role": "storage", "zone": "Engine room", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "starter", "cap": 1280, "usable": 0.5, "make": "AGM 12 V 1280 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.starter.voltage", "cPath": "electrical.batteries.starter.current", "sPath": "electrical.batteries.starter.capacity.stateOfCharge", "box": "#c62828"},
+    {"name": "Bow thruster battery", "type": "Battery", "role": "storage", "zone": "Forepeak", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "thruster", "cap": 2304, "usable": 0.5, "make": "AGM 12 V 2304 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.bowThruster.voltage", "cPath": "electrical.batteries.bowThruster.current", "sPath": "electrical.batteries.bowThruster.capacity.stateOfCharge", "box": "#ef6c00"},
 
     {"name": "House main fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 250, "page": ["dc"]},
     {"name": "Battery switch", "type": "Battery switch", "role": "distribution", "zone": "Aft cabin", "icon": "#f9a825", "page": ["dc"]},
@@ -250,7 +250,7 @@
   "history": [
     {"daysAgo": 27, "at": "18:42", "kind": "schematic", "ref": "12 V DC", "created": true},
     {"daysAgo": 27, "at": "19:10", "kind": "schematic", "ref": "230 V AC", "created": true},
-    {"daysAgo": 25, "at": "09:15", "kind": "device", "ref": "House battery", "diff": {"capacity_ah": [280, 400], "make_model": ["LiFePO4 12.8 V 280 Ah", "LiFePO4 12.8 V 400 Ah"]}},
+    {"daysAgo": 25, "at": "09:15", "kind": "device", "ref": "House battery", "diff": {"capacity_ah": [3584, 5120], "make_model": ["LiFePO4 12.8 V 3584 Ah", "LiFePO4 12.8 V 5120 Ah"]}},
     {"daysAgo": 24, "at": "16:30", "kind": "wireRun", "ref": "B13-3", "diff": {"length": [9, 14]}},
     {"daysAgo": 22, "at": "08:05", "kind": "zone", "ref": "Saloon", "diff": {"name": ["Salon", "Saloon"]}},
     {"daysAgo": 21, "at": "20:12", "kind": "device", "ref": "Water heater", "diff": {"rated_power_w": [1000, 750]}},

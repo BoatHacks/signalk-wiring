@@ -72,7 +72,7 @@ spec.
 
 ## The boat
 
-- 12 V DC: house battery (LiFePO4, 400 Ah), starter battery, bow thruster
+- 12 V DC: house battery (LiFePO4, 5120 Ah), starter battery, bow thruster
   battery; main fuse, battery switch, main positive bus; alternator; a shore
   charger for the house bank; two DC-DC chargers ("Orion to starter" and "Orion
   to thruster", each fed from the house battery through its own fuse and wired
@@ -104,6 +104,9 @@ spec.
   with `.voltage`, `.current` and `.capacity.stateOfCharge` (the battery's
   voltage, current and state of charge path fields).
 - The house battery also reads `.capacity.timeRemaining`.
+- The battery capacities (house 5120 Ah, starter 1280 Ah, bow thruster 2304 Ah)
+  are what the demo server publishes as `.capacity.nominal` (coulombs, divided by
+  3600), so the state of charge and the capacity the app shows agree with it.
 - Solar: `electrical.solar.bimini`, `.deckPort`, `.deckStarboard` on the arrays,
   each with its `.panelPower` (watts) as the device meter, which the Dashboard
   reads as live power in.

@@ -7,6 +7,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The demo boat's battery capacities follow the SignalK demo server: house 5120 Ah, starter 1280 Ah and bow thruster 2304 Ah (its `capacity.nominal` in coulombs divided by 3600), where they were 400, 90 and 120 Ah. The house battery's capacity change in the demo history and the make and model texts follow.
+- Two boxes of the demo's 12 V DC schematic page overlapped (the starter switch on the inverter/charger, the engine alternator on the shore charger), which the Dashboard reported under Needs attention. They are moved to free spots, and a demo test now fails when any page of the demo has overlapping boxes.
 - The demo boat's charger and alternator fuses have names that say what they protect: "Shore charger house fuse", "Orion starter output fuse", "Orion thruster output fuse", "Alternator house fuse" and "Alternator starter fuse" (they were "Charger fuse house", "Charger fuse starter", "Charger fuse thruster", "Alternator fuse" and "Starter charge fuse", two of which were easy to mix up).
 - The demo builder reads `demo/source/layout.json`, the position of every schematic box and zone block, so a hand-arranged layout survives a rebuild. `scripts/read-layout.js` captures it from a running server (the schematic counterpart of `read-positions.js`). The demo now carries the current layout of the 12 V DC, 230 V AC and DC distribution panel pages.
 - The demo boat no longer has the empty "Switch panel" enclosure (and its empty inside page).

@@ -7,6 +7,8 @@ import { createRequire } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
 import { execFileSync } from 'node:child_process'
 import { checkAll, countVerdicts } from '../public/cableChecks.js'
+import { deviceBox } from '../public/schematic.js'
+import { findOverlaps } from '../public/schematicLayout.js'
 import { axesForView, calibrationFromClicks, metersToPx, pointToPx, pxToMeters, planShowsPoint } from '../public/floorplan.js'
 
 const require = createRequire(import.meta.url)
@@ -434,6 +436,19 @@ test('read-layout turns a server\'s schematics into a layout by name and formats
   )
   assert.deepEqual(layout, { Page: { devices: { Alpha: { x: 1, y: 2 }, Beta: { x: 10, y: 20 } }, zones: { Saloon: { x: 0, y: 0, width: 100, height: 50 } } } })
   assert.deepEqual(JSON.parse(format(layout)), layout)
+})
+
+test('no schematic page of the demo has boxes that overlap (the Dashboard would flag the page)', () => {
+  const copy = path.join(tmp, 'overlap.db')
+  fs.copyFileSync(rebuilt, copy)
+  const store = new Store(copy)
+  const byId = new Map(store.list('device').map((d) => [d.id, d]))
+  for (const page of store.list('schematic')) {
+    const boxes = page.devices.filter((p) => byId.has(p.deviceId)).map((p) => deviceBox(byId.get(p.deviceId), { x: p.x, y: p.y }))
+    const pairs = findOverlaps(boxes).map(([a, b]) => `${byId.get(a).name} and ${byId.get(b).name}`)
+    assert.deepEqual(pairs, [], `${page.name}: ${pairs.join('; ')}`)
+  }
+  store.close()
 })
 
 test('cleanup', () => { fs.rmSync(tmp, { recursive: true, force: true }) })
