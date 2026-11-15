@@ -1,12 +1,12 @@
 // Hash routing: the address bar tracks the active tab and whatever is open
-// there, as `#/`, `#/<tab>`, `#/circuits/<id>`, `#/devices/<id>`,
+// there, as `#/` (the Dashboard), `#/<tab>`, `#/circuits/<id>`, `#/devices/<id>`,
 // `#/conduits/<id>`, `#/buses/<id>`, `#/schematics/<id>` and `#/floorplan/<plan id>`. Same
 // model as the stowage-mgmt plugin's hash router. Pure string and state
 // functions, so they are tested without a DOM; only App touches
 // window.location. Tools, forms, selections and zoom stay out of the URL.
 
-export const TABS = ['circuits', 'cables', 'devices', 'batteries', 'conduits', 'buses', 'load', 'zones', 'schematics', 'floorplan', 'changes']
-export const DEFAULT_TAB = 'circuits'
+export const TABS = ['dashboard', 'circuits', 'cables', 'devices', 'batteries', 'conduits', 'buses', 'load', 'zones', 'schematics', 'floorplan', 'changes']
+export const DEFAULT_TAB = 'dashboard'
 
 // Tabs whose route may carry an id.
 const ID_TABS = new Set(['circuits', 'devices', 'conduits', 'buses', 'schematics', 'floorplan'])
@@ -16,7 +16,7 @@ export function hashForState (state) {
   const tab = state && TABS.includes(state.tab) ? state.tab : DEFAULT_TAB
   const id = state && state.id
   if (id && ID_TABS.has(tab)) return '#/' + tab + '/' + encodeURIComponent(id)
-  return tab === DEFAULT_TAB ? '#/' : '#/' + tab
+  return '#/' + tab
 }
 
 // Always returns { tab, id } with a known tab and id null or a string.

@@ -2,9 +2,11 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { hashForState, parseHash, TABS } from '../public/router.js'
 
-test('hashForState: default tab is #/', () => {
-  assert.equal(hashForState({ tab: 'circuits', id: null }), '#/')
-  assert.equal(hashForState({}), '#/')
+test('hashForState: the Dashboard is the default tab and has its own address', () => {
+  assert.equal(hashForState({ tab: 'dashboard', id: null }), '#/dashboard')
+  assert.equal(hashForState({}), '#/dashboard')
+  assert.equal(hashForState({ tab: 'circuits', id: null }), '#/circuits')
+  assert.equal(TABS[0], 'dashboard')
 })
 
 test('hashForState: tabs and ids', () => {
@@ -12,7 +14,7 @@ test('hashForState: tabs and ids', () => {
   assert.equal(hashForState({ tab: 'devices', id: 'd1' }), '#/devices/d1')
   assert.equal(hashForState({ tab: 'circuits', id: 'c 1/x' }), '#/circuits/c%201%2Fx')
   assert.equal(hashForState({ tab: 'floorplan', id: 'p1' }), '#/floorplan/p1')
-  assert.equal(hashForState({ tab: 'unknown' }), '#/')
+  assert.equal(hashForState({ tab: 'unknown' }), '#/dashboard')
 })
 
 test('hashForState: tabs without detail routes ignore an id', () => {
@@ -21,14 +23,16 @@ test('hashForState: tabs without detail routes ignore an id', () => {
 })
 
 test('parseHash: empty and default', () => {
-  assert.deepEqual(parseHash(''), { tab: 'circuits', id: null })
-  assert.deepEqual(parseHash('#/'), { tab: 'circuits', id: null })
-  assert.deepEqual(parseHash(undefined), { tab: 'circuits', id: null })
+  assert.deepEqual(parseHash(''), { tab: 'dashboard', id: null })
+  assert.deepEqual(parseHash('#/'), { tab: 'dashboard', id: null })
+  assert.deepEqual(parseHash(undefined), { tab: 'dashboard', id: null })
+  assert.deepEqual(parseHash('#/dashboard'), { tab: 'dashboard', id: null })
+  assert.deepEqual(parseHash('#/dashboard/x'), { tab: 'dashboard', id: null })
 })
 
 test('parseHash: unknown tab falls back to the default', () => {
-  assert.deepEqual(parseHash('#/nonsense'), { tab: 'circuits', id: null })
-  assert.deepEqual(parseHash('#/nonsense/abc'), { tab: 'circuits', id: null })
+  assert.deepEqual(parseHash('#/nonsense'), { tab: 'dashboard', id: null })
+  assert.deepEqual(parseHash('#/nonsense/abc'), { tab: 'dashboard', id: null })
 })
 
 test('parseHash: ids, decoding and malformed input', () => {

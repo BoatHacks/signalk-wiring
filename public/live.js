@@ -226,10 +226,13 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id, options = {
     return () => document.removeEventListener('visibilitychange', onChange)
   }, [pauseWhenHidden])
 
+  // The stream opens once the plugin has answered (or failed to), so the paths
+  // of the answer and the extra ones go out in one subscription, not two.
+  const settled = live !== null || error !== null
   const streaming = shouldStream(active, hidden, pauseWhenHidden)
   const watchKey = mergePaths(pathsToWatch(live), extraPaths).join('|')
   useEffect(() => {
-    if (!streaming || !watchKey) return undefined
+    if (!streaming || !settled || !watchKey) return undefined
     const paths = watchKey.split('|')
     const watching = new Set(paths)
     let socket = null
@@ -296,7 +299,7 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id, options = {
       if (socket) { socket.onclose = null; try { socket.close() } catch (e) { /* already closed */ } }
       setConnected(false)
     }
-  }, [streaming, watchKey, period])
+  }, [streaming, settled, watchKey, period])
 
   const info = (deviceId) => liveInfo(deviceId, live, values, nameOf, stampsRef.current, now)
 
@@ -317,5 +320,5 @@ export function useLive (active, reloadKey = 0, nameOf = (id) => id, options = {
     return result.body
   }
 
-  return { live, values, connected, error, info, toggle }
+  return { live, values, connected, error, info, toggle, stamps: stampsRef.current, now, paused: active && !streaming }
 }

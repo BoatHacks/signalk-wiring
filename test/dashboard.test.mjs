@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   dashboardStats, dashboardChecks, configuredSide, autoInputSide, autoOutputSide, liveFlows, batteryCards,
   switchesOn, dashboardPaths, formatWatts, formatMetres, netText, percentText, onFloorplan, schematicPlaced,
-  cableLengthOf, batteryTotals, isChargingSource, historyPaths, STALE_MS
+  cableLengthOf, batteryTotals, isChargingSource, historyPaths, readLivePref, writeLivePref, STALE_MS
 } from '../public/dashboard.js'
 
 const NOW = 1_000_000_000
@@ -522,4 +522,21 @@ test('historyPaths: every entry of both sides and the charge of each bank, once'
     outputs: { entries: [{ path: 'b' }, { path: 'c' }] }
   }
   assert.deepEqual(historyPaths(flows, [{ socPath: 's1' }, { socPath: null }, { socPath: 'a' }]), ['a', 'b', 'c', 's1'])
+})
+
+test('the Live switch is on by default and remembered per browser', () => {
+  const store = new Map()
+  const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v) }
+  assert.equal(readLivePref(storage), true)
+  writeLivePref(false, storage)
+  assert.equal(readLivePref(storage), false)
+  writeLivePref(true, storage)
+  assert.equal(readLivePref(storage), true)
+})
+
+test('the Live switch survives storage that throws or is missing', () => {
+  const broken = { getItem () { throw new Error('blocked') }, setItem () { throw new Error('blocked') } }
+  assert.equal(readLivePref(broken), true)
+  assert.doesNotThrow(() => writeLivePref(false, broken))
+  assert.equal(readLivePref(undefined), true)
 })

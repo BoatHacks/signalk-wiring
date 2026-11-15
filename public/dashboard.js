@@ -432,7 +432,7 @@ export function batteryCards (devices, banks, live, values, stamps = new Map(), 
       hasData,
       socPath: firstPath(bank, paths, 'socPath'),
       voltagePath: firstPath(bank, paths, 'voltagePath'),
-      href: hashForState({ tab: 'batteries' })
+      href: hashForState({ tab: 'devices', id: bank.batteryIds[0] })
     })
     if (finite(r.current) && finite(r.voltage) && !r.stale) {
       const source = bank.batteryIds.map((id) => paths[id] && paths[id].currentPath).find(Boolean)
@@ -546,4 +546,26 @@ export function netText (netW) {
   if (!finite(netW)) return null
   if (Math.abs(netW) < 1) return 'balanced'
   return `${netW > 0 ? 'discharging' : 'charging'} ${formatWatts(netW)}`
+}
+
+// ---- The Live switch ----
+
+const LIVE_KEY = 'wiring.dashboardLive'
+
+// Is the Dashboard's live stream wanted? On unless the visitor turned it off
+// in this browser. Storage can be missing or throw, then it stays on.
+export function readLivePref (storage) {
+  try {
+    return (storage || globalThis.localStorage).getItem(LIVE_KEY) !== '0'
+  } catch (err) {
+    return true
+  }
+}
+
+export function writeLivePref (value, storage) {
+  try {
+    (storage || globalThis.localStorage).setItem(LIVE_KEY, value ? '1' : '0')
+  } catch (err) {
+    // the choice just is not remembered
+  }
 }

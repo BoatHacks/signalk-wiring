@@ -17,6 +17,7 @@ import {
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
 import { LoadSummary } from './loadSummary.js'
+import { DashboardTab } from './dashboardView.js'
 import { FloorplanTab } from './floorplanView.js'
 import { SchematicsTab } from './schematicView.js'
 import { BatteriesTab } from './batteriesView.js'
@@ -3038,7 +3039,7 @@ function AppBody () {
   const named = { circuits: 'circuit', devices: 'device', conduits: 'conduit', buses: 'bus' }
   const detailMissing = (nextTab) => () => missing(nextTab)(`That ${named[nextTab]} was not found.`)
   const nav = [
-    ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'], ['buses', 'Buses'],
+    ['dashboard', 'Dashboard'], ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'], ['buses', 'Buses'],
     ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan'], ['changes', 'Changes']
   ]
   const cableForm = (props) => html`<${CableForm} ...${props} />`
@@ -3057,6 +3058,7 @@ function AppBody () {
       </nav>
       <main>
       ${notFound && html`<${NotFoundNotice} message=${notFound} onClose=${() => setNotFound(null)} />`}
+      ${tab === 'dashboard' && html`<${DashboardTab} />`}
       ${tab === 'circuits' && !id && html`<${CircuitsList} onSelect=${open('circuits')} />`}
       ${tab === 'circuits' && id && html`
         <${CircuitDetail} key=${id} circuitId=${id} onBack=${back('circuits')} onNotFound=${detailMissing('circuits')} />

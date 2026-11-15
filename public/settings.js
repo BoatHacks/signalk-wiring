@@ -32,16 +32,22 @@ export function colorPlaceholder (convention) {
 // to the defaults while loading or if the request fails, so a form is
 // never blocked on it.
 export function useSettings () {
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
+  return useSettingsLoaded().settings
+}
+
+// Like useSettings, and says when the answer is in (or has failed), for a page
+// that should not draw once with defaults and again with the real values.
+export function useSettingsLoaded () {
+  const [state, setState] = useState({ settings: DEFAULT_SETTINGS, loaded: false })
 
   useEffect(() => {
     let cancelled = false
     fetch('/signalk/v2/api/resources/wiringSettings/config')
       .then((res) => (res.ok ? res.json() : null))
-      .then((loaded) => { if (!cancelled && loaded) setSettings({ ...DEFAULT_SETTINGS, ...loaded }) })
-      .catch(() => {})
+      .then((loaded) => { if (!cancelled) setState({ settings: loaded ? { ...DEFAULT_SETTINGS, ...loaded } : DEFAULT_SETTINGS, loaded: true }) })
+      .catch(() => { if (!cancelled) setState((s) => ({ ...s, loaded: true })) })
     return () => { cancelled = true }
   }, [])
 
-  return settings
+  return state
 }

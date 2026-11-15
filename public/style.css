@@ -1055,3 +1055,63 @@ main:has(.schematic-editor) { max-width: none; }
 .proto-badge.p-nmea0183 { color: var(--proto-nmea0183); border-color: var(--proto-nmea0183); }
 .proto-badge.p-sensor { color: var(--proto-sensor); border-color: var(--proto-sensor); }
 .proto-badge.p-other { color: var(--proto-other); border-color: var(--proto-other); }
+
+/* Dashboard (plan 0038, issue #24). Colours come from the theme tokens, so the
+   red night theme keeps to its reds. Everything a finger can press is at least
+   48 px high. Cards stack on a phone and sit in two columns from tablet width. */
+.dash-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 8px; }
+.dash-head p { margin: 0; }
+.dash-live { display: flex; align-items: center; gap: 12px; }
+.dash-live-state { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-muted-strong); }
+.dash-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--live-unknown); display: inline-block; }
+.dash-live-state.on .dash-dot { background: var(--live-on); }
+.dash-live-state.off .dash-dot { background: var(--live-off); }
+.dash-live-state.error .dash-dot { background: var(--danger); }
+.dash-live-switch { min-height: 48px; min-width: 48px; padding: 0 16px; border: 1px solid var(--border-strong); border-radius: 8px; cursor: pointer; font-size: 14px; }
+.dash-live-switch.active { border-color: var(--accent); }
+
+.dash-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.dash-card { margin-bottom: 0; min-width: 0; }
+.dash-card h2 { margin: 0 0 8px; font-size: 16px; }
+.dash-card h3 { margin: 12px 0 4px; font-size: 13px; color: var(--text-muted-strong); text-transform: uppercase; letter-spacing: 0.04em; }
+@media (min-width: 720px) {
+  .dash-grid { grid-template-columns: 1fr 1fr; }
+  .dash-wide { grid-column: 1 / -1; }
+}
+
+.dash-list { list-style: none; margin: 0; padding: 0; }
+.dash-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; border-top: 1px solid var(--border); }
+.dash-row:first-child { border-top: none; }
+.dash-plain { padding: 6px 0; font-size: 14px; }
+a.dash-link { display: inline-flex; align-items: center; min-height: 48px; color: var(--link); overflow-wrap: anywhere; }
+.dash-label { overflow-wrap: anywhere; }
+.dash-ok { padding: 12px; background: var(--ok-bg); border: 1px solid var(--ok-border); border-radius: 8px; color: var(--text); }
+.dash-none { color: var(--text-muted); font-size: 16px; }
+.dim { opacity: 0.55; }
+.dash-status { font-size: 12px; color: var(--text-muted); }
+
+.dash-flows { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 720px) { .dash-flows { grid-template-columns: 1fr 1fr 1fr; } }
+.dash-flow { min-width: 0; }
+.dash-flow h3 { margin-top: 0; }
+.dash-total { font-size: 28px; font-weight: 600; line-height: 1.2; margin-bottom: 4px; }
+.dash-flow .dash-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px auto; }
+.dash-reading { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dash-spark { width: 72px; height: 28px; color: var(--accent); }
+.dash-spark.empty { display: inline-block; }
+
+.dash-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 720px) { .dash-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.dash-stat { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; text-align: left; min-height: 64px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-alt); color: var(--text); text-decoration: none; }
+a.dash-stat:hover { text-decoration: none; background: var(--surface); }
+.dash-stat-value { font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+.dash-stat-label { font-size: 12px; color: var(--text-muted-strong); }
+.dash-stat .meta { font-size: 11px; }
+
+.dash-banks .dash-bank { padding: 4px 0 10px; border-top: 1px solid var(--border); }
+.dash-banks .dash-bank:first-child { border-top: none; }
+.dash-bank-main { display: flex; align-items: center; gap: 12px; }
+.dash-big { font-size: 24px; font-weight: 600; }
+.dash-bank .dash-spark { width: 96px; }
+a.dash-stat { display: flex; align-items: flex-start; min-height: 64px; }
+.dash-unmetered { display: flex; flex-wrap: wrap; align-items: center; gap: 0 14px; }
