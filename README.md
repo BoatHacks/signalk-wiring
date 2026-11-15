@@ -188,6 +188,38 @@ then restart `signalk-server` — plugin updates don't hot-reload.
 
 Requires **Node.js ≥ 22.13** (see [Why Node ≥ 22.13](#why-node--2213) below).
 
+## Demo mode
+
+A file named `demo-mode-active` in the plugin's data directory
+(`<server config>/plugin-config-data/signalk-wiring/`, next to `wiring.db`)
+turns demo mode on. The file only has to exist; it can be empty and nothing is
+read from it. A server meant for a trade fair or a showroom shows a clean demo
+boat after every start. With the file in place, every time the plugin starts
+(server restart, or saving the plugin settings):
+
+1. The plugin checks GitHub (`BoatHacks/signalk-wiring`, branch `main`) for a
+   newer version of the demo files and, if there is one, downloads it into
+   `demo/` in the data directory. Only `demo/wiring.db`, `demo/plans/` and
+   `demo/attachments/` are taken. Every file is checked against its git
+   checksum, size limits apply, and a demo database with a newer schema than the
+   plugin knows is refused. If GitHub cannot be reached, or anything is wrong,
+   the files already in `demo/` are used and the plugin status says so.
+2. The working data is replaced by the demo: `wiring.db` and the `plans/` and
+   `attachments/` folders are overwritten with copies of the demo ones. Edits
+   made during the demo are gone at the next start. The first time, the existing
+   `wiring.db` is copied to `wiring.db.before-demo` and that copy is never
+   overwritten afterwards, so an accidental marker file does not cost your real
+   database. Without a `demo/wiring.db` (a server that has never reached GitHub)
+   the plugin starts with its current data and says so in the status.
+3. The Floorplan tab is hidden and the header says "demo mode, some features
+   might not work as expected".
+
+The server where the demo content is prepared simply has no `demo-mode-active`
+file: its data is never replaced and the Floorplan tab is shown. The old
+`showFloorplan` plugin option is gone; an old value in the configuration is
+ignored. The demo files themselves are in [demo/](demo/README.md) and are not
+part of the npm package.
+
 ## Access & security
 
 Circuit/wire run/device **reads** are anonymous — same as SignalK's

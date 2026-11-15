@@ -4,6 +4,8 @@ const path = require('path')
 const { Store } = require('./src/store')
 const { createResourceProvider } = require('./src/resources')
 const { isDemoMode } = require('./src/demoMode')
+const { updateDemoFiles } = require('./src/demoSource')
+const { restoreDemoData } = require('./src/demoRestore')
 const { resolveSettings, settingsWarnings, createSettingsProvider } = require('./src/settings')
 const { registerRoutes } = require('./src/routes')
 const { registerLiveRoutes } = require('./src/liveRoutes')
@@ -31,7 +33,7 @@ function dashboardList (title, description) {
   }
 }
 
-module.exports = function (app) {
+module.exports = function (app, deps = {}) {
   const plugin = {}
 
   plugin.id = 'signalk-wiring'
@@ -97,12 +99,25 @@ module.exports = function (app) {
   let live = null
   let settings = resolveSettings({})
 
-  plugin.start = function (options) {
-    settings = resolveSettings(options, isDemoMode(app.getDataDirPath()))
+  // Counts starts and stops. A start that has to prepare the demo first only
+  // carries on when no stop or newer start came in meanwhile.
+  let generation = 0
+  // The preparation of the previous start, so two never touch the files at once.
+  let preparing = Promise.resolve()
+
+  const report = (message) => {
+    if (typeof app.setPluginStatus === 'function') app.setPluginStatus(message)
+  }
+
+  // The normal start: open the store and register the resource providers.
+  // demoStatus is the demo mode report, or null outside demo mode.
+  function begin (options, demo, demoStatus) {
+    settings = resolveSettings(options, demo)
     const dropped = settingsWarnings(options)
-    if (dropped.length && typeof app.setPluginStatus === 'function') {
-      app.setPluginStatus(`Ignored Dashboard entries: ${dropped.join('; ')}`)
-    }
+    const messages = []
+    if (dropped.length) messages.push(`Ignored Dashboard entries: ${dropped.join('; ')}`)
+    if (demoStatus) messages.push(demoStatus)
+    if (messages.length) report(messages.join('. '))
     const dbPath = path.join(app.getDataDirPath(), 'wiring.db')
     store = new Store(dbPath)
     store.abandonRunningRuns()
@@ -123,7 +138,59 @@ module.exports = function (app) {
     }
   }
 
+  // Demo mode: bring the demo files up to date, then reset the data to them.
+  // Resolves to the status line, or null when this start was cancelled. It does
+  // not throw: whatever goes wrong is reported and the plugin starts anyway.
+  async function prepareDemo (dataDir, gen) {
+    await preparing.catch(() => {})
+    if (gen !== generation) return null
+    const parts = ['Demo mode on']
+    let update
+    try {
+      update = await updateDemoFiles(dataDir, { fetch: deps.fetch })
+    } catch (e) {
+      update = { status: 'kept', commit: null, reason: `the update failed (${e && e.message})` }
+    }
+    if (gen !== generation) return null
+    const short = update.commit ? update.commit.slice(0, 7) : null
+    if (update.status === 'updated') parts.push(`demo files updated to commit ${short}`)
+    else if (update.status === 'unchanged') parts.push(`demo files unchanged (commit ${short})`)
+    else if (short) parts.push(`demo files kept at commit ${short} (${update.reason})`)
+    else parts.push(`no demo files (${update.reason})`)
+    try {
+      const restored = restoreDemoData(dataDir)
+      if (restored.restored) parts.push(restored.backedUp ? 'data restored from the demo, previous database kept as wiring.db.before-demo' : 'data restored from the demo')
+      else parts.push('no demo database, started with the current data')
+    } catch (e) {
+      parts.push(`data could not be restored (${e && e.message}), started with the current data`)
+    }
+    return parts.join(', ')
+  }
+
+  plugin.start = function (options) {
+    const gen = ++generation
+    const dataDir = app.getDataDirPath()
+    const demo = isDemoMode(dataDir)
+    if (!demo) {
+      begin(options, false, null)
+      return
+    }
+    // The server does not wait for start(), so the preparation runs on its own.
+    // Until it is done the routes answer as when the plugin is disabled.
+    report('Preparing the demo')
+    preparing = prepareDemo(dataDir, gen).then((demoStatus) => {
+      if (demoStatus === null || gen !== generation) return
+      begin(options, true, demoStatus)
+    }).catch((e) => {
+      if (gen !== generation) return
+      const message = `Demo mode could not start: ${e && e.message}`
+      if (typeof app.setPluginError === 'function') app.setPluginError(message)
+      else report(message)
+    })
+  }
+
   plugin.stop = function () {
+    generation++
     // A run in progress is cancelled first: it writes to the store as it stops.
     const stopping = live ? live.stopRuns().catch(() => {}) : Promise.resolve()
     const closing = store

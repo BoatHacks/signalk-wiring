@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Demo mode. A file named `demo-mode-active` in the plugin data directory turns it on. On every plugin start the plugin then checks GitHub (`BoatHacks/signalk-wiring`, branch `main`) for newer demo files, updates its local `demo/` folder after verifying every file, and resets `wiring.db`, `plans/` and `attachments/` to the demo boat. The first reset keeps the previous database as `wiring.db.before-demo`. A server without the file behaves as before. The plugin status says what happened.
+- In demo mode the web app header shows a subdued note after the title: "demo mode, some features might not work as expected". The settings served to the web app have a new `demoMode` value.
+
+### Changed
+
+- The `showFloorplan` plugin option ("Show the Floorplan tab") is removed. Whether the Floorplan tab shows now follows demo mode: hidden in demo mode, shown otherwise. `showFloorplan` is still in the served settings, as a derived value. An old `showFloorplan` entry in an existing configuration is ignored.
+
 ## [0.8.2] - 2026-11-15
 
 ### Added

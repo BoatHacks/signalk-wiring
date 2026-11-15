@@ -40,8 +40,11 @@ test('the plugin serves demoMode and showFloorplan false when the marker file ex
   const dir = tmp()
   fs.writeFileSync(path.join(dir, MARKER_FILE), '')
   const providers = []
-  const plugin = require('../index.js')({ getDataDirPath: () => dir, registerResourceProvider: (p) => providers.push(p) })
+  // Demo mode prepares first; the fake fetch keeps this test off the network.
+  const offline = async () => { throw new TypeError('fetch failed') }
+  const plugin = require('../index.js')({ getDataDirPath: () => dir, registerResourceProvider: (p) => providers.push(p) }, { fetch: offline })
   plugin.start({ showFloorplan: true })
+  for (let i = 0; i < 400 && providers.length < 9; i++) await new Promise((resolve) => setTimeout(resolve, 5))
   const served = await providers.find((p) => p.type === 'wiringSettings').methods.getResource('config')
   plugin.stop()
   assert.equal(served.demoMode, true)

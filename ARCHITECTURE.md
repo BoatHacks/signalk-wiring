@@ -748,6 +748,9 @@ signalk-wiring/
     calibration.js           # calibration run state machine
     safety.js                # critical-looking device types
     settings.js              # plugin options and the wiringSettings resource
+    demoMode.js              # the demo-mode-active marker file check
+    demoSource.js            # GitHub check and safe update of <dataDir>/demo
+    demoRestore.js           # reset wiring.db, plans and attachments to the demo
     store.js                 # SQLite access layer
     schema.sql                # table definitions (§3)
   public/                   # name required by the signalk-webapp keyword (§2.4)
@@ -1019,3 +1022,45 @@ drawing, using `scripts/demo-geometry.js`; `scripts/read-positions.js` writes it
 from a running server's `wiringDevices` resource so manual adjustments can be
 captured. The tests check the plans with the app's own `floorplan.js` functions
 (`pxToMeters`, `metersToPx`, `pointToPx`, `planShowsPoint`).
+
+## Demo mode (plan 0039)
+
+`src/demoMode.js` answers one question: is there a plain file named
+`demo-mode-active` in the data directory. `resolveSettings(options, demoMode)`
+puts the answer into the served settings as `demoMode` and derives
+`showFloorplan` from it (false in demo mode); `showFloorplan` is not in
+`plugin.schema` and a stale option is ignored. The web app shows the header
+note from `settings.demoMode` and hides the Floorplan tab from
+`settings.showFloorplan`.
+
+`plugin.start` stays synchronous. Outside demo mode it opens the store at once,
+as before. In demo mode it records a generation number, sets the status
+"Preparing the demo" and starts an async preparation: `updateDemoFiles`
+(`src/demoSource.js`) then `restoreDemoData` (`src/demoRestore.js`), and only
+then runs the normal start body (`begin`). `plugin.stop` bumps the generation,
+so a stop during the preparation, or a newer start, cancels the continuation;
+preparations are chained so two never work on the files at once. Until
+`begin` runs, `store` is null and the routes answer 503 as for a disabled
+plugin. Errors in the async path are caught and put in the plugin status or
+error, never thrown.
+
+`updateDemoFiles` asks the GitHub API for the newest commit on `main` that
+touched `demo/` and compares it with `demo/version.json`. On a difference it
+reads the commit's recursive git tree, accepts only `demo/wiring.db` and the
+flat files in `demo/plans/` and `demo/attachments/`, downloads each from
+raw.githubusercontent.com pinned to the commit, and checks the size against the
+tree, the git blob sha (`sha1("blob <size>\0" + bytes)`), the name characters,
+the size caps and the SQLite header schema version (`PRAGMA user_version`, a
+big-endian integer at byte 60) against `LATEST_SCHEMA_VERSION` exported by
+`src/store.js`. Files are written to `demo.new/` and swapped in by renames
+(`demo` to `demo.old`, `demo.new` to `demo`); the next run recovers a swap that
+was interrupted between the two renames. `fetch` is the global one and can be
+injected, which is how the tests run without a network. Every request has a 5 s
+timeout and the whole check a 30 s deadline (`AbortSignal`).
+
+`restoreDemoData` runs before the `Store` opens the database. It does nothing
+without `demo/wiring.db`. Otherwise it copies the current `wiring.db` to
+`wiring.db.before-demo` once (never overwriting it), removes `-wal` and `-shm`,
+replaces `wiring.db` through a temporary copy and a rename, and replaces
+`plans/` and `attachments/` the same way (an empty folder when the demo has
+none).

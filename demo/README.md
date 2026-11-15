@@ -18,13 +18,28 @@ not part of the npm package (`package.json` `files` is `index.js`, `src` and
 - `source/positions.json`: device name to `x`, `y`, `z` in meters, read by the
   builder (see "Floorplans and positions").
 
-## Use it
+## How it reaches a server
+
+A server runs the demo through the plugin's demo mode (see "Demo mode" in the
+main README). Create an empty file named `demo-mode-active` in the plugin's data
+directory (`<server config>/plugin-config-data/signalk-wiring/`) and restart the
+server. On every start the plugin looks on GitHub (`BoatHacks/signalk-wiring`,
+branch `main`) for a newer commit that touched this folder, downloads
+`wiring.db`, `plans/` and `attachments/` into `demo/` in the data directory (the
+rest of this folder, `source/` and this README, is never fetched), and then
+resets its data to them. The server that prepares the demo content has no
+marker file, so its data is never replaced.
+
+To install the files by hand instead:
 
 1. Stop the SignalK server (the plugin keeps the database open).
 2. Copy `wiring.db`, `plans/` and `attachments/` into the plugin's data
-   directory (`<server config>/plugin-config-data/signalk-wiring/`).
+   directory.
 3. Remove `wiring.db-wal` and `wiring.db-shm` from that directory if they exist.
 4. Start the server.
+
+Files only reach servers through the main branch, so commit a change to this
+folder to publish it.
 
 The database has schema version 17. The plugin migrates older databases up,
 never down, so the demo server must run a plugin at least as new as the

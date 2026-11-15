@@ -920,6 +920,34 @@ Everything else (zones, circuit/device names, voltage, breaker rating,
 rated power, SignalK path) is free-form user data, not plugin
 configuration.
 
+### 9.1 Demo mode (plan 0039)
+
+Demo mode is not a plugin option. It is on when a file named
+`demo-mode-active` exists in the plugin data directory (a plain file; nothing
+is read from it; a directory of that name does not count). It has no flags.
+
+- `wiringSettings` carries `demoMode` (boolean) and `showFloorplan`, which is
+  derived: false in demo mode, true otherwise. `showFloorplan` is no longer a
+  plugin option; a stale value in a configuration is ignored.
+- On every plugin start in demo mode the plugin asks GitHub (repository
+  `BoatHacks/signalk-wiring`, branch `main`) for the last commit that touched
+  `demo/` and compares it with `demo/version.json` in the data directory. When
+  it differs it downloads `demo/wiring.db`, `demo/plans/*` and
+  `demo/attachments/*` pinned to that commit, verifies each file against its git
+  blob sha, and replaces `<dataDir>/demo` in one rename. Limits: database 50 MB,
+  other files 20 MB, 100 MB in all; names of `[A-Za-z0-9._-]` only; a database
+  whose schema version is newer than the plugin's newest migration is refused.
+  Requests time out after 5 s and the check after 30 s. Any failure keeps the
+  old files and is shown in the plugin status.
+- Then, only when `demo/wiring.db` exists, `wiring.db` (without `-wal` and
+  `-shm`), `plans/` and `attachments/` are replaced by copies of the demo ones.
+  The first time the previous `wiring.db` is kept as `wiring.db.before-demo`;
+  that backup is never overwritten.
+- Until this is done the plugin's routes answer as when the plugin is disabled
+  and the status reads "Preparing the demo".
+- The web app hides the Floorplan tab and shows a subdued note after the title
+  in the header.
+
 ## 10. MVP Scope
 
 ### 10.1 MVP Features

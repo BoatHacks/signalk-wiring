@@ -147,8 +147,29 @@ These are my proposals, to be reviewed before the build:
 - [x] The restore, with tests.
 - [x] The GitHub check and update, with tests.
 - [x] The header note in demo mode (web app).
-- [ ] The start sequence in `index.js`, docs (README, SPEC, ARCHITECTURE,
+- [x] The start sequence in `index.js`, docs (README, SPEC, ARCHITECTURE,
       demo README), CHANGELOG and a comment on issue #20.
+
+## Decisions made while building
+
+- `resolveSettings(options, demoMode)` takes the demo mode flag as a second
+  argument, so the settings provider is built from the resolved settings.
+- The plugin factory takes an optional second argument `{ fetch }`; the server
+  passes none, so the global `fetch` is used. Tests always inject a fake.
+- Preparations are chained through one promise so an overlapping restart never
+  updates or restores the files at the same time as the earlier start.
+- Inside the accepted places, a name with a disallowed character, a nested
+  folder or a non-regular file (a link) refuses the whole update; paths outside
+  them are ignored. `demo/attachments/.gitkeep` is skipped.
+- The update swaps `demo` and `demo.new` through `demo.old`; a run that finds
+  `demo.old` without `demo` puts it back first.
+- The restore copies into `<name>.demo-new` and renames, also for the database.
+- A failed restore or a failed GitHub check is reported in the plugin status and
+  the plugin still starts; only an error in the normal start body (for example
+  the database cannot be opened) is reported as a plugin error.
+- The header note is a `span` inside the `h1`, so it wraps with the title; it
+  uses the header's own text colour at a smaller size and 85 percent opacity.
+- The comment on issue #20 was left to the caller.
 
 ## Files to Create/Modify
 
