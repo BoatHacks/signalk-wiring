@@ -1012,3 +1012,13 @@ main:has(.schematic-editor) { max-width: none; }
 .bus-checks summary { cursor: pointer; }
 .bus-checks ul { margin: 6px 0 4px 18px; padding: 0; }
 .on-the-bus h3 { margin: 10px 0 4px; font-size: 1rem; }
+
+/* A backbone on a schematic page (plan 0037) */
+.sch-bus-line { stroke: var(--accent); stroke-width: 6; stroke-linecap: round; cursor: move; }
+.sch-bus.selected .sch-bus-line { stroke-width: 9; }
+.sch-bus-drop line { stroke: var(--accent); stroke-width: 2.5; }
+.sch-bus-tap { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.sch-bus-term { stroke: var(--text); stroke-width: 4; stroke-linecap: butt; }
+.sch-bus-open { fill: var(--surface); stroke: var(--text-muted); stroke-width: 1.5; }
+.sch-bus-feed { fill: var(--warn); stroke: var(--warn); stroke-width: 1; }
+.sch-bus-name { fill: var(--text); font-size: 12px; font-weight: 600; pointer-events: none; }

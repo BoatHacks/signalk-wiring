@@ -26,6 +26,8 @@ import * as TG from './touchGestures.js'
 import * as TT from './touchTargets.js'
 import { placePopover } from './popoverPlace.js'
 import * as L from './schematicLayout.js'
+import * as B from './schematicBus.js'
+import { hashForState } from './router.js'
 import { midpoints } from './polygon.js'
 import { pageModel, insideText } from './enclosures.js'
 import { ensureInsidePage } from './insidePage.js'
@@ -122,9 +124,9 @@ export function SchematicsTab ({ renderCableForm, selectedId = null, onSelect = 
     let cancelled = false
     Promise.all([
       fetchList('wiringSchematics'), fetchList('wiringDevices'),
-      fetchList('wiringWireRuns'), fetchList('wiringCircuits'), fetchList('wiringConduits'), fetchList('wiringZones')
-    ]).then(([schematics, devices, cables, circuits, conduits, zones]) => {
-      if (!cancelled) setData({ schematics, devices, cables, circuits, conduits, zones })
+      fetchList('wiringWireRuns'), fetchList('wiringCircuits'), fetchList('wiringConduits'), fetchList('wiringZones'), fetchList('wiringBackbones')
+    ]).then(([schematics, devices, cables, circuits, conduits, zones, backbones]) => {
+      if (!cancelled) setData({ schematics, devices, cables, circuits, conduits, zones, backbones })
     }).catch((err) => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }
   }, [reloadKey])
@@ -258,6 +260,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const [hand, setHand] = useState({}) // device id -> true: placed by hand (dragged or dropped), kept by the first Auto-arrange click (plan 0028)
   const [bends, setBends] = useState({})
   const [stubPos, setStubPos] = useState({}) // cable id -> { x, y }: tabs the user placed
+  const [busPos, setBusPos] = useState({}) // backbone id -> { x, y, hand? }: backbones placed on this page (plan 0037)
   const [shapes, setShapes] = useState([]) // zone shapes: { zoneId, kind, x, y, width, height, points? }
   const [shapeKind, setShapeKind] = useState('rect')
   const [vb, setVb] = useState(null)
@@ -309,7 +312,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   // Layout lives in local state while it is being dragged and is written
   // when the drag ends. It is reset from the record whenever that changes.
-  const recordKey = JSON.stringify([schematic.devices, schematic.wires, schematic.stubs || [], schematic.zoneShapes || []])
+  const recordKey = JSON.stringify([schematic.devices, schematic.wires, schematic.stubs || [], schematic.zoneShapes || [], schematic.backboneBoxes || []])
   useEffect(() => {
     const p = {}
     const hp = {}
@@ -323,6 +326,9 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     setBends(b)
     setStubPos(sp)
     setShapes(schematic.zoneShapes || [])
+    const bp = {}
+    for (const b of schematic.backboneBoxes || []) bp[b.backboneId] = { x: b.x, y: b.y, ...(b.handPlaced ? { hand: true } : {}) }
+    setBusPos(bp)
   }, [recordKey])
 
   // An enclosure on the page stands for what it holds: its ports are the
@@ -336,6 +342,12 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const isEnclosureBox = (id) => !!(drawnById.get(id) && drawnById.get(id).isEnclosure)
   const boxes = pageDevices.map((d) => G.deviceBox(d, pos[d.id]))
   const boxById = new Map(boxes.map((b) => [b.id, b]))
+  // Backbones on this page: a thick line with drops to the tapped devices that are on it.
+  const busList = data.backbones || []
+  const busById = new Map(busList.map((b) => [b.id, b]))
+  const busGeoms = B.placedBuses(Object.entries(busPos).map(([backboneId, v]) => ({ backboneId, x: v.x, y: v.y, handPlaced: v.hand })), busList)
+    .map((p) => B.busGeometry(p.backbone, p.at, boxById))
+  const busesOffPage = busList.filter((b) => isLive(b) && !busPos[b.id]).sort((a, b) => a.name.localeCompare(b.name))
   const wireBoxes = boxes.filter((b) => !isEnclosureBox(b.id)) // cables are drawn to what is inside, never to the box
   const liveCables = model.cables.filter(isLive)
   const onPage = liveCables.filter((c) => boxById.has(c.fromDeviceId) && boxById.has(c.toDeviceId))
@@ -431,7 +443,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   const selectedWireId = selection && selection.type === 'wire' ? selection.id : null
   const shown = shapes.filter((sh) => zoneById.has(sh.zoneId))
   // while a bend point or a stretch is dragged, the viewBox stays as it was: the cheap routes drawn meanwhile must not rescale the page under the pointer
-  const view = (drag.current && drag.current.frozen) || vb || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
+  const view = (drag.current && drag.current.frozen) || vb || G.fitView([...boxes, ...busGeoms.map((g) => g.box), ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
   const fitNow = () => setVb(null)
   const toggleSnap = () => { const v = !snapOn; setSnapOn(v); N.writeSnap(v) }
   // one place decides: the toggle, flipped by the Alt key of this very event
@@ -458,7 +470,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const zoomAt = (factor, at) => {
     setVb((cur) => {
-      const v = cur || G.fitView([...boxes, ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
+      const v = cur || G.fitView([...boxes, ...busGeoms.map((g) => g.box), ...stubs.map((s) => s.tab), ...shown.map(Z.shapeBox)])
       const nw = v.w / factor
       const nh = v.h / factor
       const cx = at ? at.x : v.x + v.w / 2
@@ -479,7 +491,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   })
 
   // ---- Persisting ----
-  const save = async (nextPos, nextBends, order, nextStubs = stubPos, nextShapes = shapes, nextHand = hand) => {
+  const save = async (nextPos, nextBends, order, nextStubs = stubPos, nextShapes = shapes, nextHand = hand, nextBus = busPos) => {
     const ids = order || schematic.devices.map((d) => d.deviceId)
     try {
       await putResource('wiringSchematics', schematic.id, {
@@ -490,7 +502,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
         stubs: Object.entries(nextStubs)
           .filter(([id]) => stubsBase.some((st) => st.cableId === id))
           .map(([wireRunId, at]) => ({ wireRunId, x: Math.round(at.x), y: Math.round(at.y) })),
-        zoneShapes: nextShapes.filter((sh) => zoneById.has(sh.zoneId))
+        zoneShapes: nextShapes.filter((sh) => zoneById.has(sh.zoneId)),
+        backboneBoxes: Object.entries(nextBus).filter(([id]) => busById.has(id)).map(([backboneId, v]) => ({ backboneId, x: Math.round(v.x), y: Math.round(v.y), ...(v.hand ? { handPlaced: true } : {}) }))
       })
       onError(null)
       await reload()
@@ -531,6 +544,28 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const tabs = !keepTabs ? [] : stubs.filter((st) => st.pos).map((st) => ({ ...st.tab, deviceId: st.deviceId }))
     const moved = G.resolveOverlaps(bx, tabs, G.OVERLAP_MARGIN, movable)
     return Object.keys(moved).length ? { ...layout, ...moved } : layout
+  }
+
+  const addBus = async (id) => {
+    if (!id || busPos[id] || !busById.has(id)) return
+    const spot = B.placeBus(busById.get(id), boxes, centre())
+    const next = { ...busPos, [id]: { x: spot.x, y: spot.y } }
+    setBusPos(next)
+    setSelection({ type: 'bus', id })
+    await save(pos, bends, undefined, undefined, undefined, undefined, next)
+  }
+  const removeBusFromPage = async (id) => {
+    const old = busPos[id]
+    const next = { ...busPos }
+    delete next[id]
+    setBusPos(next)
+    setSelection(null)
+    await save(pos, bends, undefined, undefined, undefined, undefined, next)
+    if (!old) return
+    undo.offer({
+      message: `Bus "${(busById.get(id) || {}).name || ''}" taken off this page.`,
+      onUndo: () => patchStored((s) => ({ backboneBoxes: [...(s.backboneBoxes || []), { backboneId: id, x: old.x, y: old.y, ...(old.hand ? { handPlaced: true } : {}) }] }))
+    })
   }
 
   const addExisting = async (id, at) => {
@@ -611,17 +646,25 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     const fixed = step.full ? [] : pageDevices.map((d) => d.id).filter((id) => hand[id])
     const auto = G.autoLayout(dagre, pageDevices, onPage)
     const layout = tidied(fixed.length ? L.arrangeFree(auto, pos, fixed) : auto, fixed.length ? pageDevices.map((d) => d.id).filter((id) => !hand[id]) : null, !step.clear.tabs)
+    const layoutBoxes = Object.keys(layout).map((id) => { const d = drawnById.get(id) || deviceById.get(id); return d ? G.deviceBox(d, layout[id]) : null }).filter(Boolean)
+    const placedBackbones = Object.keys(busPos).map((id) => busById.get(id)).filter((b) => b && isLive(b))
+    const keepBus = new Set(step.full ? [] : Object.keys(busPos).filter((id) => busPos[id].hand))
+    const arrangedBus = B.arrangeBuses(placedBackbones, layoutBoxes, busPos, keepBus, new Set(fixed))
+    Object.assign(layout, arrangedBus.devices)
+    const nextBus = {}
+    for (const b of placedBackbones) nextBus[b.id] = arrangedBus.buses[b.id] ? { ...arrangedBus.buses[b.id] } : busPos[b.id]
+    setBusPos(nextBus)
     setPos(layout)
     if (step.full) {
       setBends({})
       setStubPos({})
       setHand({})
-      await save(layout, {}, undefined, {}, undefined, {})
+      await save(layout, {}, undefined, {}, undefined, {}, nextBus)
       undo.offer({
         message: 'Everything on this page arranged.',
         onUndo: () => patchStored(() => ({ devices: before.devices, wires: before.wires, stubs: before.stubs }))
       })
-    } else await save(layout, bends)
+    } else await save(layout, bends, undefined, undefined, undefined, undefined, nextBus)
     if (step.armed) {
       armedPending.current = editKeyRef.current
       // when the layout did not change, no new data comes back: settle after a moment
@@ -770,6 +813,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   useEffect(() => {
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (selection && selection.type === 'bus' && (e.key === 'Delete' || e.key === 'Backspace') && !G.isTypingTarget(e.target)) {
+        e.preventDefault()
+        removeBusFromPage(selection.id)
+        return
+      }
       const cmd = G.keyCommand(e.key, {
         typing: G.isTypingTarget(e.target),
         drag: !!drag.current && (drag.current.kind !== 'pan' || drag.current.moved),
@@ -1008,6 +1056,12 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       drag.current = { kind: 'move', id: device.id, dx: p.x - device.x, dy: p.y - device.y, sx: e.clientX, sy: e.clientY, moved: false }
       return
     }
+    const busHit = B.hitBus(busGeoms, p.x, p.y, Math.max(B.BUS_HIT, TT.hitRadius('wire', e.pointerType, zoom)))
+    if (busHit) {
+      setSelection({ type: 'bus', id: busHit.id })
+      drag.current = { kind: 'bus', id: busHit.id, dx: p.x - busHit.x1, dy: p.y - busHit.y, sx: e.clientX, sy: e.clientY, moved: false }
+      return
+    }
     const wire = G.hitWire(wires, p.x, p.y)
     if (wire) {
       const tap = { id: wire.id, t: Date.now(), x: e.clientX, y: e.clientY }
@@ -1039,6 +1093,10 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       const p = toCanvas(e)
       const at = snapping(e) ? N.snapCorner(p, d.dx, d.dy) : { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) }
       setPos((cur) => ({ ...cur, [d.id]: at }))
+    } else if (d.kind === 'bus') {
+      const p = toCanvas(e)
+      const at = snapping(e) ? N.snapCorner(p, d.dx, d.dy) : { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) }
+      setBusPos((cur) => ({ ...cur, [d.id]: { x: at.x, y: at.y, hand: true } }))
     } else if (d.kind === 'stub') {
       const p = toCanvas(e)
       const at = snapping(e) ? N.snapCorner(p, d.dx, d.dy) : { x: Math.round(p.x - d.dx), y: Math.round(p.y - d.dy) }
@@ -1127,6 +1185,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
       setHand(nextHand)
       save(next, bends, undefined, undefined, undefined, nextHand)
     }
+    if (d.kind === 'bus' && d.moved) save(pos, bends)
     if (d.kind === 'bend' && d.moved) save(pos, bends)
     if (d.kind === 'seg' && d.moved && d.result) save(pos, { ...bends, [d.wireId]: d.result })
     if ((d.kind === 'shape-move' || d.kind === 'shape-resize' || d.kind === 'corner') && d.moved) save(pos, bends, undefined, stubPos, shapes)
@@ -1209,6 +1268,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           <option value="">Add existing device…</option>
           ${addable.map((d) => html`<option value=${d.id} key=${d.id}>${d.name} (${roleLabel(d.role)})</option>`)}
         </select>
+        <select value="" data-testid="add-bus" disabled=${busesOffPage.length === 0} title=${busList.length === 0 ? 'Create a bus on the Buses tab first' : 'Draw a bus (an NMEA 2000 backbone) on this page'}
+          onChange=${(e) => { const id = e.target.value; e.target.value = ''; addBus(id) }}>
+          <option value="">Add bus…</option>
+          ${busesOffPage.map((b) => html`<option value=${b.id} key=${b.id}>${b.name}</option>`)}
+        </select>
         <select value=${shapeKind} data-testid="shape-kind" title="Shape of a new zone" onChange=${(e) => setShapeKind(e.target.value)}>
           ${Z.SHAPE_KINDS.map((k) => html`<option value=${k.value} key=${k.value}>${k.label}</option>`)}
         </select>
@@ -1274,6 +1338,8 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
               dim=${dimming && !hl.cableIds.has(w.id)} lit=${dimming && hl.cableIds.has(w.id)} />`)}
             ${stubs.map((s) => html`<${StubShape} key=${s.cableId} stub=${s} mark=${wireMark(checks.get(s.cableId))} />`)}
             ${selectedWireId && html`<${BendHandles} wire=${wires.find((w) => w.id === selectedWireId)} bends=${bends[selectedWireId] || []} />`}
+            ${busGeoms.map((g) => html`<${BusShape} key=${g.id} geom=${g} bus=${busById.get(g.id)} deviceName=${deviceName}
+              selected=${!!selection && selection.type === 'bus' && selection.id === g.id} />`)}
             ${boxes.map((b) => html`<${DeviceShape} key=${b.id} box=${b} device=${drawnById.get(b.id)}
               selected=${!!selection && selection.type === 'device' && selection.id === b.id}
               target=${!!preview && preview.targetId === b.id}
@@ -1319,6 +1385,13 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           <span class="meta">Zone shape, ${(Z.SHAPE_KINDS.find((k) => k.value === selectedShape.kind) || {}).label.toLowerCase()}. Drawing only: it does not set the zone of a device.</span>
           <button type="button" class="link-btn" data-testid="remove-zone-shape" onClick=${() => removeShape(selectedShape.zoneId)}>Remove shape</button>
           <span class="meta">${selectedShape.kind === 'polygon' ? 'Drag a corner to move it, drag a midpoint dot to add a corner, double-click a corner to remove it.' : 'Drag the squares to resize; hold Shift for a circle or square.'}</span>
+        </div>`}
+      ${selection && selection.type === 'bus' && busById.get(selection.id) && html`
+        <div class="schematic-inspector" data-testid="bus-inspector">
+          <strong>${busById.get(selection.id).name}</strong>
+          <span class="meta">Bus (NMEA 2000 backbone), ${B.pageTaps(busById.get(selection.id), boxById).length} of ${(busById.get(selection.id).taps || []).length} devices on this page. Drag the line to move it.</span>
+          <a href=${hashForState({ tab: 'buses', id: selection.id })} data-testid="open-bus">Open bus</a>
+          <button type="button" class="link-btn" data-testid="remove-bus" onClick=${() => removeBusFromPage(selection.id)}>Take off this page</button>
         </div>`}
       ${selectedDevice && html`
         <div class="schematic-inspector" data-testid="inspector">
@@ -1390,6 +1463,31 @@ function ZoneHandles ({ shape }) {
     <g class="sch-zone-handles" data-testid="zone-handles">
       ${Z.handlePositions(shape).map((h) => html`<rect key=${h.id} x=${h.x - 5} y=${h.y - 5} width="10" height="10" class="sch-zone-handle" data-handle=${h.id} />`)}
     </g>`
+}
+
+// A backbone: one thick line, a drop to each tapped device, terminator marks
+// at the ends that have one, and a mark at the power feed.
+function BusShape ({ geom, bus, deviceName, selected }) {
+  const unit = (bus && bus.lengthUnit) || 'm'
+  return html`
+    <g class=${`sch-bus${selected ? ' selected' : ''}`} data-bus=${geom.id} data-testid="bus-shape">
+      <title>${geom.name}</title>
+      ${geom.drops.filter((d) => d.drawn).map((d) => html`
+        <g key=${d.deviceId + '|' + d.port} class="sch-bus-drop" data-testid="bus-drop">
+          <title>${B.dropTitle(d, deviceName(d.deviceId), unit)}</title>
+          <line x1=${d.x} y1=${d.y1} x2=${d.x} y2=${d.y2} />
+          <circle cx=${d.x} cy=${d.y1} r="3.5" class="sch-bus-tap" />
+          ${d.powerFeed && html`<path class="sch-bus-feed" data-testid="bus-feed" d=${`M ${d.x - 6} ${d.y1 + (d.y2 > d.y1 ? 10 : -10)} L ${d.x + 6} ${d.y1 + (d.y2 > d.y1 ? 10 : -10)} L ${d.x} ${d.y1 + (d.y2 > d.y1 ? 20 : -20)} Z`} />`}
+        </g>
+      `)}
+      <line class="sch-bus-line" x1=${geom.x1} y1=${geom.y} x2=${geom.x2} y2=${geom.y} />
+      ${geom.termA && html`<line class="sch-bus-term" data-testid="bus-term" x1=${geom.x1} y1=${geom.y - 9} x2=${geom.x1} y2=${geom.y + 9} />`}
+      ${geom.termB && html`<line class="sch-bus-term" data-testid="bus-term" x1=${geom.x2} y1=${geom.y - 9} x2=${geom.x2} y2=${geom.y + 9} />`}
+      ${!geom.termA && html`<circle class="sch-bus-open" cx=${geom.x1} cy=${geom.y} r="4" />`}
+      ${!geom.termB && html`<circle class="sch-bus-open" cx=${geom.x2} cy=${geom.y} r="4" />`}
+      <text class="sch-bus-name" x=${geom.label.x} y=${geom.label.y}>${shorten(geom.name, 40)}</text>
+    </g>
+  `
 }
 
 function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
