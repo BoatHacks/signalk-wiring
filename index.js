@@ -69,8 +69,10 @@ module.exports = function (app) {
 
   let store = null
   let live = null
+  let settings = resolveSettings({})
 
   plugin.start = function (options) {
+    settings = resolveSettings(options)
     const dbPath = path.join(app.getDataDirPath(), 'wiring.db')
     store = new Store(dbPath)
     store.abandonRunningRuns()
@@ -83,7 +85,7 @@ module.exports = function (app) {
       createResourceProvider(store, 'zone', 'wiringZones'),
       createResourceProvider(store, 'conduit', 'wiringConduits'),
       createResourceProvider(store, 'schematic', 'wiringSchematics'),
-      createSettingsProvider(resolveSettings(options))
+      createSettingsProvider(settings)
     ]
     for (const provider of providers) {
       app.registerResourceProvider(provider)
@@ -102,7 +104,7 @@ module.exports = function (app) {
   // enabled state (signalk-plugin skill §2), so routes.js reads `store`
   // through this getter rather than a captured value.
   plugin.registerWithRouter = function (router) {
-    registerRoutes(router, () => store, app.getDataDirPath())
+    registerRoutes(router, () => store, app.getDataDirPath(), () => settings)
     live = registerLiveRoutes(router, () => store, { app })
   }
 

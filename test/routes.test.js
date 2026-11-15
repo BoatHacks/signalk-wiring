@@ -493,13 +493,14 @@ test('every GET route is registered readonly when the server supports router.acc
 
   const gets = registered.filter((r) => r.method === 'get')
   const writes = registered.filter((r) => r.method !== 'get')
-  assert.ok(gets.length >= 9)
+  assert.ok(gets.length >= 13)
   assert.ok(writes.length >= 6)
   assert.deepEqual(gets.filter((r) => r.level !== 'readonly'), [])
   assert.deepEqual(writes.filter((r) => r.level !== 'admin'), [])
   assert.deepEqual(gets.map((r) => r.routePath).sort(), [
     '/attachments', '/attachments/:id', '/changelog', '/changelog/:kind/:id',
-    '/circuits/:id/diagram', '/derived', '/devices/:id/icon', '/plans/:id/image', '/version'
+    '/checks', '/circuits/:id/diagram', '/derived', '/devices/:id/icon', '/load-summary', '/plans/:id/image',
+    '/search', '/trace/:deviceId', '/version'
   ])
   store.close()
 })

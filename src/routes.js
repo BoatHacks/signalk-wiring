@@ -3,6 +3,8 @@
 const fs = require('fs')
 const path = require('path')
 const { rowToResource } = require('./resources')
+const query = require('./query')
+const { resolveSettings } = require('./settings')
 const { version: PLUGIN_VERSION } = require('../package.json')
 
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
@@ -134,7 +136,7 @@ function buildCircuitDiagram (store, circuitId) {
 // Store between plugin.start()/stop() — so every handler reads the store
 // fresh and returns 503 rather than crashing on a null store if the
 // plugin is currently disabled.
-function registerRoutes (router, getStore, dataDir) {
+function registerRoutes (router, getStore, dataDir, getSettings = () => resolveSettings({})) {
   const requireStore = (req, res, next) => {
     const store = getStore()
     if (!store) {
@@ -329,6 +331,47 @@ function registerRoutes (router, getStore, dataDir) {
     const { banks, warnings } = req.wiringStore.deriveAll()
     res.json({ banks, warnings })
   })
+
+  // The query routes (plan 0036): derived answers for assistants and
+  // dashboards, built on the same resources and browser modules as the web app.
+  const asyncRoute = (handler) => (req, res) => {
+    handler(req, res).catch((err) => res.status(500).json({ error: err.message }))
+  }
+
+  readOnlyRoutes.get('/search', requireStore, asyncRoute(async (req, res) => {
+    const result = query.search(await query.loadResources(req.wiringStore), req.query || {})
+    if (result.error) {
+      res.status(400).json({ error: result.error })
+      return
+    }
+    res.json(result)
+  }))
+
+  readOnlyRoutes.get('/trace/:deviceId', requireStore, asyncRoute(async (req, res) => {
+    const direction = (req.query && req.query.direction) || 'both'
+    if (!['up', 'down', 'both'].includes(direction)) {
+      res.status(400).json({ error: 'direction must be up, down or both' })
+      return
+    }
+    const result = query.trace(await query.loadResources(req.wiringStore), req.params.deviceId, direction)
+    if (!result) {
+      res.status(404).json({ error: `device not found: ${req.params.deviceId}` })
+      return
+    }
+    res.json(result)
+  }))
+
+  readOnlyRoutes.get('/load-summary', requireStore, asyncRoute(async (req, res) => {
+    const resources = await query.loadResources(req.wiringStore)
+    resources.limits = query.limitsFromSettings(getSettings())
+    res.json(await query.loadSummary(req.wiringStore, resources))
+  }))
+
+  readOnlyRoutes.get('/checks', requireStore, asyncRoute(async (req, res) => {
+    const resources = await query.loadResources(req.wiringStore)
+    resources.limits = query.limitsFromSettings(getSettings())
+    res.json(await query.cableChecks(resources))
+  }))
 
   readOnlyRoutes.get('/circuits/:id/diagram', requireStore, (req, res) => {
     const diagram = buildCircuitDiagram(req.wiringStore, req.params.id)
