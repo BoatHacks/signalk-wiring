@@ -11,8 +11,8 @@
     {"name": "Bow thruster battery", "type": "Battery", "role": "storage", "zone": "Forepeak", "v": 12, "page": ["dc"], "chem": "agm", "purpose": "thruster", "cap": 120, "usable": 0.5, "make": "AGM 12 V 120 Ah", "installed": "2025-03-12", "vPath": "electrical.batteries.bowThruster.voltage", "cPath": "electrical.batteries.bowThruster.current", "sPath": "electrical.batteries.bowThruster.capacity.stateOfCharge", "box": "#ef6c00"},
 
     {"name": "House main fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 250, "page": ["dc"]},
-    {"name": "Battery switch", "type": "Battery switch", "role": "distribution", "zone": "Engine room", "icon": "#f9a825", "parent": "Switch panel"},
-    {"name": "Main positive bus", "type": "Bus bar", "role": "distribution", "zone": "Engine room", "page": ["dc"]},
+    {"name": "Battery switch", "type": "Battery switch", "role": "distribution", "zone": "Aft cabin", "icon": "#f9a825"},
+    {"name": "Main positive bus", "type": "Bus bar", "role": "distribution", "zone": "Engine room", "dcA": 300, "dcV": 12, "page": ["dc"]},
     {"name": "Inverter fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 125, "page": ["dc"]},
     {"name": "Inverter/charger", "type": "Inverter/charger", "role": "converter", "zone": "Engine room", "page": ["dc", "ac"], "make": "12 V 1600 VA inverter/charger", "path": "electrical.inverters.main", "box": "#6a1b9a",
       "terminals": [["AC in L", "line", 230, "ac-in"], ["AC in N", "neutral", 230, "ac-in"], ["AC in PE", "earth", 230, "ac-in"], ["AC out L", "line", 230, "ac-out"], ["AC out N", "neutral", 230, "ac-out"], ["AC out PE", "earth", 230, "ac-out"], ["DC +", "positive", 12, "dc"]]},
@@ -26,11 +26,11 @@
     {"name": "Engine alternator", "type": "Alternator", "role": "source", "zone": "Engine room", "v": 12, "page": ["dc"], "make": "12 V 100 A alternator"},
     {"name": "Alternator fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 150, "page": ["dc"]},
     {"name": "Starter charge fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 30, "page": ["dc"]},
-    {"name": "Starter switch", "type": "Battery switch", "role": "distribution", "zone": "Engine room", "parent": "Switch panel"},
+    {"name": "Starter switch", "type": "Battery switch", "role": "distribution", "zone": "Cockpit"},
     {"name": "Starter motor", "type": "Starter motor", "role": "consumer", "zone": "Engine room", "w": 1500, "current": "dc", "page": ["dc"]},
 
     {"name": "Bow thruster fuse", "type": "Fuse", "role": "distribution", "zone": "Forepeak", "trip": 250, "page": ["dc"]},
-    {"name": "Bow thruster contactor", "type": "Relay", "role": "distribution", "zone": "Forepeak", "switch": "electrical.switches.bank.13.1.state", "parent": "Switch panel"},
+    {"name": "Bow thruster contactor", "type": "Relay", "role": "distribution", "zone": "Forepeak", "switch": "electrical.switches.bank.13.1.state"},
     {"name": "Bow thruster", "type": "Bow thruster motor", "role": "consumer", "zone": "Forepeak", "w": 2000, "current": "dc", "confirm": true, "page": ["dc"], "notes": "Switched by bank 13 channel 1 through the contactor.", "box": "#ef6c00"},
 
     {"name": "Bimini solar array", "type": "Solar panel", "role": "source", "zone": "Cockpit", "w": 200, "v": 36, "path": "electrical.solar.bimini", "page": ["dc"]},
@@ -44,9 +44,9 @@
     {"name": "Deck starboard solar fuse", "type": "Fuse", "role": "distribution", "zone": "Engine room", "trip": 30, "page": ["dc"]},
 
     {"name": "DC distribution panel", "type": "DC panel", "role": "enclosure", "zone": "Nav station", "page": ["dc"], "box": "#37474f"},
-    {"name": "Switch panel", "type": "Switch panel", "role": "enclosure", "zone": "Nav station", "page": ["dc"], "box": "#6d4c41"},
+    {"name": "Switch panel", "type": "Switch panel", "role": "enclosure", "zone": "Nav station", "notes": "Holds the battery and starter switches and the bow thruster contactor.", "page": ["dc"], "box": "#6d4c41"},
     {"name": "DC panel main fuse", "type": "Fuse", "role": "distribution", "zone": "Nav station", "trip": 100, "parent": "DC distribution panel"},
-    {"name": "DC panel bus", "type": "Bus bar", "role": "distribution", "zone": "Nav station", "parent": "DC distribution panel"},
+    {"name": "DC panel bus", "type": "Bus bar", "role": "distribution", "zone": "Nav station", "dcA": 300, "dcV": 12, "parent": "DC distribution panel"},
     {"name": "DC negative bus", "type": "Bus bar", "role": "distribution", "zone": "Nav station", "parent": "DC distribution panel"},
     {"name": "Chartplotter fuse", "type": "Fuse", "role": "distribution", "zone": "Nav station", "trip": 5, "parent": "DC distribution panel"},
     {"name": "Autopilot fuse", "type": "Fuse", "role": "distribution", "zone": "Nav station", "trip": 15, "parent": "DC distribution panel"},
@@ -88,10 +88,10 @@
     {"name": "Cabin lights", "type": "Cabin light", "role": "consumer", "zone": "Forward cabin", "w": 30, "current": "dc", "page": ["dc"]},
     {"name": "Instruments", "type": "Instrument", "role": "consumer", "zone": "Cockpit", "w": 10, "current": "dc", "page": ["dc"]},
 
-    {"name": "Relay bank 10", "type": "Relay bank", "role": "enclosure", "zone": "Nav station", "page": ["dc"], "box": "#455a64"},
-    {"name": "Relay bank 11", "type": "Relay bank", "role": "enclosure", "zone": "Engine room", "page": ["dc"], "box": "#455a64"},
-    {"name": "Relay bank 12", "type": "Relay bank", "role": "enclosure", "zone": "Nav station", "page": ["dc"], "box": "#455a64"},
-    {"name": "Relay bank 13", "type": "Relay bank", "role": "enclosure", "zone": "Engine room", "page": ["dc"], "box": "#455a64"},
+    {"name": "Relay bank 10", "type": "Relay bank", "role": "enclosure", "zone": "Nav station", "parent": "DC distribution panel", "box": "#455a64"},
+    {"name": "Relay bank 11", "type": "Relay bank", "role": "enclosure", "zone": "Engine room", "parent": "DC distribution panel", "box": "#455a64"},
+    {"name": "Relay bank 12", "type": "Relay bank", "role": "enclosure", "zone": "Nav station", "parent": "DC distribution panel", "box": "#455a64"},
+    {"name": "Relay bank 13", "type": "Relay bank", "role": "enclosure", "zone": "Engine room", "parent": "DC distribution panel", "box": "#455a64"},
 
     {"name": "Shore power inlet", "type": "Shore power inlet", "role": "source", "zone": "Cockpit", "v": 230, "page": ["ac"], "box": "#1565c0"},
     {"name": "AC panel", "type": "AC panel", "role": "enclosure", "zone": "Saloon", "page": ["ac"], "box": "#37474f"},
@@ -141,7 +141,7 @@
   ],
 
   "cables": [
-    {"label": "W-01", "from": "House battery", "to": "House main fuse", "gauge": 70, "len": 0.5, "kind": "pos"},
+    {"label": "W-01", "from": "House battery", "to": "House main fuse", "gauge": 70, "len": 0.86, "kind": "pos"},
     {"label": "W-02", "from": "House main fuse", "to": "Battery switch", "gauge": 70, "len": 0.4, "kind": "pos"},
     {"label": "W-03", "from": "Battery switch", "to": "Main positive bus", "gauge": 70, "len": 0.6, "kind": "pos"},
     {"label": "W-04", "from": "House battery", "to": "DC negative bus", "gauge": 95, "len": 1.2, "kind": "neg"},
@@ -179,7 +179,7 @@
     {"label": "S-14", "from": "Deck port solar fuse", "to": "House battery", "gauge": 10, "len": 2, "kind": "pos"},
     {"label": "S-21", "from": "Deck starboard solar array", "to": "Deck starboard charge controller", "toTerm": "PV +", "gauge": 4, "len": 9, "kind": "pos"},
     {"label": "S-23", "from": "Deck starboard charge controller", "fromTerm": "BAT +", "to": "Deck starboard solar fuse", "gauge": 10, "len": 0.5, "kind": "pos"},
-    {"label": "S-24", "from": "Deck starboard solar fuse", "to": "House battery", "gauge": 10, "len": 2, "kind": "pos"},
+    {"label": "S-24", "from": "Deck starboard solar fuse", "to": "House battery", "gauge": 10, "len": 1.88, "kind": "pos"},
 
     {"label": "N-01", "from": "NMEA 2000 backbone", "to": "Chartplotter", "gauge": 0.75, "len": 2, "kind": "sig"},
     {"label": "N-02", "from": "NMEA 2000 backbone", "to": "Autopilot", "gauge": 0.75, "len": 3, "kind": "sig"},

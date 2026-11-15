@@ -54,7 +54,7 @@ const DEVICE_FIELDS = {
   cap: 'capacity_ah', usable: 'usable_fraction', chem: 'chemistry', purpose: 'purpose', make: 'make_model',
   installed: 'installed_on', vPath: 'voltage_path', cPath: 'current_path', sPath: 'soc_path',
   path: 'signalk_path', meter: 'meter_path', meterUnit: 'meter_unit', notes: 'notes', switch: 'switch_path',
-  confirm: 'confirm_switching'
+  confirm: 'confirm_switching', dcA: 'rated_dc_a', dcV: 'rated_dc_v'
 }
 
 // Expands the relay banks of the spec into devices and cables. A channel is a

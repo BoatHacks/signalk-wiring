@@ -156,9 +156,11 @@ test('the enclosures have inside pages with their contents', () => {
     const page = pages.find((p) => p.enclosure_id === e.id)
     assert.ok(page, `${e.name} has an inside page`)
     const held = devices.filter((d) => d.parent_id === e.id)
-    assert.ok(held.length >= 3, `${e.name} holds devices`)
+    // The Switch panel was emptied on the live demo (its switches stand on
+    // their own); every other enclosure holds at least three devices.
+    if (e.name !== 'Switch panel') assert.ok(held.length >= 3, `${e.name} holds devices`)
     assert.deepEqual(page.devices.map((d) => d.deviceId).sort(), held.map((d) => d.id).sort(), e.name)
-    assert.ok(store.enclosureInfo(e.id).boundaryCables.length >= 1, `${e.name} has boundary cables`)
+    if (held.length > 0) assert.ok(store.enclosureInfo(e.id).boundaryCables.length >= 1, `${e.name} has boundary cables`)
   }
   assert.ok(pages.some((p) => p.name === '12 V DC' && !p.enclosure_id && p.zone_shapes.length >= 5))
   assert.ok(pages.some((p) => p.name === '230 V AC' && !p.enclosure_id))
@@ -268,7 +270,9 @@ test('placed devices carry the position of positions.json, unplaced ones have no
     if (!d.parent_id && placed) assert.deepEqual({ x: d.pos_x, y: d.pos_y, z: d.pos_z }, positions[d.name], d.name)
   }
   assert.equal(Object.keys(positions).length, devices.filter((d) => !d.parent_id && d.pos_x != null).length)
-  assert.ok(devices.filter((d) => d.role === 'enclosure').every((d) => d.pos_x != null), 'enclosure markers are placed')
+  // The four relay banks sit inside the DC distribution panel, so only the
+  // enclosures that stand on their own have a marker.
+  assert.ok(devices.filter((d) => d.role === 'enclosure' && !d.parent_id).every((d) => d.pos_x != null), 'enclosure markers are placed')
 })
 
 test('no two devices share a position', () => {
