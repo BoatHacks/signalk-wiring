@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-15
+
 ### Added
 
 - A Dashboard (issue #24), the first tab and the page the app opens on. Statistics (counts, total cable length, protected circuits, battery capacity, summed consumer load, what is still missing), a "Needs attention" overview built on the cable and bus checks, live power in and out with the battery's net flow, battery banks, the switches that are on, and last-hour sparklines from the server's history routes when a history provider is installed. Live data uses the one shared stream every 5 seconds, pauses while the browser tab is hidden, greys readings older than a minute and leaves them out of sums, and says "no live data" rather than zero. A Live switch is remembered per browser. Every entry links to its record.
