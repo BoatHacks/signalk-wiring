@@ -1121,3 +1121,39 @@ a.dash-stat { display: flex; align-items: flex-start; min-height: 64px; }
 .dash-reason, .dash-reasons { flex-basis: 100%; margin: 0 0 8px; padding-left: 0; list-style: none; }
 .dash-reasons li { min-height: 0; }
 .dash-flow .dash-row.dash-bnum { display: flex; min-height: 32px; flex-wrap: wrap; }
+
+/* Dashboard: the Switches card, one small chip per switchable consumer.
+   On is a filled chip, off a plain outline, unknown a dashed outline; no red
+   and green. The mark (filled dot, open dot, question mark) repeats the state. */
+:root {
+  --chip-on-bg: #185fa5;
+  --chip-on-text: #fff;
+  --chip-on-border: #185fa5;
+  --chip-off-bg: var(--surface);
+  --chip-off-text: var(--text-muted-strong);
+  --chip-off-border: var(--border-strong);
+  --chip-unknown-bg: var(--surface-alt);
+  --chip-unknown-text: var(--text-muted);
+  --chip-unknown-border: var(--text-muted);
+}
+[data-theme="dark"] {
+  --chip-on-bg: #d9776a;
+  --chip-on-text: #16181c;
+  --chip-on-border: #d9776a;
+  --chip-off-bg: var(--surface);
+  --chip-off-text: #a15850;
+  --chip-off-border: #4d332e;
+  --chip-unknown-bg: var(--surface-alt);
+  --chip-unknown-text: #a15850;
+  --chip-unknown-border: #a15850;
+}
+.dash-chips { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.dash-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px;
+  border-radius: 16px; border: 1px solid; font-size: 13px; line-height: 1.2; text-decoration: none;
+}
+.dash-chip-mark { font-size: 11px; width: 10px; text-align: center; }
+.dash-chip-on { background: var(--chip-on-bg); color: var(--chip-on-text); border-color: var(--chip-on-border); font-weight: 600; }
+.dash-chip-off { background: var(--chip-off-bg); color: var(--chip-off-text); border-color: var(--chip-off-border); }
+.dash-chip-unknown { background: var(--chip-unknown-bg); color: var(--chip-unknown-text); border: 1px dashed var(--chip-unknown-border); }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

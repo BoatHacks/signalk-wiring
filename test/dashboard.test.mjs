@@ -473,10 +473,14 @@ test('switches on: the switchable consumers that are on, with the switch that fe
   assert.equal(r.off, 1)
   assert.equal(r.unknown, 1)
   assert.equal(r.on[0].href, '#/devices/lampA')
+  // the chips: every switchable consumer once, by name, with its state
+  assert.deepEqual(r.all.map((x) => [x.name, x.state]), [['fan', 'unknown'], ['Lamp A', 'on'], ['Lamp B', 'on'], ['Pump', 'off']])
+  assert.equal(r.all.find((x) => x.name === 'Pump').via, 'sw2')
+  assert.equal(r.all.find((x) => x.name === 'Lamp A').via, 'Relay')
 })
 
 test('switches on: no answer from the plugin is an empty list', () => {
-  assert.deepEqual(switchesOn(null, new Map(), []), { on: [], off: 0, unknown: 0 })
+  assert.deepEqual(switchesOn(null, new Map(), []), { on: [], off: 0, unknown: 0, all: [] })
 })
 
 // ---- Paths and text ----

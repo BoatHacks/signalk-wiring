@@ -480,6 +480,7 @@ export function batteryCards (devices, banks, live, values, stamps = new Map(), 
 export function switchesOn (live, values, devices) {
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const on = []
+  const all = []
   let off = 0
   let unknown = 0
   const consumers = (live && live.consumers) || {}
@@ -488,17 +489,22 @@ export function switchesOn (live, values, devices) {
     if (!c.switchable || !c.switchDeviceId) continue
     const sw = switches[c.switchDeviceId]
     const state = sw ? stateFromValue(values.get(stripSelf(sw.switchPath))) : null
-    if (state === true) {
-      on.push({
-        id, name: nameOf(deviceById.get(id), id),
-        via: c.switchDeviceId !== id ? nameOf(deviceById.get(c.switchDeviceId), c.switchDeviceId) : null,
-        href: hashForState({ tab: 'devices', id })
-      })
-    } else if (state === false) off++
+    const item = {
+      id, name: nameOf(deviceById.get(id), id),
+      via: c.switchDeviceId !== id ? nameOf(deviceById.get(c.switchDeviceId), c.switchDeviceId) : null,
+      state: state === true ? 'on' : state === false ? 'off' : 'unknown',
+      href: hashForState({ tab: 'devices', id })
+    }
+    all.push(item)
+    if (state === true) on.push(item)
+    else if (state === false) off++
     else unknown++
   }
   on.sort((a, b) => a.name.localeCompare(b.name))
-  return { on, off, unknown }
+  // Every switchable consumer, by name so the chips keep their place while
+  // their states change.
+  all.sort((a, b) => a.name.localeCompare(b.name))
+  return { on, off, unknown, all }
 }
 
 // ---- Which paths the page needs ----

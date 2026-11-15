@@ -269,17 +269,27 @@ function Batteries ({ cards, history, liveOn }) {
     </ul>`
 }
 
-function SwitchesOn ({ sw, liveOn }) {
+const SWITCH_MARK = { on: '\u25CF', off: '\u25CB', unknown: '?' }
+const SWITCH_WORD = { on: 'on', off: 'off', unknown: 'unknown' }
+
+// Every switchable consumer as a small chip. The state shows in the colour
+// scheme (blue filled, grey outline, dashed outline), in a mark and in the
+// text of the tooltip, so it does not rest on red and green.
+function SwitchesCard ({ sw, liveOn }) {
   if (!liveOn) return html`<div class="empty-state">Live is off.</div>`
-  if (sw.on.length === 0 && sw.off === 0 && sw.unknown === 0) return html`<div class="empty-state" data-testid="switches-none">No switchable consumers, or no live data.</div>`
+  if (sw.all.length === 0) return html`<div class="empty-state" data-testid="switches-none">No switchable consumers, or no live data.</div>`
   return html`
     <div>
-      ${sw.on.length === 0 ? html`<div class="meta" data-testid="switches-none">Nothing is switched on.</div>` : html`
-        <ul class="dash-list" data-testid="switches-on">
-          ${sw.on.map((s) => html`
-            <li key=${s.id} class="dash-row"><${Link} href=${s.href}>${s.name}<//>${s.via ? html`<span class="meta">via ${s.via}</span>` : ''}</li>`)}
-        </ul>`}
-      <div class="meta">${sw.on.length} on, ${sw.off} off${sw.unknown > 0 ? `, ${sw.unknown} unknown` : ''}.</div>
+      <ul class="dash-chips" data-testid="switch-chips">
+        ${sw.all.map((s) => html`
+          <li key=${s.id}>
+            <${Link} href=${s.href} class=${'dash-chip dash-chip-' + s.state} data-testid="switch-chip" data-state=${s.state}
+              title=${`${s.name}: ${SWITCH_WORD[s.state]}${s.via ? ', via ' + s.via : ''}`}>
+              <span class="dash-chip-mark" aria-hidden="true">${SWITCH_MARK[s.state]}</span>${s.name}<span class="sr-only"> (${SWITCH_WORD[s.state]})</span>
+            <//>
+          </li>`)}
+      </ul>
+      <div class="meta" data-testid="switch-counts">${sw.on.length} on, ${sw.off} off${sw.unknown > 0 ? `, ${sw.unknown} unknown` : ''}.</div>
     </div>`
 }
 
@@ -341,8 +351,8 @@ export function DashboardTab () {
             <${Batteries} cards=${battery.cards} history=${history} liveOn=${liveOn} />
           </section>
           <section class="card dash-card" data-testid="card-switches">
-            <h2>Switches on</h2>
-            <${SwitchesOn} sw=${switches} liveOn=${liveOn} />
+            <h2>Switches</h2>
+            <${SwitchesCard} sw=${switches} liveOn=${liveOn} />
           </section>
           <section class="card dash-card" data-testid="card-checks">
             <h2>Needs attention</h2>

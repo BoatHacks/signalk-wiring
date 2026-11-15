@@ -11,6 +11,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The Dashboard's "Switches on" list is now a "Switches" card with one small chip for every switchable consumer, switched off ones included, in name order so the chips keep their place. On is a filled blue chip with a filled dot, off a plain grey outline with an open dot, and unknown a dashed outline with a question mark, so the state does not depend on red and green (the night theme keeps its red tones and uses brightness and the marks). Each chip links to the device and its tooltip names the switch that feeds it.
+
 - The Load Summary says what is really missing on an incomplete circuit. A circuit that is not wired back to any battery or source now reads "No supply: this circuit is not wired back to a battery or a source, so its voltage is unknown" (it used to ask for a nominal voltage on a supply that does not exist), and a circuit with no fuse or breaker reads "No fuse or breaker: nothing to compare the load with" instead of asking for a trip rating. The summary rows of `GET /load-summary` carry the same texts and two new flags, `missingSupply` and `unprotected`.
 
 - The Dashboard no longer lists the devices that have no meter under Live power in and out. Under the battery reading it now shows the numbers behind it: each bank's voltage, current and power, the net power into or out of the batteries, and input minus output.
