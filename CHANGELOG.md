@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-11-16
+
 ### Changed
 
 - UI quick fixes (issue 28, plan 0041). Wording: "cable" replaces "wire run" in everything shown, singular forms such as "1 device" and "1 cable", the spelling "meter" instead of "metre" (in the web app, the API descriptions and the docs), a pipe between the parts of every list row, "None" for an empty select, and the demo banner reads "Demo: sample boat, edits reset on restart".
