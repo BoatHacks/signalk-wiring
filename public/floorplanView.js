@@ -1,5 +1,6 @@
 import { html, useState, useEffect, useRef } from './vendor/preact-standalone.module.js'
 import { newId } from './ids.js'
+import { FloorplanLegend } from './floorplanLegend.js'
 import { deviceIconUrl } from './deviceIcons.js'
 import {
   calibrationFromClicks, parseSvgSize, pxToMeters, pointToPx, applyClick, waypointFromClick,
@@ -733,10 +734,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
         <button onClick=${() => zoomAt(0.8)}>Zoom in</button>
         <button onClick=${() => zoomAt(1.25)}>Zoom out</button>
         <button onClick=${() => setBox({ ...size })}>Fit</button>
-        ${!calibrating
-          ? html`<button onClick=${startCalibrating}>${cal ? 'Recalibrate' : 'Calibrate'}</button>`
-          : html`<button onClick=${stopCalibrating}>Cancel calibration</button>`}
-        <button onClick=${() => actions.removePlan(plan)}>Remove plan</button>
+        ${calibrating && html`<button onClick=${stopCalibrating}>Cancel calibration</button>`}
         <details class="show-menu" data-testid="show-menu">
           <summary class=${layersChanged(layers) ? 'changed' : ''}>Show</summary>
           <div class="show-menu-body">
@@ -759,13 +757,19 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
             `}
           </div>
         </details>
+        <${FloorplanLegend} />
+        <details class="show-menu" data-testid="plan-settings">
+          <summary>Plan settings</summary>
+          <div class="show-menu-body plan-settings-body">
+            ${cal && html`<p class="meta" data-testid="plan-scale">Scale: ${cal.pxPerMeter.toFixed(2)} drawing units per meter. The bow is toward the ${lengthDirection(cal)} of this drawing. If that is wrong, or differs from your other plans, recalibrate.</p>`}
+            ${!calibrating && html`<button onClick=${startCalibrating}>${cal ? 'Recalibrate' : 'Calibrate'}</button>`}
+            <button onClick=${() => actions.removePlan(plan)}>Remove plan</button>
+          </div>
+        </details>
       </div>
 
       ${!cal && !calibrating && html`
-        <p class="meta">Not calibrated yet. Calibrate to give the drawing a real-world scale.</p>
-      `}
-      ${cal && !calibrating && html`
-        <p class="meta">Scale: ${cal.pxPerMeter.toFixed(2)} drawing units per meter. The bow is toward the ${lengthDirection(cal)} of this drawing. If that is wrong, or differs from your other plans, recalibrate.</p>
+        <p class="meta">Not calibrated yet. Open Plan settings and calibrate to give the drawing a real-world scale.</p>
       `}
 
       ${calibrating && html`
@@ -899,8 +903,8 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           // A short faint arrow where a route leaves the plan; its label shows only for the
           // chosen cable or conduit, or while the pointer is on the arrow, so the labels do not
           // cover the markers and routes of a crowded plan.
-          const end = [m.at[0] + m.dir[0] * unit * 3, m.at[1] + m.dir[1] * unit * 3]
-          const head = arrowHeadPoints(m.at, end, unit * 1.3).map((p) => p.join(',')).join(' ')
+          const end = [m.at[0] + m.dir[0] * unit * 2.2, m.at[1] + m.dir[1] * unit * 2.2]
+          const head = arrowHeadPoints(m.at, end, unit * 0.9).map((p) => p.join(',')).join(' ')
           const left = m.dir[0] < 0
           const label = m.target ? `continues on ${m.target.name}` : 'continues, not shown on any plan'
           const chosen = m.owner === ctx.runId || m.owner === ctx.conduitId
@@ -909,7 +913,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
           const drawing = html`
             <title>${label}</title>
             <line class="continuation-hit" x1=${m.at[0]} y1=${m.at[1]} x2=${end[0]} y2=${end[1]} stroke-width=${unit * 2} />
-            <line x1=${m.at[0]} y1=${m.at[1]} x2=${end[0]} y2=${end[1]} stroke-width=${unit * 0.4} />
+            <line x1=${m.at[0]} y1=${m.at[1]} x2=${end[0]} y2=${end[1]} stroke-width=${unit * 0.22} />
             <polygon points=${head} />
             ${text}
           `
@@ -1012,6 +1016,7 @@ function useFloorplanData (reloadKey, onError) {
 export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = () => {}, onNotFound = () => {} }) {
   const settings = useSettings()
   const [error, setError] = useState(null)
+  const [showNewPlan, setShowNewPlan] = useState(false)
   const [connect, setConnect] = useState(initialConnect)
   const [finishing, setFinishing] = useState(null) // null | { more: values | null }
   const [notice, setNotice] = useState(null)
@@ -1343,8 +1348,9 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
   const conduitOptions = conduits.filter((c) => c.status !== 'removed')
     .map((c) => ({ value: c.id, label: c.kind ? `${c.name} (${c.kind})` : c.name }))
 
-  const planButtons = (list, selectedPlan, setId) => list.length > 1 && html`
-    <div class="row-actions">
+  const planButtons = (list, selectedPlan, setId, label) => list.length > 1 && html`
+    <div class="row-actions plan-picker" data-testid=${'plan-picker-' + label.toLowerCase().replace(' ', '-')}>
+      <span class="meta plan-picker-label">${label}</span>
       ${list.map((p) => html`
         <button key=${p.id} class=${selectedPlan && selectedPlan.id === p.id ? 'active' : ''}
           onClick=${() => { setId(p.id); setError(null) }}>${p.name}</button>
@@ -1378,7 +1384,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
                 onChange=${(v) => { if (connect.stage === 'to') setConnect(connectPickDevice(connect, v)) }} />
             `}
             ${tool !== 'place' && !connecting && html`
-              <${Select} label="Wire run" value=${runId} options=${runOptions}
+              <${Select} label="Cable" value=${runId} options=${runOptions}
                 onChange=${(v) => { setRunId(v); setConduitId(null); setBusId(null); setWaypointIndex(null) }} />
               <${Select} label="Conduit" value=${conduitId} options=${conduitOptions}
                 onChange=${(v) => { setConduitId(v); setRunId(null); setBusId(null); setWaypointIndex(null) }} />
@@ -1390,7 +1396,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
           ${tool === 'place' && html`<p class="meta">Choose a device, then click a calibrated plan to place it. A click in one view sets only the two axes it shows. Drag a marker in Select mode to adjust it.</p>`}
           ${tool === 'place' && insideCount > 0 && html`<p class="meta" data-testid="inside-note">${insideCount} ${insideCount === 1 ? 'device is' : 'devices are'} inside an enclosure and not listed: place the enclosure instead, its marker stands for what is inside it.</p>`}
           ${connecting && html`<p class="meta">Pick the From and To devices by clicking their markers on a plan (or with the lists), then click the route on the plan and finish. The cable gets the drawn route and its measured length.</p>`}
-          ${tool === 'route' && html`<p class="meta">Choose a wire run, a conduit or a backbone, then click to add waypoints. A conduit or backbone route is just its points; a backbone starts or ends at a tap device that sits at that end of it. A wire run route starts at the run's from-device when that is placed. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
+          ${tool === 'route' && html`<p class="meta">Choose a cable, a conduit or a backbone, then click to add waypoints. A conduit or backbone route is just its points; a backbone starts or ends at a tap device that sits at that end of it. A wire run route starts at the run's from-device when that is placed. Drag a waypoint to adjust it, or click it to select it for deletion.</p>`}
           ${connecting && html`
             <div class="route-info" data-testid="connect-panel">
               <span data-testid="connect-hint">${connectHint(connect, connectNames)}</span>
@@ -1478,7 +1484,7 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
                 <button disabled=${measured.length === 0} onClick=${useMeasured}>Use measured length</button>
                 <button disabled=${!(run.route || []).length} onClick=${undoLast}>Undo last point</button>
                 <button disabled=${waypointIndex === null} onClick=${deleteWaypoint}>Delete selected point</button>
-                <button data-testid="delete-run" onClick=${() => removeRun(run)}>Delete wire run</button>
+                <button data-testid="delete-run" onClick=${() => removeRun(run)}>Delete cable</button>
               </div>
             </div>
           `}
@@ -1500,17 +1506,22 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
           <details class="unrouted">
             <summary>${unrouted.length === 1 ? '1 cable is' : `${unrouted.length} cables are`} not drawn on the plans</summary>
             <p class="meta">These have no route of their own and no conduit with a drawn route. Pick one to draw it.</p>
-            ${unrouted.map((r) => html`
-              <div class="list-item" key=${r.id}>
-                <div>${cableName(r, deviceNameById)}</div>
-                <button onClick=${() => drawCable(r.id)}>Draw</button>
-              </div>
-            `)}
+            <div class="unrouted-list" data-testid="unrouted-list">
+              ${unrouted.map((r) => html`
+                <div class="list-item" key=${r.id}>
+                  <div>
+                    <div>${cableName(r, deviceNameById)}</div>
+                    <div class="meta">${deviceNameById.get(r.fromDeviceId) || '?'} to ${deviceNameById.get(r.toDeviceId) || '?'}</div>
+                  </div>
+                  <button onClick=${() => drawCable(r.id)}>Draw</button>
+                </div>
+              `)}
+            </div>
           </details>
         `}
 
-        ${planButtons(topPlans, topPlan, pickTop)}
-        ${planButtons(sidePlans, sidePlan, pickSide)}
+        ${planButtons(topPlans, topPlan, pickTop, 'Top view')}
+        ${planButtons(sidePlans, sidePlan, pickSide, 'Side view')}
 
         <div class="floorplan-pair">
           ${topPlan && html`<${PlanViewer} key=${topPlan.id} plan=${topPlan} data=${data} ctx=${ctx}
@@ -1520,10 +1531,11 @@ export function FloorplanTab ({ renderCableForm, planId = null, onPlanChange = (
         </div>
       `}
 
-      <${NewPlanForm} onCreated=${(id) => {
+      ${active.length > 0 && !showNewPlan && html`<div class="row-actions"><button data-testid="add-plan-open" onClick=${() => setShowNewPlan(true)}>Add a plan</button></div>`}
+      ${(active.length === 0 || showNewPlan) && html`<${NewPlanForm} onCreated=${(id) => {
         const created = { id }
-        setTopId(id); setSideId(id); openedHere.current = id; onPlanChange(id); reload(); return created
-      }} onError=${setError} />
+        setTopId(id); setSideId(id); openedHere.current = id; onPlanChange(id); setShowNewPlan(false); reload(); return created
+      }} onError=${setError} />`}
     </div>
   `
 }

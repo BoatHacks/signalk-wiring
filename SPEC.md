@@ -688,7 +688,7 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   floorplan device and waypoint markers and cluster markers take presses in an
   invisible area of about 44 px on screen; nothing looks different, and a
   mouse or pen sees no change. Where areas of neighbours would overlap, the
-  nearer target wins and no area covers another target's centre; over a device
+  nearer target wins and no area covers another target's center; over a device
   box the box (a move) wins beyond the usual handle radius. The quick cable
   popover and the cluster and bundle lists open fully inside the canvas, clear
   of the finger, below the point or flipped above it, and scroll inside when
@@ -826,7 +826,7 @@ A boat can have several NMEA 2000 backbones. A backbone is one record
 maxi), a length and unit, two terminator flags, a supply rating in amperes,
 status, notes, an optional route and attachments, and an ordered list of taps.
 A tap is the drop of one device: the device, its port (the standard port name
-is "NMEA 2000"), the drop length in metres, the place along the backbone and a
+is "NMEA 2000"), the drop length in meters, the place along the backbone and a
 power feed flag; a power feed tap names the fuse, breaker or source it comes
 from (`fedFromDeviceId`). A device and port is a tap on one live backbone only;
 a gateway sits on two backbones through two ports. Devices have an optional LEN

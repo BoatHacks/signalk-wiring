@@ -18,5 +18,5 @@ test('the continuation arrow is the link, with a tooltip, and the label is a sec
 test('the label is hidden and takes no clicks until the arrow is hovered or its cable is chosen', () => {
   assert.match(css, /\.continuation-label \{[^}]*opacity: 0; pointer-events: none;/)
   assert.match(css, /\.continuation:hover \.continuation-label, \.continuation\.chosen \.continuation-label \{ opacity: 1; pointer-events: auto; \}/)
-  assert.match(css, /\.continuation \{ opacity: 0\.55; \}/)
+  assert.match(css, /\.continuation \{ opacity: 0\.5; \}/)
 })

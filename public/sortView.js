@@ -16,11 +16,11 @@ export function useSort (listKey, columns) {
 // then back to the default order.
 export function SortHeader ({ label, k, sort, onSort }) {
   const active = sort && sort.key === k
-  const arrow = active ? (sort.dir === 'asc' ? '▲' : '▼') : ''
+  const arrow = active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'
   return html`
     <th aria-sort=${active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
       <button type="button" class="sort-header ${active ? 'active' : ''}" data-sort-key=${k}
-        title=${`Sort by ${label}`} onClick=${() => onSort(nextSort(sort, k))}>${label}<span class="sort-arrow" aria-hidden="true">${arrow}</span></button>
+        title=${`Sort by ${label}`} onClick=${() => onSort(nextSort(sort, k))}>${label}<span class=${'sort-arrow' + (active ? '' : ' idle')} aria-hidden="true">${arrow}</span></button>
     </th>
   `
 }
@@ -38,8 +38,8 @@ export function SortControl ({ options, sort, onChange }) {
         </select>
       </label>
       <button type="button" class="sort-direction" data-testid="sort-direction" disabled=${!sort}
-        aria-label=${sort && sort.dir === 'desc' ? 'Descending, click for ascending' : 'Ascending, click for descending'}
-        title=${sort && sort.dir === 'desc' ? 'Descending' : 'Ascending'}
+        aria-label=${sort && sort.dir === 'desc' ? 'Descending' : 'Ascending'}
+        title=${!sort ? 'Choose what to sort by first' : sort.dir === 'desc' ? 'Descending, click for ascending' : 'Ascending, click for descending'}
         onClick=${() => onChange(flipSort(sort))}>${sort && sort.dir === 'desc' ? '▼' : '▲'}</button>
     </span>
   `

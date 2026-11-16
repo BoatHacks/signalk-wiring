@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- UI quick fixes (issue 28, plan 0041). Wording: "cable" replaces "wire run" in everything shown, singular forms such as "1 device" and "1 cable", the spelling "meter" instead of "metre" (in the web app, the API descriptions and the docs), a pipe between the parts of every list row, "None" for an empty select, and the demo banner reads "Demo: sample boat, edits reset on restart".
+- A list that cannot be loaded shows a plain sentence with a Retry button and the technical text in a smaller line (lists, Dashboard, Load Summary, Batteries, Buses, Changes).
+- An active status is a small muted word instead of a badge, and an "ok" result (cable checks, Load Summary) is a muted tick, so findings stand out.
+- The device page shows the NMEA 2000 block only for a device on a bus or with an NMEA 2000 port, and the switching lines (switch path, confirmation) have a block of their own. The History block uses the wording of the Changes tab ("Changed", "rated power: 45 to 60 W"), and a Changes card with one change prints its time once.
+- Layout: the tab bar fades at the edge where more tabs are hidden, scrolls the current tab into view and marks it for screen readers; Load Summary and the circuit page scroll their table, not the whole page, on a phone; Load Summary uses the full width; links are blue everywhere; Batteries puts its intro first, Devices and Schematics got a short intro; the schematic toolbar and the bulk bar selects look like the filter selects.
+- Sortable column headers show a faint mark and a hover state, and the direction button of the sort control is disabled, with a reason, until a sort is chosen. The long Load Summary explanation and the schematic legend are folded behind closed "How this is worked out" and "Legend" disclosures.
+- Floorplan tab: an always available Legend (it also explains the thin arrow where a cable crosses to another plan, which is now smaller and neutral), labelled "Top view" and "Side view" plan pickers, Recalibrate, Remove plan and the scale text under a "Plan settings" disclosure, the not drawn list shows from and to and scrolls in a box, the Show control matches the buttons, and the "Add a plan" form is folded behind a button once a plan exists.
+
 ## [0.9.2] - 2026-11-16
 
 ### Added

@@ -135,7 +135,8 @@ header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; min-width: 0;
 /* Shown after the title in demo mode only. Smaller and lighter than the title,
    in the header's own text colour so the red night theme keeps to its reds; it
    wraps with the title on a narrow screen. */
-.demo-note { font-size: 13px; font-weight: 400; opacity: 0.85; }
+.demo-note { font-size: 13px; font-weight: 400; opacity: 0.85; margin-left: 8px; }
+.demo-note::before { content: '| '; }
 
 .theme-toggle {
   background: transparent;
@@ -169,6 +170,9 @@ nav.tabs button {
   color: var(--text-muted-strong);
   white-space: nowrap;
 }
+nav.tabs.fade-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+nav.tabs.fade-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
+nav.tabs.fade-left.fade-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
 nav.tabs button:hover { background: none; color: var(--text); }
 nav.tabs button.active { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
 
@@ -277,7 +281,7 @@ button:disabled:hover { background: var(--surface); }
 .actions-cell { padding: 4px 8px; white-space: nowrap; width: 1%; }
 .actions-cell .row-actions { flex-wrap: nowrap; gap: 4px; }
 .actions-cell button.icon-btn { padding: 4px 6px; min-width: 30px; min-height: 30px; }
-a.route-link { color: var(--accent); text-decoration: none; }
+a.route-link { color: var(--link); text-decoration: none; }
 a.route-link:hover { text-decoration: underline; }
 .search-field input { min-width: 200px; }
 .check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; align-self: flex-end; padding-bottom: 6px; }
@@ -313,6 +317,7 @@ button.icon-btn svg { display: block; }
 input, select, textarea { font-size: 13px; }
 .form-field input, .form-field select, .form-field textarea,
 .row-actions input, .row-actions select, .filter-bar select,
+.schematic-toolbar select, .bulk-bar select,
 .calibrate-help input {
   font: inherit;
   font-size: 13px;
@@ -662,9 +667,9 @@ main:has(.cables-table) { max-width: none; }
 .axis-corner line { stroke: var(--link); stroke-linecap: round; }
 .axis-corner circle, .axis-corner polygon { fill: var(--link); stroke: none; }
 .axis-corner text { fill: var(--link); font-size: 9px; font-weight: 600; }
-.continuation line { stroke: var(--danger); stroke-linecap: round; }
-.continuation polygon { fill: var(--danger); stroke: none; }
-.continuation { opacity: 0.55; }
+.continuation line { stroke: var(--text-muted-strong); stroke-linecap: round; }
+.continuation polygon { fill: var(--text-muted-strong); stroke: none; }
+.continuation { opacity: 0.5; }
 .continuation:hover, .continuation.chosen { opacity: 1; }
 .continuation-hit { stroke: transparent; }
 .continuation-label { fill: var(--link); text-decoration: underline; cursor: pointer; paint-order: stroke; stroke: var(--surface); stroke-width: 0.4px; opacity: 0; pointer-events: none; }
@@ -885,7 +890,7 @@ main:has(.schematic-editor) { max-width: none; }
 
 /* Plan 0027: the Show menu and the focus fade. Faded things stay clickable. */
 .show-menu { position: relative; display: inline-block; }
-.show-menu summary { cursor: pointer; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); list-style: none; }
+.show-menu summary { cursor: pointer; padding: 7px 14px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); list-style: none; font: inherit; font-size: 13px; }
 .show-menu summary::-webkit-details-marker { display: none; }
 .show-menu summary.changed { border-color: var(--link); color: var(--link); }
 .show-menu-body {
@@ -1031,7 +1036,7 @@ main:has(.schematic-editor) { max-width: none; }
 .bus-checks details { margin-top: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 .bus-checks summary { cursor: pointer; }
 .bus-checks ul { margin: 6px 0 4px 18px; padding: 0; }
-.on-the-bus h3 { margin: 10px 0 4px; font-size: 1rem; }
+.on-the-bus h3, .device-block h3 { margin: 10px 0 4px; font-size: 1rem; }
 
 /* A backbone on a schematic page (plan 0037) */
 .sch-bus-line { stroke: var(--accent); stroke-width: 6; stroke-linecap: round; cursor: move; }
@@ -1172,5 +1177,49 @@ a.dash-stat { display: flex; align-items: flex-start; min-height: 64px; }
 .sort-header { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: inherit; color: inherit; cursor: pointer; text-align: left; display: inline-flex; align-items: center; gap: 4px; }
 .sort-header:hover, .sort-header.active { text-decoration: underline; }
 .sort-arrow { font-size: 10px; min-width: 10px; }
+.sort-arrow.idle { opacity: 0.35; }
+.sort-header:hover .sort-arrow.idle { opacity: 0.8; }
+.sort-header:hover { text-decoration: underline; }
 .sort-control { display: inline-flex; align-items: flex-end; gap: 6px; }
 .sort-direction { min-width: 34px; min-height: 34px; }
+.sort-direction:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Load errors (plan 0041). */
+.load-error-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.load-error-detail { margin-top: 4px; font-size: 12px; opacity: 0.8; }
+
+/* Quiet markers (plan 0041): an active status and an ok result are muted, so findings stand out. */
+.status-quiet { color: var(--text-muted); font-size: 12px; }
+.ok-tick, .check-ok-tick { color: var(--text-muted); font-size: 14px; line-height: 1; }
+.check-ok-tick { background: none; border: 0; padding: 4px 6px; cursor: pointer; }
+.check-ok-tick:hover { color: var(--accent); }
+.device-block { margin-bottom: 10px; }
+
+/* Load Summary uses the full width like the other wide tables (plan 0041); a long explanation is folded. */
+main:has(.load-summary) { max-width: none; }
+.how-worked-out { margin: 0 0 12px; }
+.how-worked-out summary { cursor: pointer; color: var(--link); font-size: 13px; margin-bottom: 6px; }
+.schematic-legend-details { margin: 0 0 6px; }
+.schematic-legend-details summary { cursor: pointer; color: var(--link); font-size: 13px; }
+
+/* Floorplan polish (plan 0041): legend, plan settings, plan picker labels, the not drawn list, the add plan form. */
+.legend-body { min-width: 280px; max-width: 420px; gap: 8px; }
+.legend-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.legend-swatches { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--marker-consumer); border: 1px solid var(--marker-stroke); }
+.legend-dot.role-source { background: var(--marker-source); }
+.legend-dot.role-storage { background: var(--marker-storage); }
+.legend-dot.role-distribution { background: var(--marker-distribution); }
+.legend-dot.role-converter { background: var(--marker-converter); }
+.legend-badge { display: inline-block; min-width: 18px; padding: 1px 5px; border: 1px solid var(--marker-distribution); background: var(--surface); text-align: center; font-style: normal; font-size: 11px; }
+.legend-line { display: inline-block; width: 28px; height: 0; border-top: 2px solid var(--text-muted); opacity: 0.7; }
+.legend-line.conduit { border-top-width: 8px; opacity: 0.25; border-radius: 4px; }
+.legend-line.chosen { border-top-color: var(--accent); opacity: 0.95; }
+.legend-arrow { width: 28px; justify-content: center; color: var(--text-muted-strong); }
+.plan-settings-body { min-width: 260px; max-width: 360px; align-items: flex-start; }
+.plan-picker { align-items: center; }
+.plan-picker-label { min-width: 70px; }
+.unrouted-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-top: 8px; }
+form.form-box { display: flex; flex-direction: column; gap: 12px; }
+form.form-box .form-field { gap: 4px; }

@@ -19,7 +19,7 @@ export const BUNDLE_FACTOR = 0.1 // cost of a stretch along the lane of the bund
 export const HEURISTIC_WEIGHT = 1.6 // greedy A*: a little off the shortest, much faster
 export const BRIDGE_R = 4
 export const ROUND_BUDGET = 500000 // no new rip-up round after this many search steps (not time: same result on every machine)
-// Centre to centre distance between parallel lines: two line widths of clear
+// Centre to center distance between parallel lines: two line widths of clear
 // space (the line is 3 wide) plus the second conductor of a pair, drawn 4 beside.
 export const PITCH = 16
 export const ANCHOR_SPACING = PITCH

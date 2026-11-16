@@ -5,6 +5,7 @@ import { useSettings } from './settings.js'
 import { checkAll, countVerdicts } from './cableChecks.js'
 import { limitsFrom } from './cableCheckView.js'
 import { useSort, SortHeader } from './sortView.js'
+import { LoadError } from './loadError.js'
 
 export { calculateCircuitLoad, checkSummaryLine, incompleteReason }
 
@@ -18,13 +19,14 @@ async function fetchResourceMap (type) {
 }
 
 // A small self-contained copy of app.js's useResourceList rather than
-// importing it — importing from app.js here would make app.js import
+// importing it, since importing from app.js here would make app.js import
 // LoadSummary and LoadSummary import app.js, a circular ES module
 // dependency that's technically survivable (Preact hooks only run
 // during render, after both modules finish evaluating) but fragile to
 // get right. Same reasoning as import.js's own local putResource.
 function useResourceList (type) {
   const [state, setState] = useState({ loading: true, error: null, items: [] })
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -32,9 +34,9 @@ function useResourceList (type) {
       .then((items) => { if (!cancelled) setState({ loading: false, error: null, items }) })
       .catch((err) => { if (!cancelled) setState({ loading: false, error: err.message, items: [] }) })
     return () => { cancelled = true }
-  }, [type])
+  }, [type, attempt])
 
-  return state
+  return { ...state, retry: () => setAttempt((n) => n + 1) }
 }
 
 // Short explanations for the status badges and the load source labels, used
@@ -56,11 +58,11 @@ export const LEGEND = [
 ]
 
 function formatAmps (amps) {
-  return amps == null ? '—' : `${amps.toFixed(2)} A`
+  return amps == null ? '-' : `${amps.toFixed(2)} A`
 }
 
 export function LoadSummary () {
-  const { loading: circuitsLoading, error: circuitsError, items: circuits } = useResourceList('wiringCircuits')
+  const { loading: circuitsLoading, error: circuitsError, retry: retryCircuits, items: circuits } = useResourceList('wiringCircuits')
   const { items: devices } = useResourceList('wiringDevices')
   const { items: cables } = useResourceList('wiringWireRuns')
   const { items: conduits } = useResourceList('wiringConduits')
@@ -83,30 +85,34 @@ export function LoadSummary () {
   const checkLine = checkSummaryLine(countVerdicts(checkAll({ cables, circuits, devices, conduits, limits: limitsFrom(settings) })))
 
   return html`
-    <div>
+    <div class="load-summary">
       <p class="meta">
-        Total wattage is summed per circuit from the consumers it feeds: a device that has an accepted
-        calibration run counts at its <em>measured</em> peak, and every other at its rated power. The
-        measured average is shown as well, for energy. Peaks are summed as if they all happened at once,
-        which is a cautious figure. Total wattage is converted
-        to amps using the voltage of its supply (on AC circuits, divided by each device's power
-        factor where one is set), and checked against the rating of the fuse or breaker that protects it.
-        A device fed by more than one circuit has its full wattage counted on${" "}
-        <em>each</em> circuit it's wired into, which can overstate load on a circuit that's
-        actually just a backup path — treat this as a starting point, not a certified
-        calculation.
+        Total wattage is summed per circuit from the consumers it feeds and checked against the fuse or breaker
+        that protects it. Advisory only, not a certified calculation.
       </p>
+      <details class="how-worked-out" data-testid="how-worked-out">
+        <summary>How this is worked out</summary>
+        <p class="meta">
+          A device that has an accepted calibration run counts at its <em>measured</em> peak, and every other at
+          its rated power. The measured average is shown as well, for energy. Peaks are summed as if they all
+          happened at once, which is a cautious figure. Total wattage is converted to amps using the voltage of
+          its supply (on AC circuits, divided by each device's power factor where one is set), and checked against
+          the rating of the fuse or breaker that protects it. A device fed by more than one circuit has its full
+          wattage counted on <em>each</em> circuit it's wired into, which can overstate load on a circuit that's
+          actually just a backup path. Treat this as a starting point, not a certified calculation.
+        </p>
+      </details>
       ${checkLine && html`
         <p class="meta check-summary" data-testid="check-summary">${checkLine}
           ${' '}<a class="route-link" href=${hashForState({ tab: 'cables' })}>See the Cables tab</a>.</p>
       `}
       ${circuitsLoading && html`<div class="empty-state">Loading…</div>`}
-      <${ErrorBannerLocal} message=${circuitsError} />
+      <${LoadError} message=${circuitsError} what="load summary" onRetry=${retryCircuits} />
       ${!circuitsLoading && !circuitsError && activeCircuits.length === 0 && html`
         <div class="empty-state">No circuits yet. They appear once cables join devices.</div>
       `}
       ${activeCircuits.length > 0 && html`
-        <table>
+        <div class="table-scroll"><table>
           <thead>
             <tr>
               <${SortHeader} label="Circuit" k="circuit" sort=${sort} onSort=${setSort} />
@@ -146,23 +152,18 @@ export function LoadSummary () {
                       <div class="meta incomplete-reason" data-testid="incomplete-reason">${incompleteReason(load)}</div>
                     `}
                     ${!load.overRating && !incompleteReason(load) && html`
-                      <span class="badge ok" title=${BADGE_HELP.ok}>ok</span>
+                      <span class="ok-tick" role="img" aria-label="ok" title=${BADGE_HELP.ok}>\u2713</span>
                     `}
                   </td>
                 </tr>
               `
             })}
           </tbody>
-        </table>
+        </table></div>
         <p class="meta load-legend" data-testid="load-legend">
           ${LEGEND.map(([name, text], i) => html`<span key=${name}>${i > 0 ? ' ' : ''}<strong>${name}</strong>: ${text}</span>`)}
         </p>
       `}
     </div>
   `
-}
-
-function ErrorBannerLocal ({ message }) {
-  if (!message) return null
-  return html`<div class="error-banner">${message}</div>`
 }

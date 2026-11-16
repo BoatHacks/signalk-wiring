@@ -80,7 +80,7 @@ export function writeSort (listKey, sort, storage) {
 
 const FT_TO_M = 0.3048
 
-// A cable length in metres; feet are converted, a missing unit counts as metres.
+// A cable length in meters; feet are converted, a missing unit counts as meters.
 export function lengthMetres (length, unit) {
   const n = Number(length)
   if (length === null || length === undefined || length === '' || !Number.isFinite(n)) return null

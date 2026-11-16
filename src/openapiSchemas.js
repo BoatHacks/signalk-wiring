@@ -92,8 +92,8 @@ const schemas = {
     socPath: nullable(str('SignalK path of the state of charge.')),
     timeRemainingPath: nullable(str('SignalK path of the time remaining.')),
     posX: nullable(num('Position along the boat in metres: 0 at the transom, increasing toward the bow.', { unit: 'm' })),
-    posY: nullable(num('Position athwartships in metres, 0 on the centreline.', { unit: 'm' })),
-    posZ: nullable(num('Height in metres.', { unit: 'm' })),
+    posY: nullable(num('Position athwartships in meters, 0 on the centerline.', { unit: 'm' })),
+    posZ: nullable(num('Height in meters.', { unit: 'm' })),
     parentId: nullable(str('Id of the enclosure that holds this device, when it sits inside one.')),
     tags: nullable(list(str('A tag.'), 'Free-text tags, for search and grouping.')),
     status: status(),
@@ -123,9 +123,9 @@ const schemas = {
   }, 'One conductor inside a cable.', { required: ['conductor'] }),
 
   RoutePoint: obj({
-    x: num('Along the boat in metres, 0 at the transom, increasing toward the bow.', { unit: 'm' }),
-    y: num('Athwartships in metres, 0 on the centreline.', { unit: 'm' }),
-    z: nullable(num('Height in metres.', { unit: 'm' })),
+    x: num('Along the boat in meters, 0 at the transom, increasing toward the bow.', { unit: 'm' }),
+    y: num('Athwartships in meters, 0 on the centerline.', { unit: 'm' }),
+    z: nullable(num('Height in meters.', { unit: 'm' })),
     planId: nullable(str('Plan the point was drawn on.'))
   }, 'One point of the path a cable follows through the boat.'),
 
@@ -136,7 +136,7 @@ const schemas = {
     gauge: nullable(num('Conductor size. The unit is gaugeUnit.')),
     gaugeUnit: nullable(str('AWG number or cross section in square millimetres.', { enum: ['AWG', 'mm2'] })),
     length: nullable(num('Length of the cable. The unit is lengthUnit.')),
-    lengthUnit: nullable(str('Metres or feet.', { enum: ['m', 'ft'] })),
+    lengthUnit: nullable(str('Meters or feet.', { enum: ['m', 'ft'] })),
     zone: nullable(str('Name of the zone the cable is in.')),
     zoneId: nullable(str('Id of the zone the cable is in.')),
     cableLabel: nullable(str('The label printed on the cable.')),
@@ -199,7 +199,7 @@ const schemas = {
   BackboneTap: obj({
     deviceId: str('Id of the device that sits on the backbone.'),
     port: nullable(str('Name of the device port, for example "NMEA 2000".')),
-    dropLength: nullable(num('Length of the drop from the backbone to the device, in metres.', { unit: 'm' })),
+    dropLength: nullable(num('Length of the drop from the backbone to the device, in meters.', { unit: 'm' })),
     along: nullable(num('Distance of the tap along the backbone, in the backbone length unit.')),
     powerFeed: bool('True when this tap feeds power into the backbone.'),
     fedFromDeviceId: nullable(str('Id of the fuse, breaker or source a power feed tap comes from. Required when powerFeed is true.'))
@@ -227,7 +227,7 @@ const schemas = {
 
   PlanCalibration: obj({
     originPx: list(num('Pixel.'), 'Pixel position of the origin (x, y).'),
-    pxPerMeter: num('Pixels per metre of the drawing.'),
+    pxPerMeter: num('Pixels per meter of the drawing.'),
     dir: list(num('Component.'), 'Direction of the boat axis in the drawing.'),
     flip: bool('Whether the drawing is mirrored.')
   }, 'Maps the drawing to boat coordinates. Set when the user has marked two known points.'),
@@ -237,8 +237,8 @@ const schemas = {
     name: str('Name of the plan, for example "Deck".'),
     view: str('Seen from above or from the side.', { enum: ['top', 'side'] }),
     filename: nullable(str('Name of the uploaded drawing file. The drawing is served by GET /plugins/signalk-wiring/plans/{id}/image.')),
-    zMin: nullable(num('Lowest height shown on the plan, metres.', { unit: 'm' })),
-    zMax: nullable(num('Highest height shown on the plan, metres.', { unit: 'm' })),
+    zMin: nullable(num('Lowest height shown on the plan, meters.', { unit: 'm' })),
+    zMax: nullable(num('Highest height shown on the plan, meters.', { unit: 'm' })),
     calibration: nullable(ref('PlanCalibration')),
     status: status(),
     notes: nullable(str('Free-text notes.'))
@@ -476,14 +476,14 @@ const schemas = {
     backboneId: str('Backbone id.'),
     name: str('Name.'),
     cableClass: nullable(str('Cable class.')),
-    lengthM: nullable(num('Backbone length in metres.', { unit: 'm' })),
+    lengthM: nullable(num('Backbone length in meters.', { unit: 'm' })),
     lengthUnit: nullable(str('Unit the length was entered in.')),
     supplyRatingA: nullable(num('Supply rating, amperes.', { unit: 'A' })),
-    taps: list({ type: 'object', additionalProperties: true }, 'The taps on live devices: device, port, drop length in metres, position, LEN, rated power, power feed flag.'),
+    taps: list({ type: 'object', additionalProperties: true }, 'The taps on live devices: device, port, drop length in meters, position, LEN, rated power, power feed flag.'),
     deviceIds: idList('Distinct devices on the bus.'),
     deviceCount: int('Number of distinct devices.'),
-    totalDropM: num('Known drop lengths added up, metres.', { unit: 'm' }),
-    longestDropM: nullable(num('Longest known drop, metres.', { unit: 'm' })),
+    totalDropM: num('Known drop lengths added up, meters.', { unit: 'm' }),
+    longestDropM: nullable(num('Longest known drop, meters.', { unit: 'm' })),
     dropsMissing: idList('Devices whose tap has no drop length.'),
     terminatorCount: int('Terminators marked (0 to 2).'),
     lenTotal: nullable(num('Sum of the known LENs; null when no device has one.')),

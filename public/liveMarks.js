@@ -6,7 +6,7 @@
 import { html } from './vendor/preact-standalone.module.js'
 
 // A padlock, drawn from rectangles and a path so it needs no font. (x, y) is
-// the centre; size is its height.
+// the center; size is its height.
 export function LiveLock ({ x, y, size }) {
   const w = size * 0.8
   const bodyH = size * 0.55

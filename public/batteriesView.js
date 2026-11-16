@@ -2,6 +2,7 @@ import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { hashForState } from './router.js'
 import { useLive } from './live.js'
 import { useSort, SortControl } from './sortView.js'
+import { LoadError } from './loadError.js'
 import { bankReading, bankReadingInput } from './liveBattery.js'
 import {
   CHEMISTRY_LABELS, PURPOSE_LABELS, bankTitle, fmtAh, fmtKwh, fmtVolts, incompleteText, stringsText, allBanks
@@ -18,7 +19,9 @@ async function getJson (url) {
 
 function useBatteryData () {
   const [state, setState] = useState({ loading: true, error: null, devices: [], banks: [] })
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
+    setState((s) => (s.error ? { ...s, loading: true, error: null } : s))
     let cancelled = false
     Promise.all([getJson(`${RESOURCE_BASE}/wiringDevices`), getJson(`${BASE}/derived`)])
       .then(([map, derived]) => {
@@ -26,8 +29,8 @@ function useBatteryData () {
       })
       .catch((err) => { if (!cancelled) setState({ loading: false, error: err.message, devices: [], banks: [] }) })
     return () => { cancelled = true }
-  }, [])
-  return state
+  }, [attempt])
+  return { ...state, retry: () => setAttempt((n) => n + 1) }
 }
 
 function DeviceLink ({ id, deviceById }) {
@@ -85,7 +88,7 @@ function BankCard ({ bank, deviceById, live }) {
 }
 
 export function BatteriesTab () {
-  const { loading, error, devices, banks } = useBatteryData()
+  const { loading, error, retry, devices, banks } = useBatteryData()
   const [liveOn, setLiveOn] = useState(false)
   const nameOf = (id) => { const d = devices.find((x) => x.id === id); return (d && d.name) || id }
   const live = useLive(liveOn, 0, nameOf)
@@ -99,6 +102,7 @@ export function BatteriesTab () {
   const cards = sorted(allBanks(devices, banks))
   return html`
     <div>
+      <p class="meta">One card per battery bank. Batteries joined by a link on a cable form a bank; a battery with no links is a bank of one.</p>
       <div class="battery-live">
         <button type="button" class=${liveOn ? 'active' : ''} data-testid="batteries-live" onClick=${() => setLiveOn((v) => !v)}>${liveOn ? 'Live: on' : 'Live'}</button>
         ${liveOn && html`<span class="meta live-status" data-testid="live-status">${live.error ? live.error : !live.live ? 'Loading…' : live.connected ? 'Connected to the SignalK stream.' : 'Connecting to the SignalK stream…'}</span>`}
@@ -109,9 +113,8 @@ export function BatteriesTab () {
             options=${[{ key: 'name', label: 'Name' }, { key: 'voltage', label: 'Voltage' }, { key: 'capacity', label: 'Capacity' }, { key: 'energy', label: 'Energy' }]} />
         </div>
       `}
-      <p class="meta">One card per battery bank. Batteries joined by a link on a cable form a bank; a battery with no links is a bank of one.</p>
       ${loading && html`<div class="empty-state">Loading…</div>`}
-      ${error && html`<div class="error-banner">${error}</div>`}
+      <${LoadError} message=${error} what="batteries" onRetry=${retry} />
       ${!loading && !error && cards.length === 0 && html`<div class="empty-state">No batteries yet. Add a device with the Storage role.</div>`}
       ${cards.map((bank) => html`<${BankCard} key=${bank.batteryIds.join(',')} bank=${bank} deviceById=${deviceById} live=${liveOn ? live : null} />`)}
     </div>

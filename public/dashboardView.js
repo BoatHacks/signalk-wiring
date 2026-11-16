@@ -10,6 +10,7 @@ import { floorplanShown } from './floorplanSwitch.js'
 import { limitsFrom } from './cableCheckView.js'
 import { useLive } from './live.js'
 import { useHistory, sparkline, sparklinePath } from './history.js'
+import { LoadError } from './loadError.js'
 import {
   dashboardStats, dashboardChecks, dashboardPaths, liveFlows, batteryCards, switchesOn, historyPaths,
   formatWatts, formatMetres, percentText, netText, readLivePref, writeLivePref
@@ -35,7 +36,9 @@ async function getJson (url) {
 // the banks and bus checks are simply missing, never an error banner.
 function useDashboardData () {
   const [state, setState] = useState({ loading: true, error: null, data: null })
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
+    setState((s) => (s.error ? { ...s, loading: true, error: null } : s))
     let cancelled = false
     const lists = Object.entries(RESOURCES).map(([key, type]) =>
       getJson(`${RESOURCE_BASE}/${type}`).then((map) => [key, Object.values(map)]))
@@ -47,8 +50,8 @@ function useDashboardData () {
       .then((pairs) => { if (!cancelled) setState({ loading: false, error: null, data: Object.fromEntries(pairs) }) })
       .catch((err) => { if (!cancelled) setState({ loading: false, error: err.message, data: null }) })
     return () => { cancelled = true }
-  }, [])
-  return state
+  }, [attempt])
+  return { ...state, retry: () => setAttempt((n) => n + 1) }
 }
 
 function Link ({ href, children, ...rest }) {
@@ -302,7 +305,7 @@ function liveStatus (liveOn, live) {
 }
 
 export function DashboardTab () {
-  const { loading, error, data } = useDashboardData()
+  const { loading, error, retry, data } = useDashboardData()
   const { settings, loaded } = useSettingsLoaded()
   const [liveOn, setLiveOn] = useState(() => readLivePref())
   const devices = (data && data.devices) || []
@@ -337,7 +340,7 @@ export function DashboardTab () {
           </button>
         </div>
       </div>
-      ${error && html`<div class="error-banner">${error}</div>`}
+      <${LoadError} message=${error} what="dashboard" onRetry=${retry} />
       ${(loading || !loaded) && !error && html`<div class="empty-state">Loading…</div>`}
       ${ready && html`
         <div class="dash-grid">

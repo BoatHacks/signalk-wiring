@@ -103,7 +103,7 @@ Sources (all read on 2026-11-12):
 - C: https://cdn.shopify.com/s/files/1/0542/2173/4073/files/DS_CM1.0-10.0.pdf
   (manufacturer datasheet, tinned copper single core cable, 1 to 10 mm2).
   Nominal current ratings 16.5, 21, 29, 39, 50, 70 A for 1, 1.5, 2.5, 4, 6, 10
-  mm2, and a maximum resistance of 0.00185 ohm per metre at 20 C for 10 mm2.
+  mm2, and a maximum resistance of 0.00185 ohm per meter at 20 C for 10 mm2.
 - C2: https://cdn.shopify.com/s/files/1/0542/2173/4073/files/DS_CM16-95.pdf (the
   same maker, 16 to 95 mm2). Nominal ratings 110, 170, 240, 345, 485, 500 A for
   16, 25, 35, 50, 70, 95 mm2. The 70 and 95 mm2 figures hardly differ, which
@@ -181,12 +181,12 @@ free air.
 
 ### Voltage drop
 
-Resistance per metre is rho divided by the cross-section, with
-rho = 0.0185 ohm mm2 per metre at 20 C. That is the annealed copper value
+Resistance per meter is rho divided by the cross-section, with
+rho = 0.0185 ohm mm2 per meter at 20 C. That is the annealed copper value
 (R, 0.017241) plus an allowance for stranding and tin plating, taken from the
-maximum resistance of the 10 mm2 cable in C (0.00185 ohm per metre times
+maximum resistance of the 10 mm2 cable in C (0.00185 ohm per meter times
 10 mm2). At the 50 C operating temperature
-rho = 0.0185 times (1 + 0.00393 times 30) = 0.02068 ohm mm2 per metre. The drop
+rho = 0.0185 times (1 + 0.00393 times 30) = 0.02068 ohm mm2 per meter. The drop
 is current times the resistance of the round trip (twice the cable length); on
 AC it is multiplied by the power factor.
 

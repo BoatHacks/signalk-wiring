@@ -83,7 +83,7 @@ export const SOURCES = [
   },
   {
     id: 'C',
-    what: 'Tinned copper single core cable, nominal current rating per mm2 and maximum resistance per metre',
+    what: 'Tinned copper single core cable, nominal current rating per mm2 and maximum resistance per meter',
     url: 'https://cdn.shopify.com/s/files/1/0542/2173/4073/files/DS_CM1.0-10.0.pdf',
     note: 'Manufacturer datasheet for 1 to 10 mm2 (nominal ratings 16.5, 21, 29, 39, 50, 70 A).'
   },
@@ -97,7 +97,7 @@ export const SOURCES = [
     id: 'R',
     what: 'Resistivity of annealed copper (17.241 ohm mm2 per km at 20 C) and its temperature coefficient',
     url: 'https://en.wikipedia.org/wiki/International_Annealed_Copper_Standard',
-    note: 'Used with an allowance for stranding and tin plating taken from the maximum resistance in source C (10 mm2: 0.00185 ohm per metre, which is 0.0185 ohm mm2 per metre).'
+    note: 'Used with an allowance for stranding and tin plating taken from the maximum resistance in source C (10 mm2: 0.00185 ohm per meter, which is 0.0185 ohm mm2 per meter).'
   }
 ]
 

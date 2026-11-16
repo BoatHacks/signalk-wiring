@@ -3,6 +3,7 @@
 // the data from GET /changelog.
 import { html, useState, useEffect, useRef } from './vendor/preact-standalone.module.js'
 import { DeviceLabel } from './deviceIcon.js'
+import { LoadError } from './loadError.js'
 import { hashForState } from './router.js'
 import {
   KIND_LABELS, KIND_ORDER, RANGES, DEFAULT_RANGE, describeEntry, buildQuery, recordRoute,
@@ -20,12 +21,12 @@ async function load (routesBase, query) {
   if (!res.ok) {
     throw new Error(res.status === 401
       ? 'You need to be logged into the SignalK admin UI to see the changes.'
-      : `Request failed (server responded ${res.status}).`)
+      : `failed to load the changes: ${res.status}`)
   }
   return res.json()
 }
 
-function GroupHeader ({ group, device }) {
+function GroupHeader ({ group, device, showLatest }) {
   const route = recordRoute(group)
   const label = group.kind === 'device' && device
     ? html`<${DeviceLabel} device=${device} name=${group.name} size=${20} tone="text" />`
@@ -40,7 +41,7 @@ function GroupHeader ({ group, device }) {
       </h3>
       ${group.status === 'removed' && html`<span class="badge removed">removed</span>`}
       ${group.status === 'purged' && html`<span class="badge removed changes-purged">permanently deleted</span>`}
-      <span class="changes-latest meta">${when(group.latest)}</span>
+      ${showLatest && html`<span class="changes-latest meta">${when(group.latest)}</span>`}
     </div>
   `
 }
@@ -49,7 +50,7 @@ function GroupCard ({ group, device, names, onShowMore, busy }) {
   const ctx = { names, units: group.units }
   return html`
     <section class="card changes-group" data-testid="changes-group" data-kind=${group.kind}>
-      <${GroupHeader} group=${group} device=${device} />
+      <${GroupHeader} group=${group} device=${device} showLatest=${group.entries.length > 1 || group.more > 0} />
       <ul class="changes-entries">
         ${group.entries.map((entry) => {
           const d = describeEntry(group.kind, entry, ctx)
@@ -80,6 +81,7 @@ export function ChangesTab ({ devices = [], routesBase }) {
   const [state, setState] = useState({ loading: true, error: null, groups: [], next: null })
   const [busy, setBusy] = useState(false)
   const seq = useRef(0)
+  const [attempt, setAttempt] = useState(0)
 
   // The text filter waits for a pause in typing.
   useEffect(() => {
@@ -95,7 +97,7 @@ export function ChangesTab ({ devices = [], routesBase }) {
     load(routesBase, buildQuery({ ...filters, limit: PAGE }))
       .then((data) => { if (mine === seq.current) setState({ loading: false, error: null, groups: data.groups, next: data.nextCursor }) })
       .catch((err) => { if (mine === seq.current) setState({ loading: false, error: err.message, groups: [], next: null }) })
-  }, [key])
+  }, [key, attempt])
 
   const nextPage = async () => {
     setBusy(true)
@@ -151,7 +153,9 @@ export function ChangesTab ({ devices = [], routesBase }) {
             onInput=${(e) => setText(e.target.value)} />
         </label>
       </div>
-      ${state.error && html`<div class="error-banner">${state.error}</div>`}
+      ${state.error && state.error.startsWith('You need to be logged')
+        ? html`<div class="error-banner">${state.error}</div>`
+        : html`<${LoadError} message=${state.error} what="changes" onRetry=${() => setAttempt((n) => n + 1)} />`}
       ${state.loading && state.groups.length === 0 && html`<div class="empty-state">Loading changes…</div>`}
       ${!state.loading && !state.error && state.groups.length === 0 && html`
         <div class="empty-state">Nothing changed in this range.</div>

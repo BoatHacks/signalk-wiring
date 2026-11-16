@@ -21,14 +21,14 @@ export const SHAPE_KINDS = [
 // The box of a shape as { x, y, w, h }, for fitting the view.
 export const shapeBox = (s) => ({ x: s.x, y: s.y, w: s.width, h: s.height })
 
-// A new shape of `kind` centred on `centre`.
-export function newShape (zoneId, kind, centre) {
+// A new shape of `kind` centred on `center`.
+export function newShape (zoneId, kind, center) {
   if (kind === 'polygon') {
-    const points = triangle(centre.x, centre.y, DEFAULT_W)
+    const points = triangle(center.x, center.y, DEFAULT_W)
     const b = boundingBox(points)
     return { zoneId, kind, x: b.x, y: b.y, width: b.w, height: b.h, points }
   }
-  return { zoneId, kind, x: Math.round(centre.x - DEFAULT_W / 2), y: Math.round(centre.y - DEFAULT_H / 2), width: DEFAULT_W, height: DEFAULT_H }
+  return { zoneId, kind, x: Math.round(center.x - DEFAULT_W / 2), y: Math.round(center.y - DEFAULT_H / 2), width: DEFAULT_W, height: DEFAULT_H }
 }
 
 // A polygon shape rebuilt from new corners.

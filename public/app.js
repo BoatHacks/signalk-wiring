@@ -30,7 +30,7 @@ import { cablesEndingOn, blockedText, purgeConfirmText, purgeFacts, purgeRecord 
 import { hashForState, parseHash } from './router.js'
 import { UndoProvider, useUndo } from './undoBar.js'
 import {
-  BUS_CLASSES, busRows, sortBusRows, filterBuses, tapRows, busesOfDevice, blankTap, cleanTaps, tapsToForm, duplicatePayload, lengthText, lenText, classLabel
+  BUS_CLASSES, busRows, sortBusRows, filterBuses, tapRows, busesOfDevice, isBusDevice, blankTap, cleanTaps, tapsToForm, duplicatePayload, lengthText, lenText, classLabel
 } from './buses.js'
 import { VerdictBadge, BusChecks } from './busesView.js'
 import { deviceBox, endTerminals } from './schematic.js'
@@ -45,6 +45,8 @@ import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { NMEA2000_PORT, deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState, terminalPresetList, newPresetTerminals } from './deviceFields.js'
 import { useSort, SortHeader, SortControl } from './sortView.js'
+import { plural } from './wording.js'
+import { LoadError } from './loadError.js'
 import { lengthMetres, cableAreaMm2 } from './sort.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import {
@@ -52,6 +54,8 @@ import {
   chemistryFill, typeBatteryFill, socPathFill, installedAgeText, fractionToPercent, bankOfBattery, describeBank
 } from './batteries.js'
 import { ChangesTab } from './changesView.js'
+import { describeEntry } from './changes.js'
+import { TabBar } from './tabBar.js'
 import { checkAll } from './cableChecks.js'
 import { CheckBadges, CheckPopover, limitsFrom } from './cableCheckView.js'
 import { canBeIcon, iconChoice, attachmentKind } from './deviceIcons.js'
@@ -118,6 +122,7 @@ async function deleteResource (type, id) {
 
 function useResourceList (type, reloadKey = 0) {
   const [state, setState] = useState({ loading: true, error: null, items: [] })
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -126,12 +131,15 @@ function useResourceList (type, reloadKey = 0) {
       .then((items) => { if (!cancelled) setState({ loading: false, error: null, items }) })
       .catch((err) => { if (!cancelled) setState({ loading: false, error: err.message, items: [] }) })
     return () => { cancelled = true }
-  }, [type, reloadKey])
+  }, [type, reloadKey, attempt])
 
-  return state
+  return { ...state, retry: () => setAttempt((n) => n + 1) }
 }
 
+// A status that is not active keeps its badge (removed, for example). An active
+// item only gets a quiet muted word, so findings stand out (plan 0041).
 function StatusBadge ({ status }) {
+  if (status === 'active') return html`<span class="status-quiet">active</span>`
   return html`<span class="badge ${status === 'removed' ? 'removed' : ''}">${status}</span>`
 }
 
@@ -186,7 +194,7 @@ function ListControls ({ query, onQuery, showRemoved, onShowRemoved, removedCoun
 }
 
 function BackLink ({ onClick, children }) {
-  // HTML entities like &larr; aren't parsed here — htm builds vnodes
+  // HTML entities like &larr; aren't parsed here, htm builds vnodes
   // straight from the JS text content, not through an HTML parser, so
   // the literal character is needed instead.
   return html`<div class="back-link" onClick=${onClick}>← ${children}</div>`
@@ -498,7 +506,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
           `}
           ${f.type === 'select' && html`
             <select value=${values[f.key]} onChange=${(e) => setField(f.key, e.target.value)}>
-              ${!f.noBlank && html`<option value="">${f.blankLabel || '—'}</option>`}
+              ${!f.noBlank && html`<option value="">${f.blankLabel || 'None'}</option>`}
               ${f.options.map((o) => {
                 const option = typeof o === 'string' ? { value: o, label: o } : o
                 return html`<option value=${option.value} key=${option.value}>${option.label}</option>`
@@ -570,7 +578,7 @@ function Form ({ fields, initial, onSubmit, onCancel, submitLabel = 'Save', cont
 }
 
 // Attachments are admin-gated (unlike the resource API reads elsewhere
-// in this file) — they were designed that way from plan 0002 onward,
+// in this file), they were designed that way from plan 0002 onward,
 // binary files rather than the wiring records SPEC.md §12 decided to
 // keep anonymously readable. So this component's own fetches can 401
 // even for a user who can otherwise browse the whole app; it shows the
@@ -694,26 +702,19 @@ function AttachmentList ({ ownerType, ownerId, iconAttachmentId, onIconChange })
   `
 }
 
-function prettifyFieldName (key) {
-  return key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
-}
-
-function formatDiffValue (v) {
-  if (v === null || v === undefined || v === '') return '(empty)'
-  return String(v)
-}
-
 function formatTimestamp (iso) {
   return new Date(iso).toLocaleString()
 }
 
-// Same admin-gated pattern as AttachmentList (plan 0006) — the
+// Same admin-gated pattern as AttachmentList (plan 0006): the
 // changelog route lives under the same /plugins/signalk-wiring/ prefix
 // as attachments, so this can 401 for a logged-out visitor too.
 function ChangeLog ({ kind, id }) {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const { items: allDevices } = useResourceList('wiringDevices')
+  const names = new Map(allDevices.map((d) => [d.id, d.name]))
 
   useEffect(() => {
     let cancelled = false
@@ -729,8 +730,8 @@ function ChangeLog ({ kind, id }) {
     return () => { cancelled = true }
   }, [kind, id])
 
-  // store.js logs creation as { after: <full row> } — one key, not a
-  // per-field {before,after} pair like updates/removes — so it can't go
+  // store.js logs creation as { after: <full row> }, one key, not a
+  // per-field {before,after} pair like updates/removes, so it can't go
   // through the same diff-row loop below; showing "created" alone is
   // enough, since the diff there is just "everything," not informative
   // to enumerate.
@@ -745,24 +746,23 @@ function ChangeLog ({ kind, id }) {
       `}
       ${entriesNewestFirst.length > 0 && html`
         <ul class="changelog-list">
-          ${entriesNewestFirst.map((entry) => html`
-            <li key=${entry.id}>
-              <div class="changelog-entry-head">
-                <span class="changelog-summary">${entry.summary}</span>
-                <span class="changelog-time">${formatTimestamp(entry.timestamp)}</span>
-              </div>
-              ${entry.summary !== 'created' && html`
-                <ul class="changelog-diff">
-                  ${Object.entries(entry.diff).map(([field, change]) => html`
-                    <li key=${field}>
-                      <strong>${prettifyFieldName(field)}</strong>:
-                      ${formatDiffValue(change.before)} → ${formatDiffValue(change.after)}
-                    </li>
-                  `)}
-                </ul>
-              `}
-            </li>
-          `)}
+          ${entriesNewestFirst.map((entry) => {
+            // The same words as the Changes tab (plan 0041).
+            const d = describeEntry(kind, entry, { names })
+            return html`
+              <li key=${entry.id}>
+                <div class="changelog-entry-head">
+                  <span class="changelog-summary">${d.title}</span>
+                  <span class="changelog-time">${formatTimestamp(entry.timestamp)}</span>
+                </div>
+                ${d.lines.length > 0 && html`
+                  <ul class="changelog-diff">
+                    ${d.lines.map((line, i) => html`<li key=${i}>${line}</li>`)}
+                  </ul>
+                `}
+              </li>
+            `
+          })}
         </ul>
       `}
     </div>
@@ -1165,7 +1165,7 @@ function ZonesManager () {
   return html`
     <div>
       <p class="meta">
-        A zone is the area something is in, such as salon or aft cabin. Each device, wire run and conduit has at most one.
+        A zone is the area something is in, such as salon or aft cabin. Each device, cable and conduit has at most one.
         Renaming a zone renames it everywhere.
       </p>
       <${ErrorBanner} message=${error} />
@@ -1174,7 +1174,7 @@ function ZonesManager () {
       ${zones.length > 1 && html`
         <div class="filter-bar">
           <${SortControl} sort=${sort} onChange=${setSort}
-            options=${[{ key: 'name', label: 'Name' }, { key: 'devices', label: 'Devices' }, { key: 'wireRuns', label: 'Wire runs' }, { key: 'conduits', label: 'Conduits' }]} />
+            options=${[{ key: 'name', label: 'Name' }, { key: 'devices', label: 'Devices' }, { key: 'wireRuns', label: 'Cables' }, { key: 'conduits', label: 'Conduits' }]} />
         </div>
       `}
       ${sorted(zones).map((zone) => {
@@ -1194,7 +1194,7 @@ function ZonesManager () {
                       onKeyDown=${(e) => { if (e.key === 'Enter') rename(zone) }} />`
                   : html`<div>${zone.name}</div>`}
               </div>
-              <div class="meta">${u.devices} devices, ${u.wireRuns} wire runs, ${u.conduits} conduits</div>
+              <div class="meta">${plural(u.devices, 'device')}, ${plural(u.wireRuns, 'cable')}, ${plural(u.conduits, 'conduit')}</div>
               ${expanded && html`
                 <ul class="zone-devices">
                   ${devicesIn(zone.id).map((d) => html`<li key=${d.id}><${DeviceLink} id=${d.id} names=${deviceNameById} devices=${deviceById} /></li>`)}
@@ -1629,7 +1629,7 @@ function CablesList () {
   const [showRemoved, setShowRemoved] = useShowRemoved('cables')
   const [picked, setPicked] = useState(() => new Set())
   const [bulk, setBulk] = useState(false)
-  const { loading, error, items: cables } = useResourceList('wiringWireRuns', reloadKey)
+  const { loading, error, retry, items: cables } = useResourceList('wiringWireRuns', reloadKey)
   const { items: devices } = useResourceList('wiringDevices', devKey)
   const { items: circuits } = useResourceList('wiringCircuits', reloadKey)
   const { items: conduits } = useResourceList('wiringConduits')
@@ -1757,7 +1757,7 @@ function CablesList () {
         />
       `}
       ${loading && html`<div class="empty-state">Loading cables…</div>`}
-      <${ErrorBanner} message=${error} />
+      <${LoadError} message=${error} what="cables" onRetry=${retry} />
       ${!loading && !error && cables.length === 0 && html`<div class="empty-state">No cables recorded yet.</div>`}
       ${cables.length > 0 && html`
         <${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter}>
@@ -1867,7 +1867,7 @@ const CIRCUIT_FIELDS = [
 // Circuits are worked out from the cables (plan 0014), so this is an
 // overview: you can name a circuit and add notes, nothing else.
 function CircuitsList ({ onSelect }) {
-  const { loading, error, items } = useResourceList('wiringCircuits')
+  const { loading, error, retry, items } = useResourceList('wiringCircuits')
   const { items: cables } = useResourceList('wiringWireRuns')
   const { items: devices } = useResourceList('wiringDevices')
   const [filter, setFilter] = useState({})
@@ -1896,7 +1896,7 @@ function CircuitsList ({ onSelect }) {
         to the loads. Add or change cables on the Cables tab. Here you can name a circuit and add notes.
       </p>
       ${loading && html`<div class="empty-state">Loading circuits…</div>`}
-      <${ErrorBanner} message=${error} />
+      <${LoadError} message=${error} what="circuits" onRetry=${retry} />
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No circuits yet. Add cables between devices and they appear here.</div>
       `}
@@ -1919,7 +1919,7 @@ function CircuitsList ({ onSelect }) {
           >
             <div>
               <div>${circuit.name}</div>
-              <div class="meta">${circuitFacts(circuit)}${d && d.supplyDeviceIds.length ? html` - from ${labels(d.supplyDeviceIds)}` : ''}${d && d.endDeviceIds.length ? html` - to ${labels(d.endDeviceIds)}` : ''}</div>
+              <div class="meta">${circuitFacts(circuit)}${d && d.supplyDeviceIds.length ? html` | from ${labels(d.supplyDeviceIds)}` : ''}${d && d.endDeviceIds.length ? html` | to ${labels(d.endDeviceIds)}` : ''}</div>
             </div>
             <div>
               ${d && d.unprotected && html`<span class="badge over-rating">no protection</span> `}
@@ -2118,7 +2118,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
       <h3>Cables</h3>
       ${d && feedCables.length + returnCables.length === 0 && html`<div class="empty-state">No cables.</div>`}
       ${feedCables.length + returnCables.length > 0 && html`
-        <table>
+        <div class="table-scroll"><table>
           <thead><tr><th>From</th><th>To</th><th>Role</th><th>Cable</th><th>Gauge</th><th>Length</th></tr></thead>
           <tbody>
             ${[...feedCables, ...returnCables].map((c) => html`
@@ -2132,7 +2132,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
               </tr>
             `)}
           </tbody>
-        </table>
+        </table></div>
       `}
     </div>
   `
@@ -2141,7 +2141,7 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
 function DevicesList ({ onSelect }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
-  const { loading, error, items } = useResourceList('wiringDevices', reloadKey)
+  const { loading, error, retry, items } = useResourceList('wiringDevices', reloadKey)
   const [filter, setFilter] = useState({})
   const [query, setQuery] = useState('')
   const [showRemoved, setShowRemoved] = useShowRemoved('devices')
@@ -2200,6 +2200,10 @@ function DevicesList ({ onSelect }) {
 
   return html`
     <div>
+      <p class="meta">
+        A device is one piece of equipment: a battery, a fuse, a switch, a load. Fill in its ratings so the
+        circuits and checks can use them.
+      </p>
       <div class="list-header">
         <button onClick=${() => setShowForm((v) => !v)}>${showForm ? 'Cancel' : '+ New device'}</button>
       </div>
@@ -2214,7 +2218,7 @@ function DevicesList ({ onSelect }) {
         />
       `}
       ${loading && html`<div class="empty-state">Loading devices…</div>`}
-      <${ErrorBanner} message=${error} />
+      <${LoadError} message=${error} what="devices" onRetry=${retry} />
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No devices recorded yet.</div>
       `}
@@ -2490,14 +2494,12 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
             <${DeviceLabel} device=${device} size=${28} imageSize=${44} tone="text" />${' '}
             <${StatusBadge} status=${device.status} />
           </h2>
-          <div class="meta">${roleLabel(device.role)} – ${device.type || 'no type recorded'}${device.zone ? ` – ${device.zone}` : ''}${(device.tags || []).length ? ` – ${device.tags.join(', ')}` : ''}</div>
+          <div class="meta">${roleLabel(device.role)} | ${device.type || 'no type recorded'}${device.zone ? ` | ${device.zone}` : ''}${(device.tags || []).length ? ` | ${device.tags.join(', ')}` : ''}</div>
           ${insideText(allDevices, deviceId) && html`
             <div class="meta" data-testid="device-inside">In ${pathChain(allDevices, deviceId).map((d, i) => html`${i > 0 ? ', ' : ''}<${DeviceLink} id=${d.id} names=${deviceNames} key=${d.id} />`)}</div>
           `}
           ${device.role === 'enclosure' && html`<${EnclosureContents} device=${device} devices=${allDevices} />`}
           ${device.ratedPowerW && html`<div class="meta">${device.ratedPowerW} W rated</div>`}
-          ${device.len != null && html`<div class="meta" data-testid="device-len">LEN ${device.len} (${Math.round(device.len * 50)} mA)</div>`}
-          <${OnTheBus} deviceId=${deviceId} len=${device.len} />
           ${device.tripRatingA && html`<div class="meta">Trip rating: ${device.tripRatingA} A</div>`}
           ${ratedLine(device) && html`<div class="meta" data-testid="rated-line">${ratedLine(device)}</div>`}
           ${device.nominalVoltage && html`<div class="meta">Nominal voltage: ${device.nominalVoltage} V</div>`}
@@ -2512,12 +2514,15 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
           ${device.signalkPath && html`
             <div class="meta">SignalK path: <code>${device.signalkPath}</code></div>
           `}
-          ${device.switchPath && html`
-            <div class="meta">Switch path: <code>${device.switchPath}</code></div>
-          `}
-          ${(device.confirmSwitching || device.neverRemote) && html`
-            <div class="meta">
-              ${device.neverRemote ? '\u{1F512} Never switched remotely' : 'Asks for confirmation before switching'}
+          ${(device.switchPath || device.confirmSwitching || device.neverRemote) && html`
+            <div class="device-block" data-testid="switching-block">
+              <h3>Switching</h3>
+              ${device.switchPath && html`<div class="meta">Switch path: <code>${device.switchPath}</code></div>`}
+              ${(device.confirmSwitching || device.neverRemote) && html`
+                <div class="meta">
+                  ${device.neverRemote ? '\u{1F512} Never switched remotely' : 'Asks for confirmation before switching'}
+                </div>
+              `}
             </div>
           `}
           ${device.meterPath && html`
@@ -2529,6 +2534,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
           ${device.measured && device.measured.group && html`
             <div class="meta">${describeGroup(device.measured, (id) => (deviceNames.get(id) || id))}</div>
           `}
+          <${OnTheBus} device=${device} />
           ${device.schematicBoxColor && html`<${ColorSwatch} label="Schematic box color" color=${device.schematicBoxColor} />`}
           ${device.schematicIconColor && html`<${ColorSwatch} label="Schematic icon color" color=${device.schematicIconColor} />`}
           ${device.notes && html`<p>${device.notes}</p>`}
@@ -2575,7 +2581,7 @@ function DeviceDetail ({ deviceId, onBack, onNotFound = () => {} }) {
 function ConduitsList ({ onSelect }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
-  const { loading, error, items } = useResourceList('wiringConduits', reloadKey)
+  const { loading, error, retry, items } = useResourceList('wiringConduits', reloadKey)
   const { items: allRuns } = useResourceList('wiringWireRuns', reloadKey)
   const { items: allDevices } = useResourceList('wiringDevices', reloadKey)
   const deviceNameById = new Map(allDevices.map((d) => [d.id, d.name]))
@@ -2621,7 +2627,7 @@ function ConduitsList ({ onSelect }) {
         />
       `}
       ${loading && html`<div class="empty-state">Loading conduits…</div>`}
-      <${ErrorBanner} message=${error} />
+      <${LoadError} message=${error} what="conduits" onRetry=${retry} />
       ${!loading && !error && items.length === 0 && html`
         <div class="empty-state">No conduits recorded yet.</div>
       `}
@@ -2657,7 +2663,7 @@ function ConduitsList ({ onSelect }) {
                 onClick=${(e) => { e.stopPropagation(); toggle(conduit.id) }}>${open.has(conduit.id) && cablesIn(conduit).length > 0 ? '▾' : '▸'}</button>
               <div>${conduit.name}</div>
             </div>
-            <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` – ${conduit.zone}` : ''} – ${(conduit.cableIds || []).length === 1 ? '1 cable' : `${(conduit.cableIds || []).length} cables`}</div>
+            <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` | ${conduit.zone}` : ''} | ${plural((conduit.cableIds || []).length, 'cable')}</div>
             ${mixesOf(conduit) && html`<div class="meta" style="color: var(--warn)" data-testid="conduit-mix-line">Mixes AC and DC</div>`}
             ${open.has(conduit.id) && cablesIn(conduit).length > 0 && html`
               <ul class="zone-devices">
@@ -2752,7 +2758,7 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
       ${conduit && !editing && html`
         <div class="card">
           <h2>${conduit.name} <${StatusBadge} status=${conduit.status} /></h2>
-          <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` – ${conduit.zone}` : ''}</div>
+          <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` | ${conduit.zone}` : ''}</div>
           <div class="meta">${Array.isArray(conduit.route) && conduit.route.length > 1
             ? `Route drawn: ${conduit.route.length} points`
             : floorplanShown() ? 'No route drawn yet. Draw it on the Floorplan tab.' : 'No route drawn.'}</div>
@@ -2794,7 +2800,7 @@ function ConduitDetail ({ conduitId, onBack, onNotFound = () => {} }) {
                   ${others.length > 1
                     ? `Passes through ${others.map((c) => c.name).join(', then ')}`
                     : 'Only in this conduit'}
-                  ${run.status === 'removed' ? ' – removed' : ''}
+                  ${run.status === 'removed' ? ' | removed' : ''}
                 </div>
               </div>
               <div class="row-actions">
@@ -2865,7 +2871,7 @@ function TapsField ({ value, onChange }) {
           <input type="text" value=${row.port} placeholder="Port" aria-label="Port" list=${'tap-ports-' + i}
             onInput=${(e) => setRow(i, { port: e.target.value })} />
           <datalist id=${'tap-ports-' + i}>${[...new Set([NMEA2000_PORT, ...portsOf(row.deviceId)])].map((p) => html`<option value=${p} key=${p} />`)}</datalist>
-          <input type="number" step="any" min="0" value=${row.dropLength} placeholder="Drop (m)" aria-label="Drop length in metres"
+          <input type="number" step="any" min="0" value=${row.dropLength} placeholder="Drop (m)" aria-label="Drop length in meters"
             onInput=${(e) => setRow(i, { dropLength: e.target.value })} />
           <input type="number" step="any" min="0" value=${row.along} placeholder="Along" aria-label="Position along the backbone"
             onInput=${(e) => setRow(i, { along: e.target.value })} />
@@ -2903,7 +2909,7 @@ function BusesList ({ onSelect }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const [text, setText] = useState('')
-  const { loading, error, items } = useResourceList('wiringBackbones', reloadKey)
+  const { loading, error, retry, items } = useResourceList('wiringBackbones', reloadKey)
   const { data } = useBuses(reloadKey)
   const [showRemoved, setShowRemoved] = useShowRemoved('buses')
   const rows = sortBusRows(busRows(items, data))
@@ -2935,7 +2941,7 @@ function BusesList ({ onSelect }) {
           onCancel=${() => setShowForm(false)} submitLabel="Create bus" />
       `}
       ${loading && html`<div class="empty-state">Loading buses…</div>`}
-      <${ErrorBanner} message=${error} />
+      <${LoadError} message=${error} what="buses" onRetry=${retry} />
       ${!loading && !error && items.length === 0 && html`<div class="empty-state">No buses recorded yet.</div>`}
       ${items.length > 0 && html`
         <div class="filter-bar">
@@ -2955,7 +2961,7 @@ function BusesList ({ onSelect }) {
         <div key=${row.id} class="list-item ${row.removed ? 'removed' : ''}" data-testid="bus-row" onClick=${() => onSelect(row.id)}>
           <div>
             <div>${row.name}</div>
-            <div class="meta">${row.classText}, ${row.lengthText}, ${row.deviceCount === 1 ? '1 device' : `${row.deviceCount} devices`}, ${row.lenText}</div>
+            <div class="meta">${row.classText} | ${row.lengthText} | ${plural(row.deviceCount, 'device')} | ${row.lenText}</div>
           </div>
           ${row.removed ? html`<${StatusBadge} status="removed" />` : html`<${VerdictBadge} verdict=${row.verdict} />`}
         </div>
@@ -3072,13 +3078,16 @@ function BusDetail ({ busId, onBack, onNotFound = () => {} }) {
 
 // The "On the bus" section of the device page: every live backbone this
 // device is a tap on.
-function OnTheBus ({ deviceId, len }) {
+function OnTheBus ({ device }) {
   const { items } = useResourceList('wiringBackbones')
+  const deviceId = device.id
+  const len = device.len
   const on = busesOfDevice(deviceId, items)
-  if (on.length === 0 && len == null) return null
+  if (!isBusDevice(device, items)) return null
   return html`
-    <div class="on-the-bus" data-testid="on-the-bus">
+    <div class="on-the-bus device-block" data-testid="on-the-bus">
       <h3>On the bus</h3>
+      ${len != null && html`<div class="meta" data-testid="device-len">LEN ${len} (${Math.round(len * 50)} mA)</div>`}
       ${on.length === 0 && html`<div class="meta">LEN ${len}, not on a bus yet.</div>`}
       ${on.map(({ backbone, taps }) => html`
         <div class="meta" key=${backbone.id} data-testid="on-the-bus-row">
@@ -3185,14 +3194,10 @@ function AppBody () {
     <div>
       <${UpdateHint} />
       <header>
-        <h1>Wiring Documentation${settings.demoMode === true && html`<span class="demo-note" data-testid="demo-note"> - demo mode, some features might not work as expected</span>`}</h1>
+        <h1>Wiring Documentation${settings.demoMode === true && html`<span class="demo-note" data-testid="demo-note">Demo: sample boat, edits reset on restart</span>`}</h1>
         <${ThemeToggle} theme=${theme} onToggle=${toggleTheme} />
       </header>
-      <nav class="tabs">
-        ${nav.map(([key, label]) => html`
-          <button key=${key} class=${tab === key ? 'active' : ''} onClick=${() => switchTab(key)}>${label}</button>
-        `)}
-      </nav>
+      <${TabBar} nav=${nav} tab=${tab} onSwitch=${switchTab} />
       <main>
       ${notFound && html`<${NotFoundNotice} message=${notFound} onClose=${() => setNotFound(null)} />`}
       ${tab === 'dashboard' && html`<${DashboardTab} />`}
@@ -3231,7 +3236,7 @@ function App () {
 }
 
 // index.html's "Loading…" placeholder is static markup, not something
-// Preact rendered — Preact's diffing tries to reuse existing container
+// Preact rendered, and Preact's diffing tries to reuse existing container
 // children rather than replacing them outright, so it's left behind
 // as a stray node unless cleared first.
 const container = document.getElementById('app')

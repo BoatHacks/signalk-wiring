@@ -108,7 +108,7 @@ export function parseGermanNumber (value) {
 }
 
 // For a column that combines gauge and unit in one cell, e.g. "2,5 mm²"
-// or "14 AWG" — the shape of the real source CSV's Querschnitt column.
+// or "14 AWG", the shape of the real source CSV's Querschnitt column.
 export function parseCombinedGauge (value) {
   if (!value) return null
   const match = String(value).match(/^\s*(\d\s*\/\s*0|[\d.,]+)\s*(mm²|mm2|awg)/i)
@@ -371,7 +371,7 @@ async function putResource (type, id, value) {
 }
 
 // Writes the grouped/mapped data via the same resource API the rest of
-// the webapp uses (plan 0004) — an import is just a lot of creates, not
+// the webapp uses (plan 0004): an import is just a lot of creates, not
 // a separate write path.
 export async function importToStore (grouped) {
   // Conduits first, so the cables can list them. Existing ones keep their id.
@@ -621,7 +621,7 @@ export function CsvImport ({ onDone, onCancel }) {
           </p>
           <ul class="changelog-list">
             ${grouped.devices.map((d) => html`
-              <li key=${d.tempId}>${d.name} (${d.role}${d.tripRatingA ? `, ${d.tripRatingA} A` : ''})${d.existingId ? ' – existing' : ' – new'}</li>
+              <li key=${d.tempId}>${d.name} (${d.role}${d.tripRatingA ? `, ${d.tripRatingA} A` : ''})${d.existingId ? ' | existing' : ' | new'}</li>
             `)}
           </ul>
           <div class="form-actions">

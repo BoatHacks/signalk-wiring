@@ -45,7 +45,7 @@ sources; each limit is one line there and can be changed later.
    device whose LEN was cleared, or that predates the field, is unknown.) A sum that is
    already over the rating fails even when some LENs are missing, because the
    known part is a lower bound.
-6. **Drop lengths are in metres.** The backbone length uses its own unit (m, ft,
+6. **Drop lengths are in meters.** The backbone length uses its own unit (m, ft,
    in, cm or mm); another unit cannot be converted and reads "cannot check".
 7. **A device on two ports** of one backbone counts once for the device count
    and the LEN, and both drops count for the drop total.

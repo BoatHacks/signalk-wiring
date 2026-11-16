@@ -22,7 +22,7 @@ const byString = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v)
 const round = (v, digits = 3) => (v === null ? null : Math.round(v * 10 ** digits) / 10 ** digits)
 
-// A length in metres, or null when it is missing or its unit is unknown.
+// A length in meters, or null when it is missing or its unit is unknown.
 function toMetres (value, unit) {
   if (!isNumber(value)) return null
   const factor = unit ? TO_METRES[String(unit).trim().toLowerCase()] : 1
@@ -263,7 +263,7 @@ function checkBus (backbone, devices) {
     checks,
     assumptions: [
       `1 LEN is ${LIMITS.lenCurrentA * 1000} mA; a device without a LEN counts as unknown.`,
-      'Drop lengths are in metres. Where sources disagree the lower figure is used.',
+      'Drop lengths are in meters. Where sources disagree the lower figure is used.',
       `A figure within ${Math.round((1 - warn) * 100)} % of its limit is a warning.`
     ],
     note: ADVISORY_NOTE

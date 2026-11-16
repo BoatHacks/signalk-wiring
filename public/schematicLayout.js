@@ -11,7 +11,7 @@ const GAP_BASE = 60
 const GAP_PER_SQRT_M = 60
 const DEFAULT_LENGTH_M = 1
 
-// The gap between two neighbouring ranks for a median cable length in metres.
+// The gap between two neighbouring ranks for a median cable length in meters.
 export function rankGap (lengthM) {
   const L = lengthM == null || !(lengthM >= 0) ? DEFAULT_LENGTH_M : lengthM
   return Math.min(GAP_MAX, Math.max(GAP_MIN, GAP_BASE + GAP_PER_SQRT_M * Math.sqrt(L)))

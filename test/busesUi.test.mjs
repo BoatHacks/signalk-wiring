@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  busRow, busRows, sortBusRows, filterBuses, tapRows, busesOfDevice, cleanTaps, tapsToForm, duplicatePayload, lenText, lengthText, verdictWord
+  busRow, busRows, sortBusRows, filterBuses, tapRows, busesOfDevice, isBusDevice, cleanTaps, tapsToForm, duplicatePayload, lenText, lengthText, verdictWord
 } from '../public/buses.js'
 
 const bb = { id: 'b1', name: 'Main', status: 'active', cableClass: 'mini', length: 12.5, lengthUnit: 'm', taps: [{ deviceId: 'd1', port: 'NMEA 2000', dropLength: 1.5, along: 2, powerFeed: true, fedFromDeviceId: 'f1' }, { deviceId: 'd2', dropLength: null }] }
@@ -82,4 +82,15 @@ test('a duplicate keeps the settings but no taps or route', () => {
   assert.deepEqual(d.taps, [])
   assert.equal(d.terminatorA, true)
   assert.equal('route' in d, false)
+})
+
+test('isBusDevice is true for a tapped device, an NMEA 2000 port or type, and false for a plain consumer', () => {
+  const backbones = [{ id: 'b1', status: 'active', taps: [{ deviceId: 'tapped' }] }]
+  assert.equal(isBusDevice({ id: 'tapped' }, backbones), true)
+  assert.equal(isBusDevice({ id: 'x', terminals: [{ name: 'NMEA 2000' }] }, []), true)
+  assert.equal(isBusDevice({ id: 'x', terminals: [{ name: 'Signal', port: 'NMEA 2000' }] }, []), true)
+  assert.equal(isBusDevice({ id: 'x', type: 'NMEA 2000 device' }, []), true)
+  assert.equal(isBusDevice({ id: 'fridge', type: 'Refrigerator', len: 0 }, backbones), false)
+  assert.equal(isBusDevice({ id: 'gone' }, [{ id: 'b2', status: 'removed', taps: [{ deviceId: 'gone' }] }]), false)
+  assert.equal(isBusDevice(null, []), false)
 })

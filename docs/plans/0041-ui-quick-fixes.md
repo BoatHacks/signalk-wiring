@@ -122,16 +122,16 @@ broken again; dashes in strings shown to the user are allowed.
 
 ## Implementation Steps
 
-- [ ] A1 dashes in comments and the pipe separator, with the comment guard test.
-- [ ] "meter" spelling (UI, docs, comments I touch).
-- [ ] A11 wording, plurals, the demo banner.
-- [ ] A3 quiet badges, A2 load errors with Retry.
-- [ ] A4 the device page bus block, A10 history wording and the one timestamp.
-- [ ] A5 tab bar, A6 table scroll on phones.
-- [ ] A12 one page frame and one link colour, A7 sorting hints, A8 selects, A9
+- [x] A1 dashes in comments and the pipe separator, with the comment guard test.
+- [x] "meter" spelling (UI, docs, comments I touch).
+- [x] A11 wording, plurals, the demo banner.
+- [x] A3 quiet badges, A2 load errors with Retry.
+- [x] A4 the device page bus block, A10 history wording and the one timestamp.
+- [x] A5 tab bar, A6 table scroll on phones.
+- [x] A12 one page frame and one link colour, A7 sorting hints, A8 selects, A9
       folded explanations.
-- [ ] B1 to B6 on the Floorplan tab.
-- [ ] CHANGELOG and README, tick the issue items, headless checks.
+- [x] B1 to B6 on the Floorplan tab.
+- [x] CHANGELOG and README, tick the issue items, headless checks.
 
 ## Files to Create/Modify
 

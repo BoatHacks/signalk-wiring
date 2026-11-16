@@ -21,10 +21,10 @@ export function pageTaps (backbone, boxById) {
 
 // The line of a backbone at `at` = { x, y }: its ends, its drops and marks.
 // The line reaches from `at.x` to the last drop plus a margin, and is at least
-// BUS_MIN_LEN long. A drop is vertical at the centre of the box, from the line
+// BUS_MIN_LEN long. A drop is vertical at the center of the box, from the line
 // to the nearest horizontal edge of the box; a box the line runs through gets
 // no drop. A drop longer than the line is not drawn outside it: the drop is
-// placed at the centre of the box, which is always inside the line.
+// placed at the center of the box, which is always inside the line.
 export function busGeometry (backbone, at, boxById) {
   const taps = pageTaps(backbone, boxById)
   const rightmost = taps.reduce((m, t) => Math.max(m, centreX(boxById.get(t.deviceId)) + BUS_END_PAD), at.x + BUS_MIN_LEN)
@@ -67,12 +67,12 @@ export function hitBus (geometries, x, y, tol = BUS_HIT) {
 
 // A free spot for a backbone that is added to a page: under the boxes it taps
 // (the left edge of the leftmost one), moved down until the line crosses no
-// other box. `boxes` are all boxes on the page; `centre` is used when the
+// other box. `boxes` are all boxes on the page; `center` is used when the
 // backbone taps nothing on the page.
-export function placeBus (backbone, boxes, centre, margin = 14) {
+export function placeBus (backbone, boxes, center, margin = 14) {
   const boxById = new Map(boxes.map((b) => [b.id, b]))
   const taps = pageTaps(backbone, boxById).map((t) => boxById.get(t.deviceId))
-  if (taps.length === 0) return { x: Math.round(centre.x - BUS_MIN_LEN / 2), y: Math.round(centre.y) }
+  if (taps.length === 0) return { x: Math.round(center.x - BUS_MIN_LEN / 2), y: Math.round(center.y) }
   const x = Math.min(...taps.map((b) => b.x))
   let y = Math.max(...taps.map((b) => b.y + b.h)) + BUS_CLEAR
   const g = () => busGeometry(backbone, { x, y }, boxById)

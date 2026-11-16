@@ -26,9 +26,10 @@ export function CheckBadges ({ result, onOpen }) {
   return html`
     <span class="check-badges" data-testid="check-badges" data-verdict=${result.verdict}>
       ${badges.map((b) => html`
-        <button type="button" key=${b.text} class=${`badge check-badge check-${b.kind}`} data-testid="check-badge" data-kind=${b.kind}
-          title="Show how this was worked out"
-          onClick=${(e) => { const r = e.currentTarget.getBoundingClientRect(); onOpen({ x: r.left + r.width / 2, y: r.bottom }) }}>${b.text}</button>
+        <button type="button" key=${b.text} class=${b.kind === 'ok' ? 'check-ok-tick' : `badge check-badge check-${b.kind}`} data-testid="check-badge" data-kind=${b.kind}
+          title=${b.kind === 'ok' ? `${b.text}, show how this was worked out` : 'Show how this was worked out'}
+          aria-label=${b.kind === 'ok' ? b.text : undefined}
+          onClick=${(e) => { const r = e.currentTarget.getBoundingClientRect(); onOpen({ x: r.left + r.width / 2, y: r.bottom }) }}>${b.kind === 'ok' ? '\u2713' : b.text}</button>
       `)}
     </span>
   `

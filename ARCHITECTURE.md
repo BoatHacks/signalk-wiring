@@ -881,7 +881,7 @@ reusing `schematic_devices` so a device row never points at a backbone. The
 geometry is pure in `public/schematicBus.js` (`busGeometry`, `hitBus`, `placeBus`,
 `arrangeBuses`); `schematicView.js` draws it as `BusShape` between the wires and
 the device boxes, with its own drag kind and selection type `bus`. The backbone
-is not given to the wire router: its drops are straight lines at the centre of
+is not given to the wire router: its drops are straight lines at the center of
 each device box, so a cable can cross it. `arrangeBuses` runs after the dagre
 layout, so the backbone is a group placed under the rest rather than a dagre node.
 

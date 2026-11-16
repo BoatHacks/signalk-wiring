@@ -28,7 +28,7 @@ export function hitRadius (kind, pointerType, zoom) {
 }
 
 // How far a rectangle of w by h must grow on every side to give a finger
-// `radius` of reach from its centre (zero when it is big enough already).
+// `radius` of reach from its center (zero when it is big enough already).
 export const rectPad = (radius, w, h) => Math.max(0, radius - Math.min(w, h) / 2)
 
 export const insideRect = (r, x, y, pad = 0) => x >= r.x - pad && x <= r.x + r.w + pad && y >= r.y - pad && y <= r.y + r.h + pad
@@ -36,8 +36,8 @@ export const insideRect = (r, x, y, pad = 0) => x >= r.x - pad && x <= r.x + r.w
 // The target a press at p lands on. `candidates` are { kind, x, y, ... } points
 // (their other fields are returned untouched). Each gets its hit radius, cut to
 // half the distance to the nearest other candidate so that no hit area covers
-// another target's centre (never below the base radius); of the areas that
-// contain p, the nearest centre wins. Null when none does.
+// another target's center (never below the base radius); of the areas that
+// contain p, the nearest center wins. Null when none does.
 export function pickTarget (p, candidates, pointerType, zoom) {
   let best = null
   let bestD = Infinity

@@ -567,7 +567,7 @@ export function formatWatts (w) {
   return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10} W`
 }
 
-// Metres as "1.2 km" from 1000 m, else whole metres from 100, else one decimal.
+// Meters as "1.2 km" from 1000 m, else whole meters from 100, else one decimal.
 export function formatMetres (m) {
   if (!finite(m)) return null
   if (m >= 1000) return `${(Math.round(m / 100) / 10).toFixed(1)} km`

@@ -205,6 +205,9 @@ function SchematicList ({ schematics, devices = [], reload, onOpen, onError }) {
 
   return html`
     <div>
+      <p class="meta">
+        A schematic page draws devices and their cables as boxes and wires. Open a page to arrange it.
+      </p>
       <form class="inline-form" onSubmit=${create}>
         <div class="row-actions">
           <input type="text" value=${name} placeholder="New schematic, e.g. 12 V system"
@@ -511,13 +514,13 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   }
 
   // ---- Zone shapes ----
-  // Adds a shape for a zone at the centre of the view; a zone that already has
+  // Adds a shape for a zone at the center of the view; a zone that already has
   // one on this page just gets that shape selected.
   const addShape = async (zoneId, kind) => {
     if (!zoneId) return
     const existing = shapes.find((sh) => sh.zoneId === zoneId)
     if (existing) { setSelection({ type: 'zone', id: zoneId }); return }
-    const next = Z.withShape(shapes, Z.newShape(zoneId, kind, centre()))
+    const next = Z.withShape(shapes, Z.newShape(zoneId, kind, center()))
     setShapes(next)
     setSelection({ type: 'zone', id: zoneId })
     await save(pos, bends, undefined, stubPos, next)
@@ -530,7 +533,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     await save(pos, bends, undefined, stubPos, next)
   }
 
-  const centre = () => ({ x: view.x + view.w / 2, y: view.y + view.h / 2 })
+  const center = () => ({ x: view.x + view.w / 2, y: view.y + view.h / 2 })
 
   // Moves the given devices (default: all) to the nearest free spot, at least
   // the overlap margin from every other device and every off-page tab.
@@ -548,7 +551,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const addBus = async (id) => {
     if (!id || busPos[id] || !busById.has(id)) return
-    const spot = B.placeBus(busById.get(id), boxes, centre())
+    const spot = B.placeBus(busById.get(id), boxes, center())
     const next = { ...busPos, [id]: { x: spot.x, y: spot.y } }
     setBusPos(next)
     setSelection({ type: 'bus', id })
@@ -570,7 +573,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
 
   const addExisting = async (id, at) => {
     if (!id || pos[id]) return
-    const c = at || centre()
+    const c = at || center()
     const n = Object.keys(pos).length
     const next = tidied({ ...pos, [id]: { x: c.x - G.BOX_W / 2 + (at ? 0 : (n % 5) * 24), y: c.y - 23 + (at ? 0 : (n % 5) * 24) } }, [id])
     setPos(next)
@@ -585,7 +588,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
   }
 
   const createDevice = async (item, at, snap = false) => {
-    const c = at || centre()
+    const c = at || center()
     const id = newId()
     try {
       // A device made on an inside page goes into that enclosure.
@@ -1023,7 +1026,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     let term
     let handle
     if (touchPress) {
-      // terminal dots and connect handles compete; the nearest centre wins
+      // terminal dots and connect handles compete; the nearest center wins
       const cands = []
       for (const b of wireBoxes) {
         for (const t of b.terminals) cands.push({ kind: 'terminal', box: b, t, x: t.x, y: t.y })
@@ -1293,7 +1296,11 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
           ${bands.map((b) => html`<option value=${'conduit:' + b.conduitId} key=${'conduit:' + b.conduitId}>${(conduitInfo.get(b.conduitId) || {}).name || b.label} (conduit)</option>`)}
         </select>
       </div>
-      <div class="meta schematic-legend" data-testid="schematic-legend">Double-click (or double-tap) a device to open it; an enclosure opens its inside page. Solid lines are DC, dashed lines are AC. The symbol on a port shows its conductor: = DC, ~ AC, a two-way arrow signal, the earth symbol earth or protective ground. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
+      <div class="meta schematic-legend" data-testid="schematic-legend">Double-click (or double-tap) a device to open it; an enclosure opens its inside page.</div>
+      <details class="schematic-legend-details" data-testid="schematic-legend-details">
+        <summary>Legend</summary>
+        <div class="meta">Solid lines are DC, dashed lines are AC. The symbol on a port shows its conductor: = DC, ~ AC, a two-way arrow signal, the earth symbol earth or protective ground. A thin line beside a wire is its second conductor. A shaded band around wires is a conduit or hose.</div>
+      </details>
       ${overlapping && html`<div class="meta schematic-notice" data-testid="overlap-notice">Some devices overlap. <button type="button" class="link-btn" data-testid="tidy" onClick=${tidyAll}>Tidy</button></div>`}
       ${liveOn && html`<${LiveBar} live=${live} error=${live.error} />`}
       ${notice && html`<div class="meta schematic-notice" data-testid="notice">${notice}</div>`}

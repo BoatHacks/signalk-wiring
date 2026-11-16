@@ -114,6 +114,16 @@ export function busesOfDevice (deviceId, backbones) {
   return out
 }
 
+// Whether the device page has a bus block (plan 0041): the device is tapped
+// onto a live backbone, has an NMEA 2000 port, or is typed as an NMEA 2000
+// device. A plain consumer, a fridge for example, has none.
+export function isBusDevice (device, backbones) {
+  if (!device) return false
+  if (busesOfDevice(device.id, backbones).length > 0) return true
+  if (/^\s*nmea\s*2000( device)?\s*$/i.test(device.type || '')) return true
+  return (device.terminals || []).some((t) => t && (t.port === 'NMEA 2000' || t.name === 'NMEA 2000'))
+}
+
 // A blank tap row for the form.
 export function blankTap () {
   return { deviceId: '', port: '', dropLength: '', along: '', powerFeed: false, fedFromDeviceId: '' }
