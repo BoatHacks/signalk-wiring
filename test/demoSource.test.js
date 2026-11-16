@@ -163,10 +163,23 @@ test('a server error, or no manifest on the branch, keeps the old files', async 
   untouched(dir)
 })
 
+// A fetch that never answers until its signal aborts. It holds a ref'd timer
+// while it waits, because the abort timers in the code under test are unref'd
+// and Node 22's test runner cancels a test whose event loop is empty.
+function hangingFetch (url, init) {
+  return new Promise((resolve, reject) => {
+    const keep = setTimeout(() => {}, 10000)
+    init.signal.addEventListener('abort', () => {
+      clearTimeout(keep)
+      reject(init.signal.reason)
+    })
+  })
+}
+
 test('a request that never answers times out', async () => {
   const dir = tmp()
   seedOld(dir)
-  const hang = (url, init) => new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))
+  const hang = hangingFetch
   const r = await updateDemoFiles(dir, { fetch: hang, requestTimeoutMs: 30 })
   assert.equal(r.status, 'kept')
   assert.match(r.reason, /timeout/)
@@ -176,7 +189,7 @@ test('a request that never answers times out', async () => {
 test('the whole check has a deadline', async () => {
   const dir = tmp()
   seedOld(dir)
-  const hang = (url, init) => new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))
+  const hang = hangingFetch
   const r = await updateDemoFiles(dir, { fetch: hang, requestTimeoutMs: 5000, deadlineMs: 30 })
   assert.equal(r.status, 'kept')
   assert.match(r.reason, /longer than 30 seconds/)
