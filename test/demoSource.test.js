@@ -6,13 +6,14 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { updateDemoFiles, blobSha, schemaVersionOf } = require('../src/demoSource')
+const { updateDemoFiles, sha256, schemaVersionOf } = require('../src/demoSource')
+const { buildManifest, manifestText, DEMO_DIR } = require('../scripts/demo-manifest')
 const { LATEST_SCHEMA_VERSION } = require('../src/store')
 
 // No test here may reach the real GitHub: every call goes to a fake fetch.
 
-const COMMIT = 'a'.repeat(40)
-const COMMIT2 = 'b'.repeat(40)
+const RAW = 'https://raw.githubusercontent.com/BoatHacks/signalk-wiring/main/demo/'
+const OLD_VERSION = 'b'.repeat(64)
 
 function tmp () {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'wiring-source-'))
@@ -29,39 +30,33 @@ function resp (body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
-    json: async () => body,
     arrayBuffer: async () => { const b = Buffer.from(body); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length) }
   }
 }
 
-// A fake GitHub holding one commit's demo files.
+// A fake raw.githubusercontent.com holding the demo files of the main branch.
+// The manifest is made from `files` unless `manifest` replaces it.
 function fakeGithub (over = {}) {
   const gh = {
-    commit: COMMIT,
-    files: { 'demo/wiring.db': dbBytes(LATEST_SCHEMA_VERSION), 'demo/plans/p1.svg': Buffer.from('<svg/>'), 'demo/attachments/.gitkeep': Buffer.from(''), 'demo/README.md': Buffer.from('readme'), 'demo/source/boat.json': Buffer.from('{}') },
+    files: { 'wiring.db': dbBytes(LATEST_SCHEMA_VERSION), 'plans/p1.svg': Buffer.from('<svg/>') },
     calls: [],
     tamper: {},
-    tree: null,
+    manifest: null,
     ...over
   }
+  gh.manifestBytes = () => Buffer.from(JSON.stringify(gh.manifest || {
+    format: 1,
+    files: Object.entries(gh.files).map(([p, b]) => ({ path: p, size: b.length, sha256: sha256(b) }))
+  }))
   gh.fetch = async (url, init) => {
     gh.calls.push(url)
-    assert.ok(url.startsWith('https://api.github.com/') || url.startsWith('https://raw.githubusercontent.com/'), url)
+    assert.ok(url.startsWith(RAW), url)
     assert.ok(init && init.signal, 'a signal is passed')
     if (gh.offline) throw new TypeError('fetch failed')
-    if (gh.status) return resp({}, gh.status)
-    if (url.includes('/commits?')) {
-      assert.match(url, /sha=main&path=demo&per_page=1/)
-      return resp([{ sha: gh.commit }])
-    }
-    if (url.includes('/git/trees/')) {
-      assert.ok(url.includes(`/git/trees/${gh.commit}?recursive=1`))
-      return resp({ truncated: false, tree: gh.tree || Object.entries(gh.files).map(([p, b]) => ({ path: p, type: 'blob', mode: '100644', size: b.length, sha: blobSha(b) })) })
-    }
-    const m = url.match(/^https:\/\/raw\.githubusercontent\.com\/BoatHacks\/signalk-wiring\/([0-9a-f]{40})\/(.*)$/)
-    assert.ok(m, url)
-    assert.equal(m[1], gh.commit, 'pinned to the commit')
-    const f = gh.tamper[m[2]] || gh.files[m[2]]
+    if (gh.status) return resp('', gh.status)
+    const rel = url.slice(RAW.length)
+    if (rel === 'manifest.json') return resp(gh.manifestBytes())
+    const f = gh.tamper[rel] || gh.files[rel]
     return f ? resp(f) : resp('', 404)
   }
   return gh
@@ -83,7 +78,7 @@ function listing (dir) {
 function seedOld (dir) {
   fs.mkdirSync(path.join(dir, 'demo'))
   fs.writeFileSync(path.join(dir, 'demo/wiring.db'), 'old-db')
-  fs.writeFileSync(path.join(dir, 'demo/version.json'), JSON.stringify({ commit: COMMIT2 }))
+  fs.writeFileSync(path.join(dir, 'demo/version.json'), JSON.stringify({ manifest: OLD_VERSION }))
 }
 
 function untouched (dir) {
@@ -92,28 +87,31 @@ function untouched (dir) {
   assert.equal(fs.existsSync(path.join(dir, 'demo.new')), false)
 }
 
-test('a first run downloads only wiring.db, plans and attachments, from one commit', async () => {
+const entry = (p, size, sha = 'd'.repeat(64)) => ({ path: p, size, sha256: sha })
+
+test('a first run reads the manifest and downloads the files it lists, without the GitHub API', async () => {
   const dir = tmp()
   const gh = fakeGithub()
   const r = await updateDemoFiles(dir, { fetch: gh.fetch })
-  assert.deepEqual(r, { status: 'updated', commit: COMMIT, reason: null })
+  const version = sha256(gh.manifestBytes())
+  assert.deepEqual(r, { status: 'updated', version, reason: null })
   assert.deepEqual(listing(path.join(dir, 'demo')), ['plans/p1.svg', 'version.json', 'wiring.db'])
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'demo/version.json'))).commit, COMMIT)
-  assert.equal(gh.calls.length, 4)
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'demo/version.json'))).manifest, version)
+  assert.deepEqual(gh.calls, [RAW + 'manifest.json', RAW + 'wiring.db', RAW + 'plans/p1.svg'])
   assert.equal(fs.existsSync(path.join(dir, 'demo.new')), false)
   assert.equal(fs.existsSync(path.join(dir, 'demo.old')), false)
 })
 
-test('the same commit means nothing to download', async () => {
+test('the same manifest means one request and nothing to download', async () => {
   const dir = tmp()
   await updateDemoFiles(dir, { fetch: fakeGithub().fetch })
   const gh = fakeGithub()
   const r = await updateDemoFiles(dir, { fetch: gh.fetch })
   assert.equal(r.status, 'unchanged')
-  assert.equal(gh.calls.length, 1)
+  assert.deepEqual(gh.calls, [RAW + 'manifest.json'])
 })
 
-test('a newer commit replaces the old demo folder completely', async () => {
+test('a changed manifest replaces the old demo folder completely', async () => {
   const dir = tmp()
   seedOld(dir)
   fs.writeFileSync(path.join(dir, 'demo/leftover.txt'), 'x')
@@ -122,11 +120,15 @@ test('a newer commit replaces the old demo folder completely', async () => {
   assert.deepEqual(listing(path.join(dir, 'demo')), ['plans/p1.svg', 'version.json', 'wiring.db'])
 })
 
-test('a folder without version.json counts as different', async () => {
+test('a folder without version.json, or one written by an older plugin, counts as different', async () => {
   const dir = tmp()
   fs.mkdirSync(path.join(dir, 'demo'))
   fs.writeFileSync(path.join(dir, 'demo/wiring.db'), 'old-db')
   assert.equal((await updateDemoFiles(dir, { fetch: fakeGithub().fetch })).status, 'updated')
+  const dir2 = tmp()
+  seedOld(dir2)
+  fs.writeFileSync(path.join(dir2, 'demo/version.json'), JSON.stringify({ commit: 'a'.repeat(40) }))
+  assert.equal((await updateDemoFiles(dir2, { fetch: fakeGithub().fetch })).status, 'updated')
 })
 
 test('offline keeps the old files and says why', async () => {
@@ -134,26 +136,31 @@ test('offline keeps the old files and says why', async () => {
   seedOld(dir)
   const r = await updateDemoFiles(dir, { fetch: fakeGithub({ offline: true }).fetch })
   assert.equal(r.status, 'kept')
-  assert.equal(r.commit, COMMIT2)
+  assert.equal(r.version, OLD_VERSION)
   assert.match(r.reason, /could not reach GitHub/)
   untouched(dir)
 })
 
 test('a rate limit keeps the old files', async () => {
-  const dir = tmp()
-  seedOld(dir)
-  const r = await updateDemoFiles(dir, { fetch: fakeGithub({ status: 403 }).fetch })
-  assert.equal(r.status, 'kept')
-  assert.match(r.reason, /rate limit/)
-  untouched(dir)
+  for (const status of [403, 429]) {
+    const dir = tmp()
+    seedOld(dir)
+    const r = await updateDemoFiles(dir, { fetch: fakeGithub({ status }).fetch })
+    assert.equal(r.status, 'kept')
+    assert.match(r.reason, /rate limit/)
+    untouched(dir)
+  }
 })
 
-test('a server error keeps the old files', async () => {
+test('a server error, or no manifest on the branch, keeps the old files', async () => {
   const dir = tmp()
   seedOld(dir)
   const r = await updateDemoFiles(dir, { fetch: fakeGithub({ status: 500 }).fetch })
   assert.equal(r.status, 'kept')
   assert.match(r.reason, /HTTP 500/)
+  const missing = async () => resp('', 404)
+  assert.match((await updateDemoFiles(dir, { fetch: missing })).reason, /HTTP 404 for demo\/manifest\.json/)
+  untouched(dir)
 })
 
 test('a request that never answers times out', async () => {
@@ -175,77 +182,104 @@ test('the whole check has a deadline', async () => {
   assert.match(r.reason, /longer than 30 seconds/)
 })
 
-test('a file that does not match its blob sha refuses the update', async () => {
+test('a file that does not match its sha256 refuses the update', async () => {
   const dir = tmp()
   seedOld(dir)
-  const gh = fakeGithub({ tamper: { 'demo/plans/p1.svg': Buffer.from('<svg!>') } })
+  const gh = fakeGithub({ tamper: { 'plans/p1.svg': Buffer.from('<svg!>') } })
   const r = await updateDemoFiles(dir, { fetch: gh.fetch })
   assert.equal(r.status, 'kept')
-  assert.match(r.reason, /checksum|wrong size/)
+  assert.match(r.reason, /checksum/)
   untouched(dir)
 })
 
-test('a file whose size differs from the tree is refused', async () => {
-  const dir = tmp()
-  seedOld(dir)
-  const gh = fakeGithub({ tamper: { 'demo/plans/p1.svg': Buffer.from('<svg/>extra') } })
-  const r = await updateDemoFiles(dir, { fetch: gh.fetch })
-  assert.equal(r.status, 'kept')
-  assert.match(r.reason, /wrong size/)
-  untouched(dir)
+test('a file whose size differs from the manifest is refused', async () => {
+  for (const body of ['<svg/>extra', '<sv']) {
+    const dir = tmp()
+    seedOld(dir)
+    const gh = fakeGithub({ tamper: { 'plans/p1.svg': Buffer.from(body) } })
+    const r = await updateDemoFiles(dir, { fetch: gh.fetch })
+    assert.equal(r.status, 'kept')
+    assert.match(r.reason, /wrong size|larger than expected/)
+    untouched(dir)
+  }
 })
 
-for (const [name, p] of [['a parent path', 'demo/plans/..'], ['an odd character', 'demo/plans/a b.svg'], ['a semicolon', 'demo/attachments/a;b'], ['a nested folder', 'demo/plans/x/y.svg'], ['a dotdot segment', 'demo/plans/../wiring.db']]) {
-  test(`${name} in an accepted place refuses the update`, async () => {
+test('a manifest that is too large, not JSON, or of another format is refused', async () => {
+  for (const [bytes, re] of [
+    [Buffer.alloc(1024 * 1024 + 1, 0x20), /larger than expected/],
+    [Buffer.from('{ not json'), /not valid JSON/],
+    [Buffer.from(JSON.stringify({ format: 2, files: [] })), /not one this plugin understands/],
+    [Buffer.from(JSON.stringify({ format: 1 })), /not one this plugin understands/]
+  ]) {
+    const dir = tmp()
+    seedOld(dir)
+    const gh = fakeGithub()
+    gh.manifestBytes = () => bytes
+    const r = await updateDemoFiles(dir, { fetch: gh.fetch })
+    assert.equal(r.status, 'kept')
+    assert.match(r.reason, re)
+    assert.equal(gh.calls.length, 1, 'nothing was downloaded')
+    untouched(dir)
+  }
+})
+
+for (const [name, p, re] of [
+  ['a parent path', 'plans/..', /not allowed/],
+  ['an odd character', 'plans/a b.svg', /not allowed/],
+  ['a semicolon', 'attachments/a;b', /not allowed/],
+  ['a nested folder', 'plans/x/y.svg', /not an accepted/],
+  ['a dotdot segment', 'plans/../wiring.db', /not an accepted|not allowed/],
+  ['an absolute path', '/etc/passwd', /not an accepted/],
+  ['a backslash', 'plans/..\\..\\x', /not allowed/],
+  ['a file outside the accepted places', 'source/boat.json', /not an accepted/],
+  ['a file at the top', 'README.md', /not an accepted/]
+]) {
+  test(`${name} in the manifest refuses the update`, async () => {
     const dir = tmp()
     seedOld(dir)
     const gh = fakeGithub()
     gh.files[p] = Buffer.from('x')
     const r = await updateDemoFiles(dir, { fetch: gh.fetch })
     assert.equal(r.status, 'kept', p)
-    assert.match(r.reason, /not allowed|nested/)
+    assert.match(r.reason, re)
+    assert.equal(gh.calls.length, 1, 'nothing was downloaded')
     untouched(dir)
   })
 }
 
-test('paths outside the three accepted places are ignored, even odd ones', async () => {
-  const dir = tmp()
-  const gh = fakeGithub()
-  gh.files['demo/source/../../etc'] = Buffer.from('x')
-  gh.files['/abs'] = Buffer.from('x')
-  gh.files['other/file'] = Buffer.from('x')
-  gh.files['demo/README.md'] = Buffer.from('x')
-  const r = await updateDemoFiles(dir, { fetch: gh.fetch })
-  assert.equal(r.status, 'updated')
-  assert.deepEqual(listing(path.join(dir, 'demo')), ['plans/p1.svg', 'version.json', 'wiring.db'])
-})
-
-test('a link in an accepted place refuses the update', async () => {
-  const dir = tmp()
-  seedOld(dir)
-  const gh = fakeGithub()
-  gh.tree = [{ path: 'demo/wiring.db', type: 'blob', mode: '100644', size: 200, sha: blobSha(gh.files['demo/wiring.db']) }, { path: 'demo/plans/l.svg', type: 'blob', mode: '120000', size: 1, sha: 'c'.repeat(40) }]
-  const r = await updateDemoFiles(dir, { fetch: gh.fetch })
-  assert.equal(r.status, 'kept')
-  assert.match(r.reason, /not a plain file/)
-})
-
-test('size caps: database 50 MB, other files 20 MB, 100 MB in all', async () => {
-  const sha = 'd'.repeat(40)
-  const mk = (...entries) => entries.map(([p, size]) => ({ path: p, type: 'blob', mode: '100644', size, sha }))
-  const mb = 1024 * 1024
-  for (const [tree, re] of [
-    [mk(['demo/wiring.db', 50 * mb + 1]), /larger than 50 MB/],
-    [mk(['demo/wiring.db', 10], ['demo/plans/a.svg', 20 * mb + 1]), /larger than 20 MB/],
-    [mk(['demo/wiring.db', 50 * mb], ['demo/plans/a.svg', 20 * mb], ['demo/plans/b.svg', 20 * mb], ['demo/attachments/c', 20 * mb]), /100 MB in all/]
+test('a file listed twice, or an entry without a sha256, is refused', async () => {
+  const db = dbBytes(LATEST_SCHEMA_VERSION)
+  const ok = entry('wiring.db', db.length, sha256(db))
+  for (const [files, re] of [
+    [[ok, ok], /listed twice/],
+    [[ok, { path: 'plans/a.svg', size: 1 }], /no sha256/],
+    [[ok, { path: 'plans/a.svg', size: -1, sha256: 'd'.repeat(64) }], /no size/],
+    [[ok, null], /without a path/]
   ]) {
     const dir = tmp()
     seedOld(dir)
-    const gh = fakeGithub({ tree })
+    const gh = fakeGithub({ manifest: { format: 1, files } })
     const r = await updateDemoFiles(dir, { fetch: gh.fetch })
     assert.equal(r.status, 'kept')
     assert.match(r.reason, re)
-    assert.equal(gh.calls.length, 2, 'nothing was downloaded')
+    untouched(dir)
+  }
+})
+
+test('size caps: database 50 MB, other files 20 MB, 100 MB in all', async () => {
+  const mb = 1024 * 1024
+  for (const [files, re] of [
+    [[entry('wiring.db', 50 * mb + 1)], /larger than 50 MB/],
+    [[entry('wiring.db', 10), entry('plans/a.svg', 20 * mb + 1)], /larger than 20 MB/],
+    [[entry('wiring.db', 50 * mb), entry('plans/a.svg', 20 * mb), entry('plans/b.svg', 20 * mb), entry('attachments/c', 20 * mb)], /100 MB in all/]
+  ]) {
+    const dir = tmp()
+    seedOld(dir)
+    const gh = fakeGithub({ manifest: { format: 1, files } })
+    const r = await updateDemoFiles(dir, { fetch: gh.fetch })
+    assert.equal(r.status, 'kept')
+    assert.match(r.reason, re)
+    assert.equal(gh.calls.length, 1, 'nothing was downloaded')
     untouched(dir)
   }
 })
@@ -254,7 +288,7 @@ test('a database with a newer schema than the plugin is refused', async () => {
   const dir = tmp()
   seedOld(dir)
   const gh = fakeGithub()
-  gh.files['demo/wiring.db'] = dbBytes(LATEST_SCHEMA_VERSION + 1)
+  gh.files['wiring.db'] = dbBytes(LATEST_SCHEMA_VERSION + 1)
   const r = await updateDemoFiles(dir, { fetch: gh.fetch })
   assert.equal(r.status, 'kept')
   assert.match(r.reason, /newer than this plugin/)
@@ -264,33 +298,29 @@ test('a database with a newer schema than the plugin is refused', async () => {
 test('an older schema is accepted, and a file that is no database is refused', async () => {
   const dir = tmp()
   const gh = fakeGithub()
-  gh.files['demo/wiring.db'] = dbBytes(3)
+  gh.files['wiring.db'] = dbBytes(3)
   assert.equal((await updateDemoFiles(dir, { fetch: gh.fetch })).status, 'updated')
   const dir2 = tmp()
   const gh2 = fakeGithub()
-  gh2.files['demo/wiring.db'] = Buffer.alloc(300)
+  gh2.files['wiring.db'] = Buffer.alloc(300)
   const r = await updateDemoFiles(dir2, { fetch: gh2.fetch })
   assert.equal(r.status, 'kept')
   assert.match(r.reason, /not a SQLite database/)
 })
 
-test('a tree without wiring.db, or a truncated tree, is refused', async () => {
+test('a manifest without wiring.db is refused', async () => {
   const dir = tmp()
   const gh = fakeGithub()
-  delete gh.files['demo/wiring.db']
+  delete gh.files['wiring.db']
   assert.match((await updateDemoFiles(dir, { fetch: gh.fetch })).reason, /no wiring\.db/)
-  const f = fakeGithub().fetch
-  const trunc = async (url, init) => (url.includes('/git/trees/') ? resp({ truncated: true, tree: [] }) : f(url, init))
-  assert.match((await updateDemoFiles(dir, { fetch: trunc })).reason, /complete file list/)
 })
 
 test('an interrupted update leaves the old files and no staging folder', async () => {
   const dir = tmp()
   seedOld(dir)
-  const gh = fakeGithub()
-  const f = gh.fetch
+  const f = fakeGithub().fetch
   const dying = async (url, init) => {
-    if (url.includes('plans/p1.svg')) throw new TypeError('connection reset')
+    if (url.endsWith('plans/p1.svg')) throw new TypeError('connection reset')
     return f(url, init)
   }
   const r = await updateDemoFiles(dir, { fetch: dying })
@@ -310,9 +340,39 @@ test('a swap interrupted after the old folder was moved away is recovered on the
   assert.equal(fs.existsSync(path.join(dir, 'demo.old')), false)
 })
 
-test('blobSha matches git and schemaVersionOf reads byte 60', () => {
-  const b = Buffer.from('hello\n')
-  assert.equal(blobSha(b), crypto.createHash('sha1').update('blob 6\0hello\n').digest('hex'))
-  assert.equal(blobSha(b), 'ce013625030ba8dba906f756967f9e9ca394464a')
+test('the committed demo/manifest.json lists the committed demo files', () => {
+  const committed = fs.readFileSync(path.join(DEMO_DIR, 'manifest.json'), 'utf8')
+  assert.equal(committed, manifestText(), 'demo/manifest.json is stale: run node scripts/demo-manifest.js')
+})
+
+test('the manifest builder leaves out .gitkeep and anything that is not a file', () => {
+  const dir = tmp()
+  fs.mkdirSync(path.join(dir, 'plans/sub'), { recursive: true })
+  fs.mkdirSync(path.join(dir, 'attachments'))
+  fs.writeFileSync(path.join(dir, 'wiring.db'), 'db')
+  fs.writeFileSync(path.join(dir, 'plans/.gitkeep'), '')
+  fs.writeFileSync(path.join(dir, 'plans/b.svg'), 'b')
+  fs.writeFileSync(path.join(dir, 'plans/a.svg'), 'a')
+  fs.writeFileSync(path.join(dir, 'attachments/.gitkeep'), '')
+  const m = buildManifest(dir)
+  assert.deepEqual(m.files.map((f) => f.path), ['wiring.db', 'plans/a.svg', 'plans/b.svg'])
+  assert.deepEqual(m.files[1], { path: 'plans/a.svg', size: 1, sha256: crypto.createHash('sha256').update('a').digest('hex') })
+})
+
+test('a manifest the builder writes is accepted by the update', async () => {
+  const src = tmp()
+  fs.mkdirSync(path.join(src, 'plans'))
+  fs.writeFileSync(path.join(src, 'wiring.db'), dbBytes(LATEST_SCHEMA_VERSION))
+  fs.writeFileSync(path.join(src, 'plans/a.svg'), '<svg/>')
+  const files = { 'wiring.db': fs.readFileSync(path.join(src, 'wiring.db')), 'plans/a.svg': fs.readFileSync(path.join(src, 'plans/a.svg')) }
+  const gh = fakeGithub({ files })
+  gh.manifestBytes = () => Buffer.from(manifestText(src))
+  const dir = tmp()
+  assert.equal((await updateDemoFiles(dir, { fetch: gh.fetch })).status, 'updated')
+  assert.deepEqual(listing(path.join(dir, 'demo')), ['plans/a.svg', 'version.json', 'wiring.db'])
+})
+
+test('sha256 and schemaVersionOf', () => {
+  assert.equal(sha256(Buffer.from('hello\n')), '5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03')
   assert.equal(schemaVersionOf(dbBytes(17)), 17)
 })

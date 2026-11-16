@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "files": [
+    {
+      "path": "wiring.db",
+      "size": 454656,
+      "sha256": "4f1e735e6a98b9fa1f5ea61f51b07bef5f17aad5d0db2fbc440fd78f3c8fa697"
+    },
+    {
+      "path": "plans/2c54830d-8af0-5a4e-9285-85212355355d.svg",
+      "size": 6073,
+      "sha256": "d8112929c83c6c59081f919e05687ded2cce2c0afcce383f5613c990050302e6"
+    },
+    {
+      "path": "plans/8356d711-810b-5fcd-9121-c2ef259c00ca.svg",
+      "size": 9272,
+      "sha256": "00563aa16c66855c956177adb48b9e7c9c37b903d3e7fdcd1dd30566f76a345b"
+    },
+    {
+      "path": "plans/901e7d9a-8ed9-564d-a734-44ed31bf782b.svg",
+      "size": 7607,
+      "sha256": "c2f03f16d726d468c5e77168345cf575af235db8a4f4f8d4616092e74ba9dc9c"
+    },
+    {
+      "path": "plans/a9fd3c23-78e7-56e2-a678-0f69d33a4a7a.svg",
+      "size": 9164,
+      "sha256": "521abbfe122aeef05e30ea8315311600736f6a526c4719526acec5850023ce38"
+    }
+  ]
+}

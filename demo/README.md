@@ -33,11 +33,12 @@ not part of the npm package (`package.json` `files` is `index.js`, `src` and
 A server runs the demo through the plugin's demo mode (see "Demo mode" in the
 main README). Create an empty file named `demo-mode-active` in the plugin's data
 directory (`<server config>/plugin-config-data/signalk-wiring/`) and restart the
-server. On every start the plugin looks on GitHub (`BoatHacks/signalk-wiring`,
-branch `main`) for a newer commit that touched this folder, downloads
-`wiring.db`, `plans/` and `attachments/` into `demo/` in the data directory (the
-rest of this folder, `source/` and this README, is never fetched), and then
-resets its data to them. The server that prepares the demo content has no
+server. On every start the plugin reads `manifest.json` of this folder from
+GitHub (`BoatHacks/signalk-wiring`, branch `main`, through
+raw.githubusercontent.com). When it changed, it downloads the files it lists,
+`wiring.db`, `plans/` and `attachments/`, into `demo/` in the data directory
+(the rest of this folder, `source/` and this README, is never fetched), and
+then resets its data to them. The server that prepares the demo content has no
 marker file, so its data is never replaced.
 
 To install the files by hand instead:
@@ -48,8 +49,11 @@ To install the files by hand instead:
 3. Remove `wiring.db-wal` and `wiring.db-shm` from that directory if they exist.
 4. Start the server.
 
-Files only reach servers through the main branch, so commit a change to this
-folder to publish it.
+Files only reach servers through the main branch and only when
+`manifest.json` lists them, so after changing `wiring.db`, `plans/` or
+`attachments/` run `node scripts/demo-manifest.js` (the builder does it for
+you) and commit the manifest with them. `test/demoSource.test.js` fails when
+the committed manifest does not match the committed files.
 
 The database has schema version 20. The plugin migrates older databases up,
 never down, so the demo server must run a plugin at least as new as the

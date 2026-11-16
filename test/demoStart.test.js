@@ -40,7 +40,7 @@ function seedDemo (dir, circuitName = 'Demo circuit') {
   s.create('circuit', { name: circuitName })
   s.close()
   fs.writeFileSync(path.join(dir, 'demo/plans/p.svg'), '<svg/>')
-  fs.writeFileSync(path.join(dir, 'demo/version.json'), JSON.stringify({ commit: 'f'.repeat(40) }))
+  fs.writeFileSync(path.join(dir, 'demo/version.json'), JSON.stringify({ manifest: 'f'.repeat(64) }))
 }
 
 function circuitNames (dir) {
@@ -84,7 +84,7 @@ test('demo mode prepares before the store opens, then restores the data and star
   assert.equal(fs.existsSync(path.join(dir, 'wiring.db.before-demo')), true)
   assert.equal(fs.readFileSync(path.join(dir, 'plans/p.svg'), 'utf8'), '<svg/>')
   const last = app.statuses[app.statuses.length - 1]
-  assert.match(last, /^Demo mode on, demo files kept at commit fffffff \(could not reach GitHub/)
+  assert.match(last, /^Demo mode on, demo files kept at version fffffff \(could not reach GitHub/)
   assert.match(last, /data restored from the demo, previous database kept as wiring\.db\.before-demo/)
   assert.deepEqual(app.errors, [])
 })

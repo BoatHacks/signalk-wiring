@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Demo mode no longer starts empty on a server behind a shared address, such as a cloud host. It used to ask the GitHub API for the newest demo files on every start, and the API's limit of 60 requests an hour per address was often used up by others, so no demo files arrived. The plugin now reads a file list, `demo/manifest.json`, and the files themselves from raw.githubusercontent.com, without the API; an unchanged demo costs one request per start. The plugin status names the demo version by the start of the manifest's checksum instead of a commit. `scripts/demo-manifest.js` writes the list, and the demo builder runs it.
+
 ### Changed
 
 - The demo boat's battery capacities follow the SignalK demo server: house 5120 Ah, starter 1280 Ah and bow thruster 2304 Ah (its `capacity.nominal` in coulombs divided by 3600), where they were 400, 90 and 120 Ah. The house battery's capacity change in the demo history and the make and model texts follow.
