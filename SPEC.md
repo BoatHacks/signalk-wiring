@@ -891,7 +891,8 @@ The screens (plan 0037, steps 3 to 5):
   the last one at the full backbone length make the line start or end at that
   device while it is placed. A backbone without a route is listed as not drawn.
 - **Cable protocol**: cables have an optional `protocol` label (`nmea2000`,
-  `seatalk1`, `nmea0183`, `sensor`, `other`). It changes nothing in the checks and
+  `seatalk1`, `nmea0183`, `sensor`, `ethernet`, `canbus`, `usb`, `hdmi`, `serial`,
+  `coax`, `other`). It changes nothing in the checks and
   the circuits; it colours the cable on schematics and the floorplan and shows as
   a badge in the cable table. The port preset "NMEA 2000" can be added to any
   device from the terminals editor.

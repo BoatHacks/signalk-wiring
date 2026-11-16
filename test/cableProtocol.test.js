@@ -24,9 +24,16 @@ test('a cable has no protocol by default, and one can be set, changed and cleare
   assert.equal(made.protocol, 'seatalk1')
 })
 
+test('the Ethernet, CAN bus, USB, HDMI, serial and coaxial protocols are accepted', () => {
+  const { store, a, b } = setup()
+  for (const protocol of ['ethernet', 'canbus', 'usb', 'hdmi', 'serial', 'coax']) {
+    assert.equal(store.create('wireRun', { from_device_id: a.id, to_device_id: b.id, protocol }).protocol, protocol)
+  }
+})
+
 test('an unknown protocol is refused, on create and update', () => {
   const { store, a, b } = setup()
-  assert.throws(() => store.create('wireRun', { from_device_id: a.id, to_device_id: b.id, protocol: 'canbus' }), /protocol must be one of/)
+  assert.throws(() => store.create('wireRun', { from_device_id: a.id, to_device_id: b.id, protocol: 'bluetooth' }), /protocol must be one of/)
   const run = store.create('wireRun', { from_device_id: a.id, to_device_id: b.id })
   assert.throws(() => store.update('wireRun', run.id, { protocol: 'x' }), /protocol must be one of/)
 })

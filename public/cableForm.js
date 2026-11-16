@@ -96,6 +96,12 @@ export const PROTOCOLS = [
   { value: 'seatalk1', label: 'Seatalk-1' },
   { value: 'nmea0183', label: 'NMEA 0183' },
   { value: 'sensor', label: 'Sensor' },
+  { value: 'ethernet', label: 'Ethernet' },
+  { value: 'canbus', label: 'CAN bus' },
+  { value: 'usb', label: 'USB' },
+  { value: 'hdmi', label: 'HDMI' },
+  { value: 'serial', label: 'Serial (RS-232, RS-485, TTL)' },
+  { value: 'coax', label: 'Coaxial (antenna, RF)' },
   { value: 'other', label: 'Other signal' }
 ]
 

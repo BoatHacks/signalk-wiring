@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- More choices for what a cable carries: Ethernet, CAN bus, USB, HDMI, serial (RS-232, RS-485, TTL such as VE.Direct and VE.Bus) and coaxial (antenna, RF), next to NMEA 2000, Seatalk-1, NMEA 0183, sensor and other. Each has its own colour on the schematics and the floorplan, in the day and the red night theme, and shows as a badge in the cable table.
+
 ## [0.9.4] - 2026-11-16
 
 ### Changed

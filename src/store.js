@@ -540,7 +540,7 @@ const MIGRATIONS = [
   }
 ]
 
-const CABLE_PROTOCOLS = ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'other']
+const CABLE_PROTOCOLS = ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'ethernet', 'canbus', 'usb', 'hdmi', 'serial', 'coax', 'other']
 const BACKBONE_CLASSES = ['micro', 'mini', 'maxi']
 const ZONE_SHAPE_KINDS = ['rect', 'oval', 'polygon']
 const RATING_COLUMNS = ['rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v']

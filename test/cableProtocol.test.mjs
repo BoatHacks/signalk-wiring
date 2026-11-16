@@ -4,7 +4,7 @@ import { PROTOCOLS, protocolLabel, buildCablePayload, cableToValues } from '../p
 import { terminalPresetList } from '../public/deviceFields.js'
 
 test('the protocol list matches the server values and has labels', () => {
-  assert.deepEqual(PROTOCOLS.map((p) => p.value), ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'other'])
+  assert.deepEqual(PROTOCOLS.map((p) => p.value), ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'ethernet', 'canbus', 'usb', 'hdmi', 'serial', 'coax', 'other'])
   assert.equal(protocolLabel('nmea2000'), 'NMEA 2000 cable')
   assert.equal(protocolLabel(null), '')
 })

@@ -41,6 +41,12 @@
   --proto-seatalk1: #8a3fb0;
   --proto-nmea0183: #b0891a;
   --proto-sensor: #2f8f6a;
+  --proto-ethernet: #0e8a9a;
+  --proto-canbus: #b0357f;
+  --proto-usb: #4f5bd5;
+  --proto-hdmi: #7d5a3c;
+  --proto-serial: #5c7a1f;
+  --proto-coax: #1f2933;
   --proto-other: #6b6b6b;
   --on-dot: #fff;
   --on-dot-light: #1c1c1c;
@@ -89,6 +95,12 @@
   --proto-seatalk1: #c0788f;
   --proto-nmea0183: #cf9a52;
   --proto-sensor: #b0a05a;
+  --proto-ethernet: #e0a38c;
+  --proto-canbus: #b86a7a;
+  --proto-usb: #c9825a;
+  --proto-hdmi: #a88f6f;
+  --proto-serial: #bf9a8a;
+  --proto-coax: #d9b38f;
   --proto-other: #a07a70;
   --on-dot: #fbdbd3;
   --on-dot-light: #2a0f0b;
@@ -1059,16 +1071,34 @@ main:has(.schematic-editor) { max-width: none; }
 .sch-wire.p-seatalk1 .sch-wire-line, .sch-wire.p-seatalk1 .sch-wire-pair { stroke: var(--proto-seatalk1); }
 .sch-wire.p-nmea0183 .sch-wire-line, .sch-wire.p-nmea0183 .sch-wire-pair { stroke: var(--proto-nmea0183); }
 .sch-wire.p-sensor .sch-wire-line, .sch-wire.p-sensor .sch-wire-pair { stroke: var(--proto-sensor); }
+.sch-wire.p-ethernet .sch-wire-line, .sch-wire.p-ethernet .sch-wire-pair { stroke: var(--proto-ethernet); }
+.sch-wire.p-canbus .sch-wire-line, .sch-wire.p-canbus .sch-wire-pair { stroke: var(--proto-canbus); }
+.sch-wire.p-usb .sch-wire-line, .sch-wire.p-usb .sch-wire-pair { stroke: var(--proto-usb); }
+.sch-wire.p-hdmi .sch-wire-line, .sch-wire.p-hdmi .sch-wire-pair { stroke: var(--proto-hdmi); }
+.sch-wire.p-serial .sch-wire-line, .sch-wire.p-serial .sch-wire-pair { stroke: var(--proto-serial); }
+.sch-wire.p-coax .sch-wire-line, .sch-wire.p-coax .sch-wire-pair { stroke: var(--proto-coax); }
 .sch-wire.p-other .sch-wire-line, .sch-wire.p-other .sch-wire-pair { stroke: var(--proto-other); }
 .run-line.p-nmea2000:not(.active):not(.highlighted) { stroke: var(--proto-nmea2000); stroke-opacity: 0.85; }
 .run-line.p-seatalk1:not(.active):not(.highlighted) { stroke: var(--proto-seatalk1); stroke-opacity: 0.85; }
 .run-line.p-nmea0183:not(.active):not(.highlighted) { stroke: var(--proto-nmea0183); stroke-opacity: 0.85; }
 .run-line.p-sensor:not(.active):not(.highlighted) { stroke: var(--proto-sensor); stroke-opacity: 0.85; }
+.run-line.p-ethernet:not(.active):not(.highlighted) { stroke: var(--proto-ethernet); stroke-opacity: 0.85; }
+.run-line.p-canbus:not(.active):not(.highlighted) { stroke: var(--proto-canbus); stroke-opacity: 0.85; }
+.run-line.p-usb:not(.active):not(.highlighted) { stroke: var(--proto-usb); stroke-opacity: 0.85; }
+.run-line.p-hdmi:not(.active):not(.highlighted) { stroke: var(--proto-hdmi); stroke-opacity: 0.85; }
+.run-line.p-serial:not(.active):not(.highlighted) { stroke: var(--proto-serial); stroke-opacity: 0.85; }
+.run-line.p-coax:not(.active):not(.highlighted) { stroke: var(--proto-coax); stroke-opacity: 0.85; }
 .run-line.p-other:not(.active):not(.highlighted) { stroke: var(--proto-other); stroke-opacity: 0.85; }
 .proto-badge.p-nmea2000 { color: var(--proto-nmea2000); border-color: var(--proto-nmea2000); }
 .proto-badge.p-seatalk1 { color: var(--proto-seatalk1); border-color: var(--proto-seatalk1); }
 .proto-badge.p-nmea0183 { color: var(--proto-nmea0183); border-color: var(--proto-nmea0183); }
 .proto-badge.p-sensor { color: var(--proto-sensor); border-color: var(--proto-sensor); }
+.proto-badge.p-ethernet { color: var(--proto-ethernet); border-color: var(--proto-ethernet); }
+.proto-badge.p-canbus { color: var(--proto-canbus); border-color: var(--proto-canbus); }
+.proto-badge.p-usb { color: var(--proto-usb); border-color: var(--proto-usb); }
+.proto-badge.p-hdmi { color: var(--proto-hdmi); border-color: var(--proto-hdmi); }
+.proto-badge.p-serial { color: var(--proto-serial); border-color: var(--proto-serial); }
+.proto-badge.p-coax { color: var(--proto-coax); border-color: var(--proto-coax); }
 .proto-badge.p-other { color: var(--proto-other); border-color: var(--proto-other); }
 
 /* Dashboard (plan 0038, issue #24). Colours come from the theme tokens, so the
