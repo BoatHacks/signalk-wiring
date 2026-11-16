@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-16
+
 ### Changed
 
 - Load Summary (plan 0043, issue 34): a fuse or breaker shows the summed load of everything behind it. A row with circuits behind it has an arrow that opens them with the sum, its amps and the rating check; the sum counts each device once, adds peaks as if everything ran at once and does not count converter losses, and a fuse that is over its rating only with everything behind it reads "over rating with everything behind it". A fuse fed only by a charging source has nothing behind it. Circuits with no consumer of their own or behind them (and no finding) are folded behind "Show N circuits with no consumers", closed by default and remembered in the browser. A line above the table counts all circuits: "55 circuits: 0 over rating, 1 incomplete, 54 ok".
