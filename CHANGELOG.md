@@ -7,6 +7,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Lists can be sorted. The Cables and Load Summary tables have clickable column headers: a click sorts ascending, a second click descending, a third returns to the usual order. Devices, Circuits, Conduits, Batteries, Buses and Zones have a "Sort by" choice with an ascending and descending button next to their filters. Names sort in natural order ("B10-3" before "B10-12"), cable gauges sort by cross section across AWG and mm², lengths in feet and metres sort together, and empty values always come last. Each list remembers its sort in the browser. The Changes list keeps newest first.
 - The Zones page shows an arrow at each zone. Clicking it opens a list of the devices in that zone (each a link to the device) and clicking again closes it. Zones start collapsed, and a zone without devices has a dimmed arrow.
 - The Conduits page has the same arrow at each conduit, opening the list of cables that run through it (each a link to the cable). The arrow does not open the conduit's page; clicking elsewhere on the row still does.
 - Each enclosure on the Devices page has the same arrow, opening the list of what it holds, including what is inside enclosures within it (indented, each a link to the device). Selecting devices for the bulk Inside action is unchanged.

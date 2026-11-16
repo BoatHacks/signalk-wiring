@@ -4,6 +4,7 @@ import { hashForState } from './router.js'
 import { useSettings } from './settings.js'
 import { checkAll, countVerdicts } from './cableChecks.js'
 import { limitsFrom } from './cableCheckView.js'
+import { useSort, SortHeader } from './sortView.js'
 
 export { calculateCircuitLoad, checkSummaryLine, incompleteReason }
 
@@ -67,6 +68,18 @@ export function LoadSummary () {
 
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const activeCircuits = circuits.filter((c) => c.status === 'active' && c.derived)
+  const loadOf = new Map(activeCircuits.map((c) => [c.id, calculateCircuitLoad(c, deviceById)]))
+  const STATUS_RANK = (load) => (load.overRating ? 0 : incompleteReason(load) ? 1 : 2)
+  const [sort, setSort, sorted] = useSort('loadSummary', {
+    circuit: (c) => c.name,
+    devices: (c) => loadOf.get(c.id).deviceCount,
+    totalW: (c) => loadOf.get(c.id).totalWatts,
+    averageW: (c) => (loadOf.get(c.id).source === 'rated' ? null : loadOf.get(c.id).averageWatts),
+    voltage: (c) => loadOf.get(c.id).voltage,
+    amps: (c) => loadOf.get(c.id).amps,
+    protection: (c) => loadOf.get(c.id).ratingA,
+    status: (c) => STATUS_RANK(loadOf.get(c.id))
+  })
   const checkLine = checkSummaryLine(countVerdicts(checkAll({ cables, circuits, devices, conduits, limits: limitsFrom(settings) })))
 
   return html`
@@ -96,13 +109,19 @@ export function LoadSummary () {
         <table>
           <thead>
             <tr>
-              <th>Circuit</th><th>Devices</th><th>Total W</th><th>Average W</th><th>Voltage</th>
-              <th>Amps</th><th>Protection</th><th>Status</th>
+              <${SortHeader} label="Circuit" k="circuit" sort=${sort} onSort=${setSort} />
+              <${SortHeader} label="Devices" k="devices" sort=${sort} onSort=${setSort} />
+              <${SortHeader} label="Total W" k="totalW" sort=${sort} onSort=${setSort} />
+              <${SortHeader} label="Average W" k="averageW" sort=${sort} onSort=${setSort} />
+              <${SortHeader} label="Voltage" k="voltage" sort=${sort} onSort=${setSort} />
+              <${SortHeader} label="Amps" k="amps" sort=${sort} onSort=${setSort} />
+              <${SortHeader} label="Protection" k="protection" sort=${sort} onSort=${setSort} />
+              <${SortHeader} label="Status" k="status" sort=${sort} onSort=${setSort} />
             </tr>
           </thead>
           <tbody>
-            ${activeCircuits.map((circuit) => {
-              const load = calculateCircuitLoad(circuit, deviceById)
+            ${sorted(activeCircuits).map((circuit) => {
+              const load = loadOf.get(circuit.id)
               return html`
                 <tr key=${circuit.id}>
                   <td><a class="route-link" href=${hashForState({ tab: 'circuits', id: circuit.id })}>${circuit.name}</a></td>

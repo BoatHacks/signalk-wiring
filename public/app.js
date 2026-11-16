@@ -44,6 +44,8 @@ import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
 import { NMEA2000_PORT, deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState, terminalPresetList, newPresetTerminals } from './deviceFields.js'
+import { useSort, SortHeader, SortControl } from './sortView.js'
+import { lengthMetres, cableAreaMm2 } from './sort.js'
 import { kindOptions, cableName, conduitSummary, addableCables, conduitsOfRun, moveInList, filterConduits } from './conduits.js'
 import {
   CHEMISTRIES, PURPOSES, CHEMISTRY_LABELS, PURPOSE_LABELS, batteryFieldVisible, deviceToFormValues, formPayloadToDevice,
@@ -1120,6 +1122,12 @@ function ZonesManager () {
     devices: devicesIn(zoneId).length,
     wireRuns: wireRuns.filter((w) => w.zoneId === zoneId && w.status !== 'removed').length
   })
+  const [sort, setSort, sorted] = useSort('zones', {
+    name: (z) => z.name,
+    devices: (z) => usage(z.id).devices,
+    wireRuns: (z) => usage(z.id).wireRuns,
+    conduits: (z) => usage(z.id).conduits
+  })
 
   const run = async (fn) => {
     setError(null)
@@ -1163,7 +1171,13 @@ function ZonesManager () {
       <${ErrorBanner} message=${error} />
       ${loading && html`<div class="empty-state">Loading zones…</div>`}
       ${!loading && zones.length === 0 && html`<div class="empty-state">No zones yet. Add one below, or from a device form.</div>`}
-      ${zones.map((zone) => {
+      ${zones.length > 1 && html`
+        <div class="filter-bar">
+          <${SortControl} sort=${sort} onChange=${setSort}
+            options=${[{ key: 'name', label: 'Name' }, { key: 'devices', label: 'Devices' }, { key: 'wireRuns', label: 'Wire runs' }, { key: 'conduits', label: 'Conduits' }]} />
+        </div>
+      `}
+      ${sorted(zones).map((zone) => {
         const u = usage(zone.id)
         const inUse = u.devices + u.wireRuns + u.conduits > 0
         const expanded = open.has(zone.id) && u.devices > 0
@@ -1626,8 +1640,20 @@ function CablesList () {
   const checks = checkAll({ cables, circuits, devices, conduits, limits: limitsFrom(settings) })
   const [checkOpen, setCheckOpen] = useState(null) // { id, anchor }
   const endNames = (c) => [deviceNameById.get(c.fromDeviceId), deviceNameById.get(c.toDeviceId)]
-  const visible = cables.filter((c) =>
-    matchesFilter(c, filter) && matchesRemoved(c, showRemoved) && matchesSearch(c, query, endNames(c)))
+  const VERDICT_RANK = { fail: 0, warning: 1, cannot: 2, ok: 3, exempt: 4 }
+  const [sort, setSort, sorted] = useSort('cables', {
+    from: (c) => deviceNameById.get(c.fromDeviceId),
+    to: (c) => deviceNameById.get(c.toDeviceId),
+    cable: (c) => c.cableLabel,
+    conduits: (c) => (c.conduitIds || []).map((id) => conduitNameById.get(id) || '').join(' > '),
+    gauge: (c) => cableAreaMm2(c.gauge, c.gaugeUnit),
+    length: (c) => lengthMetres(c.length, c.lengthUnit),
+    zone: (c) => c.zone,
+    checks: (c) => { const r = checks.get(c.id); return r ? VERDICT_RANK[r.verdict] : undefined },
+    status: (c) => c.status
+  })
+  const visible = sorted(cables.filter((c) =>
+    matchesFilter(c, filter) && matchesRemoved(c, showRemoved) && matchesSearch(c, query, endNames(c))))
   const removedCount = cables.filter((c) => c.status === 'removed').length
   const pickedCables = cables.filter((c) => picked.has(c.id))
   const allVisiblePicked = visible.length > 0 && visible.every((c) => picked.has(c.id))
@@ -1744,7 +1770,7 @@ function CablesList () {
         <div class="table-scroll">
         <table class="cables-table">
           <thead>
-            <tr><th><input type="checkbox" class="checkbox-input" title="Select all shown" checked=${allVisiblePicked} onChange=${toggleAllVisible} /></th><th>From</th><th>To</th><th>Conductors</th><th>Cable</th><th>Conduits</th><th>Gauge</th><th>Length</th><th>Zone</th><th>Circuit</th><th>Checks</th><th>Status</th><th></th></tr>
+            <tr><th><input type="checkbox" class="checkbox-input" title="Select all shown" checked=${allVisiblePicked} onChange=${toggleAllVisible} /></th><${SortHeader} label="From" k="from" sort=${sort} onSort=${setSort} /><${SortHeader} label="To" k="to" sort=${sort} onSort=${setSort} /><th>Conductors</th><${SortHeader} label="Cable" k="cable" sort=${sort} onSort=${setSort} /><${SortHeader} label="Conduits" k="conduits" sort=${sort} onSort=${setSort} /><${SortHeader} label="Gauge" k="gauge" sort=${sort} onSort=${setSort} /><${SortHeader} label="Length" k="length" sort=${sort} onSort=${setSort} /><${SortHeader} label="Zone" k="zone" sort=${sort} onSort=${setSort} /><th>Circuit</th><${SortHeader} label="Checks" k="checks" sort=${sort} onSort=${setSort} /><${SortHeader} label="Status" k="status" sort=${sort} onSort=${setSort} /><th></th></tr>
           </thead>
           <tbody>
             ${visible.flatMap((cable) => {
@@ -1852,9 +1878,16 @@ function CircuitsList ({ onSelect }) {
   const labels = (ids) => ids.map((id, i) => html`${i > 0 ? ', ' : ''}<${DeviceLink} id=${id} names=${nameById} devices=${deviceById} />`)
   const endNames = (c) => c.derived ? [...c.derived.supplyDeviceIds, ...c.derived.endDeviceIds].map((id) => nameById.get(id)) : []
   const removedCount = items.filter((c) => c.status === 'removed').length
-  const visible = items
+  const [sort, setSort, sorted] = useSort('circuits', {
+    name: (c) => c.name,
+    rating: (c) => c.derived && c.derived.ratingA,
+    voltage: (c) => c.derived && c.derived.voltage,
+    cables: (c) => (c.cableIds || []).length,
+    status: (c) => c.status
+  })
+  const visible = sorted(items
     .filter((c) => circuitMatches(c, cables, filter) && matchesRemoved(c, showRemoved) && matchesSearch(c, query, endNames(c)))
-    .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'removed' ? 1 : -1))
+    .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'removed' ? 1 : -1)))
 
   return html`
     <div>
@@ -1871,6 +1904,8 @@ function CircuitsList ({ onSelect }) {
         <${ZoneTagFilter} items=${cables} filter=${filter} onChange=${setFilter}>
           <${ListControls} query=${query} onQuery=${setQuery} showRemoved=${showRemoved} onShowRemoved=${setShowRemoved}
             removedCount=${removedCount} label="Name, device" />
+          <${SortControl} sort=${sort} onChange=${setSort}
+            options=${[{ key: 'name', label: 'Name' }, { key: 'rating', label: 'Protection rating' }, { key: 'voltage', label: 'Voltage' }, { key: 'cables', label: 'Cables' }, { key: 'status', label: 'Status' }]} />
         <//>
       `}
       ${items.length > 0 && visible.length === 0 && html`<div class="empty-state">No circuits match.</div>`}
@@ -2129,10 +2164,17 @@ function DevicesList ({ onSelect }) {
     walk(enclosureId, 0, new Set([enclosureId]))
     return rows
   }
-  const visible = items.filter((d) =>
+  const [sort, setSort, sorted] = useSort('devices', {
+    name: (d) => d.name,
+    role: (d) => roleLabel(d.role),
+    type: (d) => d.type,
+    zone: (d) => d.zone,
+    status: (d) => d.status
+  })
+  const visible = sorted(items.filter((d) =>
     matchesFilter(d, filter) && (!filter.role || (d.role || 'consumer') === filter.role) &&
     matchesInside(items, d, filter.inside) &&
-    matchesRemoved(d, showRemoved) && matchesSearch(d, query, [insideText(items, d.id)]))
+    matchesRemoved(d, showRemoved) && matchesSearch(d, query, [insideText(items, d.id)])))
   // Bulk "Inside": tick several devices and put them in one enclosure (or take them out).
   const [picking, setPicking] = useState(false)
   const [ticked, setTicked] = useState(new Set())
@@ -2191,6 +2233,8 @@ function DevicesList ({ onSelect }) {
             onClick=${() => { setPicking((v) => !v); setTicked(new Set()); setBulkMessage(null) }}>${picking ? 'Done selecting' : 'Select devices'}</button>
           <${ListControls} query=${query} onQuery=${setQuery} showRemoved=${showRemoved} onShowRemoved=${setShowRemoved}
             removedCount=${removedCount} label="Name, type, zone, tag" />
+          <${SortControl} sort=${sort} onChange=${setSort}
+            options=${[{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'type', label: 'Type' }, { key: 'zone', label: 'Zone' }, { key: 'status', label: 'Status' }]} />
         <//>
       `}
       ${picking && html`
@@ -2544,7 +2588,14 @@ function ConduitsList ({ onSelect }) {
   const [showRemoved, setShowRemoved] = useShowRemoved('conduits')
   const removedCount = items.filter((c) => c.status === 'removed').length
   const { suggested, used } = kindOptions(items.map((c) => c.kind), '')
-  const visible = filterConduits(items, filter).filter((c) => matchesRemoved(c, showRemoved))
+  const [sort, setSort, sorted] = useSort('conduits', {
+    name: (c) => c.name,
+    kind: (c) => c.kind,
+    zone: (c) => c.zone,
+    cables: (c) => (c.cableIds || []).length,
+    status: (c) => c.status
+  })
+  const visible = sorted(filterConduits(items, filter).filter((c) => matchesRemoved(c, showRemoved)))
 
   const createConduit = async (payload) => {
     await putResource('wiringConduits', newId(), payload)
@@ -2587,6 +2638,8 @@ function ConduitsList ({ onSelect }) {
             <input type="checkbox" class="checkbox-input" checked=${showRemoved} onChange=${(e) => setShowRemoved(e.target.checked)} />
             Show removed${removedCount > 0 ? ` (${removedCount})` : ''}
           </label>
+          <${SortControl} sort=${sort} onChange=${setSort}
+            options=${[{ key: 'name', label: 'Name' }, { key: 'kind', label: 'Kind' }, { key: 'zone', label: 'Zone' }, { key: 'cables', label: 'Cables' }, { key: 'status', label: 'Status' }]} />
         <//>
       `}
       ${visible.map((conduit) => html`
@@ -2855,7 +2908,13 @@ function BusesList ({ onSelect }) {
   const [showRemoved, setShowRemoved] = useShowRemoved('buses')
   const rows = sortBusRows(busRows(items, data))
   const removedCount = rows.filter((r) => r.removed).length
-  const visible = filterBuses(rows, text).filter((r) => matchesRemoved({ status: r.removed ? 'removed' : 'active' }, showRemoved))
+  const BUS_VERDICT_RANK = { fail: 0, warning: 1, cannot: 2, ok: 3 }
+  const [sort, setSort, sorted] = useSort('buses', {
+    name: (r) => r.name,
+    devices: (r) => r.deviceCount,
+    check: (r) => (r.verdict ? BUS_VERDICT_RANK[r.verdict] : null)
+  })
+  const visible = sorted(filterBuses(rows, text).filter((r) => matchesRemoved({ status: r.removed ? 'removed' : 'active' }, showRemoved)))
   const create = async (payload) => {
     const id = newId()
     await putResource('wiringBackbones', id, payload)
@@ -2887,6 +2946,8 @@ function BusesList ({ onSelect }) {
             <input type="checkbox" class="checkbox-input" checked=${showRemoved} onChange=${(e) => setShowRemoved(e.target.checked)} />
             Show removed${removedCount > 0 ? ` (${removedCount})` : ''}
           </label>
+          <${SortControl} sort=${sort} onChange=${setSort}
+            options=${[{ key: 'name', label: 'Name' }, { key: 'devices', label: 'Devices' }, { key: 'check', label: 'Check result' }]} />
         </div>
       `}
       ${items.length > 0 && visible.length === 0 && html`<div class="empty-state">No buses match.</div>`}

@@ -1,6 +1,7 @@
 import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { hashForState } from './router.js'
 import { useLive } from './live.js'
+import { useSort, SortControl } from './sortView.js'
 import { bankReading, bankReadingInput } from './liveBattery.js'
 import {
   CHEMISTRY_LABELS, PURPOSE_LABELS, bankTitle, fmtAh, fmtKwh, fmtVolts, incompleteText, stringsText, allBanks
@@ -89,13 +90,25 @@ export function BatteriesTab () {
   const nameOf = (id) => { const d = devices.find((x) => x.id === id); return (d && d.name) || id }
   const live = useLive(liveOn, 0, nameOf)
   const deviceById = new Map(devices.map((d) => [d.id, d]))
-  const cards = allBanks(devices, banks)
+  const [sort, setSort, sorted] = useSort('batteries', {
+    name: (b) => bankTitle(b, deviceById),
+    voltage: (b) => b.voltage,
+    capacity: (b) => b.capacityAh,
+    energy: (b) => b.energyWh
+  })
+  const cards = sorted(allBanks(devices, banks))
   return html`
     <div>
       <div class="battery-live">
         <button type="button" class=${liveOn ? 'active' : ''} data-testid="batteries-live" onClick=${() => setLiveOn((v) => !v)}>${liveOn ? 'Live: on' : 'Live'}</button>
         ${liveOn && html`<span class="meta live-status" data-testid="live-status">${live.error ? live.error : !live.live ? 'Loading…' : live.connected ? 'Connected to the SignalK stream.' : 'Connecting to the SignalK stream…'}</span>`}
       </div>
+      ${cards.length > 1 && html`
+        <div class="filter-bar">
+          <${SortControl} sort=${sort} onChange=${setSort}
+            options=${[{ key: 'name', label: 'Name' }, { key: 'voltage', label: 'Voltage' }, { key: 'capacity', label: 'Capacity' }, { key: 'energy', label: 'Energy' }]} />
+        </div>
+      `}
       <p class="meta">One card per battery bank. Batteries joined by a link on a cable form a bank; a battery with no links is a bank of one.</p>
       ${loading && html`<div class="empty-state">Loading…</div>`}
       ${error && html`<div class="error-banner">${error}</div>`}

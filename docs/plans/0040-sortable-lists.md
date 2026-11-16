@@ -17,7 +17,7 @@ browser. The default order stays what it is today until someone picks a sort.
   removed" is remembered. If storage is unavailable the list just opens in its
   default order.
 - **Pages:** Cables, Load Summary, Devices, Circuits, Conduits, Batteries,
-  Buses, Zones, Changes.
+  Buses, Zones, Changes. (Changes was left out while building, see below.)
 
 ## Approach
 
@@ -65,7 +65,7 @@ not comparable:
 - **Batteries:** Name, Voltage, Capacity, Energy.
 - **Buses:** Name, Taps (count), LEN.
 - **Zones:** Name, Devices, Wire runs, Conduits.
-- **Changes:** Time (newest first stays the default), Kind, Item name.
+- **Changes:** not sortable (see below).
 
 The text and number sorts apply to what the filters already show: filtering
 first, then sorting.
@@ -76,6 +76,24 @@ Nothing sorts until the person picks a column. "Default order" (or the third
 header click) removes the sort, so the lists go back exactly as they are today,
 including any order the server provides. Expanded rows (zones, conduits,
 enclosures) keep their lists; sorting only reorders the rows.
+
+## Decisions made while building
+
+- **The Changes list is not sortable.** It is a log, grouped by record and read
+  from the server a page at a time (newest activity first). Sorting only the
+  groups already loaded would give a misleading order, so it keeps newest first.
+- **The sort code is split in two:** `public/sort.js` is pure (comparison,
+  stable sorting, the header click cycle, the remembered choice, the length and
+  gauge conversions) and `public/sortView.js` draws the header, the sort control
+  and holds the `useSort` hook.
+- **Buses sort by Name, Devices and Check result** (worst first); the list rows
+  hold no other comparable figure. Batteries sort by Name, Voltage, Capacity and
+  Energy. Circuits by Name, Protection rating, Voltage, Cables and Status.
+- **Where the sort control sits:** next to the filters on Devices, Circuits,
+  Conduits and Buses, and above the cards on Batteries and Zones (which have no
+  filter bar).
+- **The existing order is the tie break:** Circuits keeps its status then name
+  order underneath, so equal values stay as they were.
 
 ## Defaults, reviewed with the user
 
@@ -106,12 +124,12 @@ These are my proposals, to be reviewed before the build:
 
 ## Implementation Steps
 
-- [ ] `public/sort.js` with tests.
-- [ ] The header and the sort control components, with their styles.
-- [ ] Cables and Load Summary headers.
-- [ ] The sort control on Devices, Circuits, Conduits.
-- [ ] The sort control on Batteries, Buses, Zones, Changes.
-- [ ] README, CHANGELOG, headless check.
+- [x] `public/sort.js` with tests.
+- [x] The header and the sort control components, with their styles.
+- [x] Cables and Load Summary headers.
+- [x] The sort control on Devices, Circuits, Conduits.
+- [x] The sort control on Batteries, Buses, Zones, Changes.
+- [x] README, CHANGELOG, headless check.
 
 ## Files to Create/Modify
 

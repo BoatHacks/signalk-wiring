@@ -87,7 +87,9 @@ to someone else doesn't depend on the current owner being present.
   managed list you can rename and merge, plus free-text **tags** for other
   groupings such as an audio zone, with zone and tag filters on the lists,
   plus a search box and a "Show removed" toggle on the device, cable and
-  circuit lists, and links between views.
+  circuit lists, and links between views. Every list can be sorted: click a
+  column header on the Cables and Load Summary tables, or use the "Sort by"
+  choice on the card lists; each list remembers its sort in the browser.
   Wire gauge/length recorded with explicit units (AWG or mm²; meters or
   feet) — boats often mix US and EU-sourced equipment.
 - Full CRUD via the admin webapp: inline create/edit forms, no page
