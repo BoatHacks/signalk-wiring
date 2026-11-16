@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A battery bank's "Protected by" list on the Batteries page named every fuse and breaker behind the bank, the demo's house battery 36 of them. It now lists only the fuses and breakers on the bank's own output, the ones between the battery and the rest of the system, such as the main fuse. The bank's `protectedBy` in the derived data changes the same way.
+
 ## [0.9.1] - 2026-11-16
 
 ### Fixed

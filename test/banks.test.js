@@ -164,6 +164,30 @@ test('protectors come from the circuits that a battery supplies', () => {
   assert.deepEqual(bank.protectedBy, ['f'])
 })
 
+test('only the fuses on the bank output count, not every circuit behind them', () => {
+  const pos = [{ conductor: 'positive' }]
+  const devices = [
+    batt('a'),
+    { id: 'main', name: 'Main fuse', role: 'distribution', status: 'active', tripRatingA: 200, nominalVoltage: 12 },
+    { id: 'bus', name: 'Bus bar', role: 'distribution', status: 'active', nominalVoltage: 12 },
+    { id: 'f1', name: 'Branch fuse 1', role: 'distribution', status: 'active', tripRatingA: 10, nominalVoltage: 12 },
+    { id: 'f2', name: 'Branch fuse 2', role: 'distribution', status: 'active', tripRatingA: 10, nominalVoltage: 12 },
+    { id: 'direct', name: 'Starter fuse', role: 'distribution', status: 'active', tripRatingA: 300, nominalVoltage: 12 },
+    { id: 'l1', name: 'Load 1', role: 'consumer', status: 'active', ratedPowerW: 50 },
+    { id: 'l2', name: 'Load 2', role: 'consumer', status: 'active', ratedPowerW: 50 },
+    { id: 'l3', name: 'Load 3', role: 'consumer', status: 'active', ratedPowerW: 50 }
+  ]
+  const wire = (id, from, to) => ({ id, fromDeviceId: from, toDeviceId: to, status: 'active', conductors: pos })
+  const cables = [
+    wire('w1', 'a', 'main'), wire('w2', 'main', 'bus'),
+    wire('w3', 'bus', 'f1'), wire('w4', 'f1', 'l1'),
+    wire('w5', 'bus', 'f2'), wire('w6', 'f2', 'l2'),
+    wire('w7', 'a', 'direct'), wire('w8', 'direct', 'l3')
+  ]
+  const [bank] = deriveBanks({ devices, cables })
+  assert.deepEqual(bank.protectedBy, ['direct', 'main'])
+})
+
 test('the store serves the richer banks, including a series link written through it', () => {
   const store = new Store(':memory:')
   const mk = (name) => store.create('device', { name, type: 'Battery', role: 'storage', nominal_voltage: 12, capacity_ah: 100, usable_fraction: 0.5, chemistry: 'agm' })

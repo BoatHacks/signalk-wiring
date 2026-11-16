@@ -38,8 +38,45 @@ function deriveBanks ({ devices = [], cables = [], circuits } = {}) {
   for (const c of links) groups.get(find(c.fromDeviceId)).cables.push(c)
 
   return [...groups.values()]
-    .map((g) => buildBank(g.ids, g.cables, live, circuitList))
+    .map((g) => buildBank(g.ids, g.cables, live, circuitList, directProtectors(g.ids, cables, circuitList)))
     .sort((a, b) => byString(a.batteryIds[0], b.batteryIds[0]))
+}
+
+// The fuses and breakers that sit on a bank's own output: walking back from the
+// protector along the positive cables reaches a battery of the bank before
+// another protector. Every circuit further downstream (behind a main fuse, on a
+// bus bar) also traces back to the battery, but it is protected by the main
+// fuse, not by its own fuse as far as the bank is concerned.
+const POSITIVE = new Set(['positive', 'line'])
+function directProtectors (ids, cables, circuitList) {
+  const idSet = new Set(ids)
+  const protectors = new Set(circuitList.map((c) => c.protectorId).filter(Boolean))
+  const feeders = new Map() // device id -> devices that feed it
+  for (const cable of cables) {
+    if (cable.status === 'removed' || cable.link === 'series' || cable.link === 'parallel') continue
+    const conductor = (cable.conductors || []).find((c) => POSITIVE.has(c.conductor))
+    if (!conductor) continue
+    const from = conductor.fromDeviceId || cable.fromDeviceId
+    const to = conductor.toDeviceId || cable.toDeviceId
+    if (!feeders.has(to)) feeders.set(to, [])
+    feeders.get(to).push(from)
+  }
+  const direct = new Set()
+  for (const p of protectors) {
+    const seen = new Set([p])
+    const stack = [p]
+    while (stack.length) {
+      const node = stack.pop()
+      for (const prev of feeders.get(node) || []) {
+        if (seen.has(prev)) continue
+        seen.add(prev)
+        if (idSet.has(prev)) { direct.add(p); continue }
+        if (protectors.has(prev)) continue
+        stack.push(prev)
+      }
+    }
+  }
+  return direct
 }
 
 // Series chains and the parallel joins between them, or null when the links
@@ -100,7 +137,7 @@ function reduceToStrings (ids, cables) {
   return strings
 }
 
-function buildBank (ids, cables, live, circuitList) {
+function buildBank (ids, cables, live, circuitList, direct) {
   const members = ids.map((id) => live.get(id))
   const warnings = []
   const strings = reduceToStrings(ids, cables)
@@ -146,7 +183,7 @@ function buildBank (ids, cables, live, circuitList) {
     chemistries,
     monitorDeviceIds: unique(members.map((d) => d.monitorDeviceId).filter(Boolean)),
     protectedBy: unique(circuitList
-      .filter((c) => c.protectorId && (c.supplyDeviceIds || []).some((id) => idSet.has(id)))
+      .filter((c) => c.protectorId && direct.has(c.protectorId) && (c.supplyDeviceIds || []).some((id) => idSet.has(id)))
       .map((c) => c.protectorId)),
     warnings
   }
