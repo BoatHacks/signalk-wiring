@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- The Zones page shows an arrow at each zone. Clicking it opens a list of the devices in that zone (each a link to the device) and clicking again closes it. Zones start collapsed, and a zone without devices has a dimmed arrow.
+- The Conduits page has the same arrow at each conduit, opening the list of cables that run through it (each a link to the cable). The arrow does not open the conduit's page; clicking elsewhere on the row still does.
+- Each enclosure on the Devices page has the same arrow, opening the list of what it holds, including what is inside enclosures within it (indented, each a link to the device). Selecting devices for the bulk Inside action is unchanged.
+
 ### Fixed
 
 - A battery bank's "Protected by" list on the Batteries page named every fuse and breaker behind the bank, the demo's house battery 36 of them. It now lists only the fuses and breakers on the bank's own output, the ones between the battery and the rest of the system, such as the main fuse. The bank's `protectedBy` in the derived data changes the same way.

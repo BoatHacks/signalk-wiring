@@ -1103,14 +1103,21 @@ function ZonesManager () {
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
   const [newName, setNewName] = useState('')
+  const [open, setOpen] = useState(() => new Set())
+  const toggle = (id) => setOpen((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const { loading, items: zones } = useResourceList('wiringZones', reloadKey)
   const { items: devices } = useResourceList('wiringDevices', reloadKey)
   const { items: wireRuns } = useResourceList('wiringWireRuns', reloadKey)
   const { items: conduits } = useResourceList('wiringConduits', reloadKey)
 
+  const deviceById = new Map(devices.map((d) => [d.id, d]))
+  const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
+  const devicesIn = (zoneId) => devices
+    .filter((d) => d.zoneId === zoneId && d.status !== 'removed')
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
   const usage = (zoneId) => ({
     conduits: conduits.filter((c) => c.zoneId === zoneId && c.status !== 'removed').length,
-    devices: devices.filter((d) => d.zoneId === zoneId && d.status !== 'removed').length,
+    devices: devicesIn(zoneId).length,
     wireRuns: wireRuns.filter((w) => w.zoneId === zoneId && w.status !== 'removed').length
   })
 
@@ -1159,14 +1166,26 @@ function ZonesManager () {
       ${zones.map((zone) => {
         const u = usage(zone.id)
         const inUse = u.devices + u.wireRuns + u.conduits > 0
+        const expanded = open.has(zone.id) && u.devices > 0
         return html`
           <div class="list-item" key=${zone.id}>
             <div>
-              ${editingId === zone.id
-                ? html`<input type="text" value=${editName} onInput=${(e) => setEditName(e.target.value)}
-                    onKeyDown=${(e) => { if (e.key === 'Enter') rename(zone) }} />`
-                : html`<div>${zone.name}</div>`}
+              <div class="zone-head">
+                <button type="button" class="zone-toggle" disabled=${u.devices === 0}
+                  aria-expanded=${expanded} aria-label=${expanded ? `Hide the devices in ${zone.name}` : `Show the devices in ${zone.name}`}
+                  title=${u.devices === 0 ? 'No devices in this zone' : ''}
+                  onClick=${() => toggle(zone.id)}>${expanded ? '▾' : '▸'}</button>
+                ${editingId === zone.id
+                  ? html`<input type="text" value=${editName} onInput=${(e) => setEditName(e.target.value)}
+                      onKeyDown=${(e) => { if (e.key === 'Enter') rename(zone) }} />`
+                  : html`<div>${zone.name}</div>`}
+              </div>
               <div class="meta">${u.devices} devices, ${u.wireRuns} wire runs, ${u.conduits} conduits</div>
+              ${expanded && html`
+                <ul class="zone-devices">
+                  ${devicesIn(zone.id).map((d) => html`<li key=${d.id}><${DeviceLink} id=${d.id} names=${deviceNameById} devices=${deviceById} /></li>`)}
+                </ul>
+              `}
             </div>
             <div class="row-actions">
               ${editingId === zone.id
@@ -2094,6 +2113,22 @@ function DevicesList ({ onSelect }) {
   const removedCount = items.filter((d) => d.status === 'removed').length
   const enclosures = items.filter((d) => d.role === 'enclosure' && d.status !== 'removed')
   const names = new Map(items.map((d) => [d.id, d.name]))
+  const byId = new Map(items.map((d) => [d.id, d]))
+  const [openEnclosures, setOpenEnclosures] = useState(() => new Set())
+  const toggleEnclosure = (id) => setOpenEnclosures((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  // What an enclosure holds, direct and nested, each with its depth.
+  const heldBy = (enclosureId) => {
+    const rows = []
+    const walk = (id, depth, seen) => {
+      for (const childId of childrenOf(items, id)) {
+        if (seen.has(childId)) continue
+        rows.push({ id: childId, depth })
+        walk(childId, depth + 1, new Set([...seen, childId]))
+      }
+    }
+    walk(enclosureId, 0, new Set([enclosureId]))
+    return rows
+  }
   const visible = items.filter((d) =>
     matchesFilter(d, filter) && (!filter.role || (d.role || 'consumer') === filter.role) &&
     matchesInside(items, d, filter.inside) &&
@@ -2177,13 +2212,29 @@ function DevicesList ({ onSelect }) {
           class="list-item ${device.status === 'removed' ? 'removed' : ''}"
           onClick=${() => (picking ? tick(device.id) : onSelect(device.id))}
         >
-          <div class="list-item-main">
+          <div class="list-item-main ${device.role === 'enclosure' && openEnclosures.has(device.id) ? 'top' : ''}">
             ${picking && html`<input type="checkbox" class="checkbox-input" checked=${ticked.has(device.id)} data-testid="bulk-check"
               aria-label=${'Select ' + device.name} onClick=${(e) => e.stopPropagation()} onChange=${() => tick(device.id)} />`}
+            ${device.role === 'enclosure' && (() => {
+              const held = heldBy(device.id).length
+              const expanded = openEnclosures.has(device.id) && held > 0
+              return html`<button type="button" class="zone-toggle" disabled=${held === 0}
+                aria-expanded=${expanded}
+                aria-label=${expanded ? `Hide what ${device.name} holds` : `Show what ${device.name} holds`}
+                title=${held === 0 ? 'Holds nothing' : ''}
+                onClick=${(e) => { e.stopPropagation(); toggleEnclosure(device.id) }}>${expanded ? '▾' : '▸'}</button>`
+            })()}
             <${DeviceIcon} device=${device} size=${18} imageSize=${32} />
             <div>
             <div>${device.name}</div>
             <div class="meta">${roleLabel(device.role)} | ${device.type || 'no type recorded'}${device.zone ? ` | ${device.zone}` : ''}${(device.tags || []).length ? ` | ${device.tags.join(', ')}` : ''}${insideText(items, device.id) ? ` | in ${insideText(items, device.id)}` : ''}${device.role === 'enclosure' ? ` | holds ${(device.contents || []).length}` : ''}</div>
+            ${device.role === 'enclosure' && openEnclosures.has(device.id) && html`
+              <ul class="zone-devices" data-testid="enclosure-list" style=${{ marginLeft: 0 }}>
+                ${heldBy(device.id).map((r) => html`
+                  <li key=${r.id} style=${{ marginLeft: (r.depth * 1.2) + 'em' }}><${DeviceLink} id=${r.id} names=${names} devices=${byId} />${byId.get(r.id) && byId.get(r.id).role === 'enclosure' ? ' (enclosure)' : ''}</li>
+                `)}
+              </ul>
+            `}
             </div>
           </div>
           <${StatusBadge} status=${device.status} />
@@ -2482,7 +2533,12 @@ function ConduitsList ({ onSelect }) {
   const [showForm, setShowForm] = useState(false)
   const { loading, error, items } = useResourceList('wiringConduits', reloadKey)
   const { items: allRuns } = useResourceList('wiringWireRuns', reloadKey)
+  const { items: allDevices } = useResourceList('wiringDevices', reloadKey)
+  const deviceNameById = new Map(allDevices.map((d) => [d.id, d.name]))
   const runById = new Map(allRuns.map((r) => [r.id, r]))
+  const [open, setOpen] = useState(() => new Set())
+  const toggle = (id) => setOpen((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  const cablesIn = (conduit) => (conduit.cableIds || []).map((id) => runById.get(id)).filter((r) => r && r.status !== 'removed')
   const mixesOf = (conduit) => conduitCurrentMix((conduit.cableIds || []).map((id) => runById.get(id)).filter(Boolean)).mixed
   const [filter, setFilter] = useState({})
   const [showRemoved, setShowRemoved] = useShowRemoved('conduits')
@@ -2540,9 +2596,21 @@ function ConduitsList ({ onSelect }) {
           onClick=${() => onSelect(conduit.id)}
         >
           <div>
-            <div>${conduit.name}</div>
+            <div class="zone-head">
+              <button type="button" class="zone-toggle" disabled=${cablesIn(conduit).length === 0}
+                aria-expanded=${open.has(conduit.id) && cablesIn(conduit).length > 0}
+                aria-label=${open.has(conduit.id) ? `Hide the cables in ${conduit.name}` : `Show the cables in ${conduit.name}`}
+                title=${cablesIn(conduit).length === 0 ? 'No cables in this conduit' : ''}
+                onClick=${(e) => { e.stopPropagation(); toggle(conduit.id) }}>${open.has(conduit.id) && cablesIn(conduit).length > 0 ? '▾' : '▸'}</button>
+              <div>${conduit.name}</div>
+            </div>
             <div class="meta">${conduitSummary(conduit)}${conduit.zone ? ` – ${conduit.zone}` : ''} – ${(conduit.cableIds || []).length === 1 ? '1 cable' : `${(conduit.cableIds || []).length} cables`}</div>
             ${mixesOf(conduit) && html`<div class="meta" style="color: var(--warn)" data-testid="conduit-mix-line">Mixes AC and DC</div>`}
+            ${open.has(conduit.id) && cablesIn(conduit).length > 0 && html`
+              <ul class="zone-devices">
+                ${cablesIn(conduit).map((run) => html`<li key=${run.id}><${RouteLink} tab="cables" id=${run.id}>${cableName(run, deviceNameById)}<//></li>`)}
+              </ul>
+            `}
           </div>
           <${StatusBadge} status=${conduit.status} />
         </div>
