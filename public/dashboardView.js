@@ -13,7 +13,7 @@ import { useHistory, sparkline, sparklinePath } from './history.js'
 import { LoadError } from './loadError.js'
 import {
   dashboardStats, dashboardChecks, dashboardPaths, liveFlows, batteryCards, switchesOn, historyPaths,
-  formatWatts, formatMetres, percentText, netText, readLivePref, writeLivePref
+  hasLiveValue, dashboardOrder, switchSummary, batteryNote, formatWatts, formatMetres, percentText, netText, readLivePref, writeLivePref
 } from './dashboard.js'
 import { fmtKwh, fmtAh } from './batteries.js'
 
@@ -133,6 +133,17 @@ function BatteryNumbers ({ cards, netW, flows }) {
 function LivePower ({ flows, battery, history, liveOn, liveError }) {
   if (!liveOn) return html`<div class="empty-state" data-testid="live-off">Live is off. Turn it on to see power in and out.</div>`
   const net = netText(battery.netW)
+  if (!hasLiveValue({ flows, battery, switches: null })) {
+    return html`
+      <div data-testid="live-none">
+        ${liveError && html`<div class="meta" data-testid="live-error">${liveError}</div>`}
+        <p class="meta dash-none-line">No live power data yet.</p>
+        <details class="how-worked-out" data-testid="live-setup">
+          <summary>How to set it up</summary>
+          <p class="meta">Choose the power in and out meters in the plugin settings (Server, Plugin Config, Wiring Documentation), or set a meter path on a device. The readings then appear here.</p>
+        </details>
+      </div>`
+  }
   return html`
     <div>
       ${liveError && html`<div class="meta" data-testid="live-error">${liveError}</div>`}
@@ -185,8 +196,8 @@ function Statistics ({ stats }) {
         <${Stat} label="zones" value=${stats.zones} href=${tab('zones')} />
         <${Stat} label="schematic pages" value=${stats.schematics} href=${tab('schematics')} />
         ${floorplanShown() && html`<${Stat} label="floorplans" value=${stats.floorplans} href=${tab('floorplan')} />`}
-        <${Stat} label="battery capacity" value=${b.banks ? `${fmtAh(b.ah)}, ${fmtKwh(b.wh)}` : '-'} href=${tab('batteries')}
-          note=${b.assumed12 > 0 ? `${b.assumed12} ${plural(b.assumed12, 'bank')} counted at 12 V` : b.unknown > 0 ? `${b.unknown} ${plural(b.unknown, 'bank')} without capacity` : null} />
+        <${Stat} label="battery energy" value=${b.banks ? fmtKwh(b.wh) : '-'} href=${tab('batteries')}
+          note=${batteryNote(b, fmtAh)} />
         <${Stat} label="consumer load, summed" value=${formatWatts(stats.consumerLoad.watts) || '0 W'} href=${tab('load')}
           note=${stats.consumerLoad.unrated > 0 ? `${stats.consumerLoad.unrated} ${plural(stats.consumerLoad.unrated, 'consumer')} without rating` : null} />
       </div>
@@ -249,13 +260,15 @@ function Checks ({ checks }) {
 
 function Batteries ({ cards, history, liveOn }) {
   if (cards.length === 0) return html`<div class="empty-state">No batteries yet.</div>`
+  const anyMissing = liveOn && cards.some((c) => !c.hasData)
   return html`
+    <div>
     <ul class="dash-list dash-banks" data-testid="battery-cards">
       ${cards.map((c) => html`
-        <li key=${c.key} class=${'dash-bank' + (c.stale || !c.hasData ? ' dim' : '')} data-testid="battery-card">
+        <li key=${c.key} class=${'dash-bank' + (c.stale ? ' dim' : '')} data-testid="battery-card">
           <${Link} href=${c.href}>${c.title}<//>
           ${!liveOn || !c.hasData
-            ? html`<div class="meta">${liveOn ? 'no live data' : 'Live is off'}</div>`
+            ? html`<div class="meta" data-testid="bank-recorded">${[c.recordedWh !== null ? fmtKwh(c.recordedWh) : null, c.recordedAh !== null ? fmtAh(c.recordedAh) : null].filter(Boolean).join(', ') || 'no capacity recorded'}</div>`
             : html`
               <div class="dash-bank-main">
                 <span class="dash-big">${c.soc !== null ? percentText(c.soc) : c.voltage !== null ? c.voltage.toFixed(1) + ' V' : '-'}</span>
@@ -269,7 +282,10 @@ function Batteries ({ cards, history, liveOn }) {
                 ].filter(Boolean).join(', ')}${c.stale ? ' (stale)' : ''}
               </div>`}
         </li>`)}
-    </ul>`
+    </ul>
+    ${anyMissing && html`<div class="meta" data-testid="battery-no-reading">Banks without a figure here have no live reading yet.</div>`}
+    ${!liveOn && html`<div class="meta">Live is off.</div>`}
+    </div>`
 }
 
 const SWITCH_MARK = { on: '\u25CF', off: '\u25CB', unknown: '?' }
@@ -280,7 +296,11 @@ const SWITCH_WORD = { on: 'on', off: 'off', unknown: 'unknown' }
 // text of the tooltip, so it does not rest on red and green.
 function SwitchesCard ({ sw, liveOn }) {
   if (!liveOn) return html`<div class="empty-state">Live is off.</div>`
-  if (sw.all.length === 0) return html`<div class="empty-state" data-testid="switches-none">No switchable consumers, or no live data.</div>`
+  const summary = switchSummary(sw)
+  if (summary.mode === 'none') return html`<div class="empty-state" data-testid="switches-none">No switchable consumers, or no live data.</div>`
+  if (summary.mode === 'unknown') {
+    return html`<p class="meta" data-testid="switches-unknown">${summary.total} ${summary.total === 1 ? 'switch' : 'switches'}, state unknown (no live data). <a class="route-link" href=${hashForState({ tab: 'devices' })}>See the devices</a>.</p>`
+  }
   return html`
     <div>
       <ul class="dash-chips" data-testid="switch-chips">
@@ -328,6 +348,15 @@ export function DashboardTab () {
   const stats = ready ? dashboardStats(data) : null
   const checks = ready ? dashboardChecks({ ...data, floorplan: settings.showFloorplan !== false, limits: limitsFrom(settings) }) : null
   const switches = ready ? switchesOn(live.live, values, devices) : null
+  // The first live value settles the order for the rest of the visit, so the
+  // cards do not jump while someone reads; turning live off starts again.
+  const anyLive = ready && hasLiveValue({ flows, battery, switches })
+  const [seenLive, setSeenLive] = useState(false)
+  useEffect(() => {
+    if (!liveOn) setSeenLive(false)
+    else if (anyLive) setSeenLive(true)
+  }, [liveOn, anyLive])
+  const order = dashboardOrder({ liveOn, seen: seenLive || anyLive })
 
   return html`
     <div class="dashboard" data-testid="dashboard">
@@ -342,29 +371,35 @@ export function DashboardTab () {
       </div>
       <${LoadError} message=${error} what="dashboard" onRetry=${retry} />
       ${(loading || !loaded) && !error && html`<div class="empty-state">Loading…</div>`}
-      ${ready && html`
-        <div class="dash-grid">
-          <section class="card dash-card dash-wide" data-testid="card-live">
+      ${ready && (() => {
+        const live1 = html`
+          <section class="card dash-card dash-wide" data-testid="card-live" key="live">
             <h2>Live power</h2>
             <${LivePower} flows=${flows} battery=${battery} history=${history} liveOn=${liveOn} liveError=${live.error} />
-            ${liveOn && history.available === false && html`<div class="meta" data-testid="no-history">No history provider is installed, so there are no last-hour graphs.</div>`}
-          </section>
-          <section class="card dash-card" data-testid="card-batteries">
+            ${liveOn && history.available === false && anyLive && html`<div class="meta" data-testid="no-history">No history provider is installed, so there are no last-hour graphs.</div>`}
+          </section>`
+        const batt = html`
+          <section class="card dash-card" data-testid="card-batteries" key="batteries">
             <h2>Battery banks</h2>
             <${Batteries} cards=${battery.cards} history=${history} liveOn=${liveOn} />
-          </section>
-          <section class="card dash-card" data-testid="card-switches">
+          </section>`
+        const sw = html`
+          <section class="card dash-card" data-testid="card-switches" key="switches">
             <h2>Switches</h2>
             <${SwitchesCard} sw=${switches} liveOn=${liveOn} />
-          </section>
-          <section class="card dash-card" data-testid="card-checks">
+          </section>`
+        const check = html`
+          <section class="card dash-card" data-testid="card-checks" key="checks">
             <h2>Needs attention</h2>
             <${Checks} checks=${checks} />
-          </section>
-          <section class="card dash-card" data-testid="card-stats">
+          </section>`
+        const stat = html`
+          <section class="card dash-card" data-testid="card-stats" key="stats">
             <h2>Statistics</h2>
             <${Statistics} stats=${stats} />
-          </section>
-        </div>`}
+          </section>`
+        const cards = order === 'live-first' ? [live1, batt, sw, check, stat] : [check, stat, live1, batt, sw]
+        return html`<div class="dash-grid" data-order=${order}>${cards}</div>`
+      })()}
     </div>`
 }

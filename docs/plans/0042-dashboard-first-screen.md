@@ -110,11 +110,11 @@ theme keeps to its own variables.
 
 ## Implementation Steps
 
-- [ ] The pure helpers with tests.
-- [ ] Order by data, the collapsed live sections, battery and switch states.
-- [ ] Statistics tiles: link look, no orphan, the kWh battery tile.
-- [ ] CHANGELOG, README line if it describes the Dashboard, headless checks.
-- [ ] Close #24 with a note.
+- [x] The pure helpers with tests.
+- [x] Order by data, the collapsed live sections, battery and switch states.
+- [x] Statistics tiles: link look, no orphan, the kWh battery tile.
+- [x] CHANGELOG, README line if it describes the Dashboard, headless checks.
+- [x] Close #24 with a note.
 
 ## Files to Create/Modify
 

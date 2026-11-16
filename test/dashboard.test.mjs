@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   dashboardStats, dashboardChecks, configuredSide, autoInputSide, autoOutputSide, liveFlows, batteryCards,
   switchesOn, dashboardPaths, formatWatts, formatMetres, netText, percentText, onFloorplan, schematicPlaced,
-  cableLengthOf, cableReason, busReasons, batteryTotals, isChargingSource, historyPaths, readLivePref, writeLivePref, STALE_MS
+  cableLengthOf, cableReason, busReasons, batteryTotals, batteryNote, switchSummary, hasLiveValue, dashboardOrder, isChargingSource, historyPaths, readLivePref, writeLivePref, STALE_MS
 } from '../public/dashboard.js'
 
 const NOW = 1_000_000_000
@@ -91,7 +91,8 @@ test('statistics: protected and unprotected circuits', () => {
 test('statistics: battery capacity uses the bank energy, else the voltage, else 12 V', () => {
   const b = dashboardStats(base).battery
   // 100 Ah / 1200 Wh, plus 50 Ah at 12 V = 600 Wh (assumed), one bank with no capacity
-  assert.equal(b.ah, 150)
+  assert.equal(b.ah, undefined, 'amp hours are not summed')
+  assert.deepEqual(b.perBank.map((x) => x.ah), [100, 50])
   assert.equal(b.wh, 1800)
   assert.equal(b.assumed12, 1)
   assert.equal(b.unknown, 1)
@@ -102,12 +103,12 @@ test('statistics: a battery in no bank still counts', () => {
   const only = dashboardStats({ ...base, banks: [] })
   // d4 is a stray battery of 100 Ah at its 12 V nominal voltage
   assert.equal(only.battery.banks, 1)
-  assert.equal(only.battery.ah, 100)
+  assert.deepEqual(only.battery.perBank.map((x) => x.ah), [100])
   assert.equal(only.battery.wh, 1200)
 })
 
 test('batteryTotals: a bank with a voltage and no energy uses that voltage', () => {
-  assert.deepEqual(batteryTotals([{ capacityAh: 10, energyWh: null, voltage: 24 }]), { banks: 1, ah: 10, wh: 240, assumed12: 0, unknown: 0 })
+  assert.deepEqual(batteryTotals([{ capacityAh: 10, energyWh: null, voltage: 24 }]), { banks: 1, wh: 240, perBank: [{ name: 'Battery', ah: 10 }], assumed12: 0, unknown: 0 })
 })
 
 test('statistics: consumer load sums each consumer once and counts the unrated', () => {
@@ -592,3 +593,43 @@ test('checks: with the floorplan off, a device on a floorplan only still counts 
   const onIds = new Set(on.unplaced.map((x) => x.id))
   for (const id of onIds) assert.ok(off.unplaced.some((x) => x.id === id))
 })
+
+const ahText = (v) => `${v} Ah`
+
+test('batteryNote lists each bank with its own amp hours, three at most', () => {
+  const t = { perBank: [{ name: 'House', ah: 5120 }, { name: 'Starter', ah: 1280 }, { name: 'Thruster', ah: 2304 }], assumed12: 0, unknown: 0 }
+  assert.equal(batteryNote(t, ahText), 'House 5120 Ah, Starter 1280 Ah, Thruster 2304 Ah')
+  assert.equal(batteryNote({ ...t, perBank: [...t.perBank, { name: 'Spare', ah: 100 }, { name: 'Other', ah: 50 }] }, ahText),
+    'House 5120 Ah, Starter 1280 Ah, Thruster 2304 Ah and 2 more')
+})
+
+test('batteryNote says what was assumed or missing, and is null for no banks', () => {
+  assert.equal(batteryNote({ perBank: [{ name: 'A', ah: 10 }], assumed12: 1, unknown: 0 }, ahText), 'A 10 Ah; 1 bank counted at 12 V')
+  assert.equal(batteryNote({ perBank: [], assumed12: 0, unknown: 2 }, ahText), '2 banks without capacity')
+  assert.equal(batteryNote({ perBank: [], assumed12: 0, unknown: 0 }, ahText), null)
+})
+
+test('switchSummary: none, all unknown, or chips once one state is known', () => {
+  assert.deepEqual(switchSummary({ all: [] }), { mode: 'none', total: 0 })
+  assert.deepEqual(switchSummary(null), { mode: 'none', total: 0 })
+  assert.deepEqual(switchSummary({ all: [{ state: 'unknown' }, { state: 'unknown' }] }), { mode: 'unknown', total: 2 })
+  assert.deepEqual(switchSummary({ all: [{ state: 'unknown' }, { state: 'off' }] }), { mode: 'chips', total: 2 })
+})
+
+test('hasLiveValue: a counted, stale or no-voltage reading, a battery reading or a known switch', () => {
+  const none = { flows: { inputs: { entries: [{ status: 'nodata' }] }, outputs: { entries: [] } }, battery: { cards: [{ hasData: false }] }, switches: { all: [{ state: 'unknown' }] } }
+  assert.equal(hasLiveValue(none), false)
+  assert.equal(hasLiveValue({ ...none, flows: { inputs: { entries: [{ status: 'ok' }] }, outputs: { entries: [] } } }), true)
+  assert.equal(hasLiveValue({ ...none, flows: { inputs: { entries: [] }, outputs: { entries: [{ status: 'stale' }] } } }), true)
+  assert.equal(hasLiveValue({ ...none, flows: { inputs: { entries: [{ status: 'novoltage' }] }, outputs: { entries: [] } } }), true)
+  assert.equal(hasLiveValue({ ...none, battery: { cards: [{ hasData: true }] } }), true)
+  assert.equal(hasLiveValue({ ...none, switches: { all: [{ state: 'on' }] } }), true)
+  assert.equal(hasLiveValue({}), false)
+})
+
+test('dashboardOrder: live first only with live on and a value seen', () => {
+  assert.equal(dashboardOrder({ liveOn: true, seen: true }), 'live-first')
+  assert.equal(dashboardOrder({ liveOn: true, seen: false }), 'findings-first')
+  assert.equal(dashboardOrder({ liveOn: false, seen: true }), 'findings-first')
+})
+

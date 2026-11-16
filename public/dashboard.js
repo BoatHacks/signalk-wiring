@@ -97,19 +97,33 @@ export function cableLengthOf (cable, devicesById, conduitsById) {
 // when the server has one, else its capacity at the bank voltage, else at 12 V
 // (counted in `assumed12`, so the page can say so). A bank with no capacity is
 // counted in `unknown`.
-export function batteryTotals (banks) {
-  let ah = 0
+export function batteryTotals (banks, deviceById = new Map()) {
   let wh = 0
   let assumed12 = 0
   let unknown = 0
+  // Amp hours are never added up: banks that are not connected, or have
+  // different voltages, do not make a meaningful sum. Each bank keeps its own.
+  const perBank = []
   for (const b of banks) {
     if (!finite(b.capacityAh)) { unknown++; continue }
-    ah += b.capacityAh
+    perBank.push({ name: b.batteryIds ? bankTitle(b, deviceById) : 'Battery', ah: b.capacityAh })
     if (finite(b.energyWh)) wh += b.energyWh
     else if (finite(b.voltage)) wh += b.capacityAh * b.voltage
     else { wh += b.capacityAh * DEFAULT_BANK_VOLTS; assumed12++ }
   }
-  return { banks: banks.length, ah, wh, assumed12, unknown }
+  return { banks: banks.length, wh, perBank, assumed12, unknown }
+}
+
+// The note under the battery tile: each bank with its own amp hours, the first
+// `limit` of them, then "and N more". `fmtAh` formats one figure.
+export function batteryNote (totals, fmtAh, limit = 3) {
+  const parts = totals.perBank.slice(0, limit).map((b) => `${b.name} ${fmtAh(b.ah)}`)
+  let text = parts.join(', ')
+  if (totals.perBank.length > limit) text += ` and ${totals.perBank.length - limit} more`
+  const extra = totals.assumed12 > 0
+    ? `${totals.assumed12} ${totals.assumed12 === 1 ? 'bank' : 'banks'} counted at 12 V`
+    : totals.unknown > 0 ? `${totals.unknown} ${totals.unknown === 1 ? 'bank' : 'banks'} without capacity` : ''
+  return [text, extra].filter(Boolean).join('; ') || null
 }
 
 const share = (n, of) => (of > 0 ? n / of : null)
@@ -168,7 +182,7 @@ export function dashboardStats (data) {
     backbones: (data.backbones || []).filter(active).length,
     cableLength: length,
     protection: { protected: circuits.length - unprotected, unprotected },
-    battery: batteryTotals(allBanks(devices, data.banks || [])),
+    battery: batteryTotals(allBanks(devices, data.banks || []), deviceById),
     consumerLoad: { watts: ratedW, unrated },
     completeness: {
       cablesNoGauge: power.filter((c) => !finite(Number(c.gauge)) || c.gauge === null || c.gauge === '').length,
@@ -459,6 +473,9 @@ export function batteryCards (devices, banks, live, values, stamps = new Map(), 
       timeText: finite(r.timeRemaining) ? formatDuration(r.timeRemaining) : null,
       stale: Boolean(r.stale),
       hasData,
+      // What is recorded about the bank, for when there is no live reading.
+      recordedAh: finite(bank.capacityAh) ? bank.capacityAh : null,
+      recordedWh: finite(bank.energyWh) ? bank.energyWh : (finite(bank.capacityAh) && finite(bank.voltage) ? bank.capacityAh * bank.voltage : null),
       socPath: firstPath(bank, paths, 'socPath'),
       voltagePath: firstPath(bank, paths, 'voltagePath'),
       href: hashForState({ tab: 'devices', id: bank.batteryIds[0] })
@@ -508,6 +525,30 @@ export function switchesOn (live, values, devices) {
   // their states change.
   all.sort((a, b) => a.name.localeCompare(b.name))
   return { on, off, unknown, all }
+}
+
+// How the switches card looks: 'none' (nothing is switchable), 'unknown' (every
+// state is unknown, so one line instead of a chip each) or 'chips'.
+export function switchSummary (sw) {
+  if (!sw || sw.all.length === 0) return { mode: 'none', total: 0 }
+  const known = sw.all.some((s) => s.state !== 'unknown')
+  return { mode: known ? 'chips' : 'unknown', total: sw.all.length }
+}
+
+// Has any live value arrived: a power reading (counted, stale or in amps
+// without a voltage), a battery reading or a known switch state.
+export function hasLiveValue ({ flows, battery, switches }) {
+  const flowValue = (e) => e.status === 'ok' || e.status === 'stale' || e.status === 'novoltage'
+  const sides = flows ? [flows.inputs, flows.outputs] : []
+  if (sides.some((side) => side && side.entries.some(flowValue))) return true
+  if (battery && battery.cards.some((c) => c.hasData)) return true
+  return Boolean(switches && switches.all.some((s) => s.state !== 'unknown'))
+}
+
+// The order of the cards: the live ones first once a value has been seen this
+// visit with live on, otherwise the findings and statistics first.
+export function dashboardOrder ({ liveOn, seen }) {
+  return liveOn && seen ? 'live-first' : 'findings-first'
 }
 
 // ---- Which paths the page needs ----

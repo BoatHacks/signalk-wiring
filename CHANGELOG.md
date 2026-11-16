@@ -5,6 +5,11 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- The Dashboard order follows the data (plan 0042, issue 31). With no live value yet, Needs attention and Statistics come first and the live cards follow; the live power card collapses to one line with a closed "How to set it up" disclosure, battery banks show their recorded capacity with one shared note instead of "no live data" each, and the switches card is one line while every state is unknown. Once a live value arrives the live cards move first and stay there for the visit.
+- The Statistics tiles look like links (border, arrow, hover and focus state) and wrap and grow so no tile is left alone in a row. The battery tile shows energy in kWh, with each bank's own amp hours in its note; amp hours of separate banks are no longer added up.
+
 ## [0.9.3] - 2026-11-16
 
 ### Changed
