@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-16
+
 ### Added
 
 - Lists can be sorted. The Cables and Load Summary tables have clickable column headers: a click sorts ascending, a second click descending, a third returns to the usual order. Devices, Circuits, Conduits, Batteries, Buses and Zones have a "Sort by" choice with an ascending and descending button next to their filters. Names sort in natural order ("B10-3" before "B10-12"), cable gauges sort by cross section across AWG and mm², lengths in feet and metres sort together, and empty values always come last. Each list remembers its sort in the browser. The Changes list keeps newest first.
