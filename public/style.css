@@ -1228,3 +1228,11 @@ form.form-box .form-field { gap: 4px; }
 
 /* Dashboard first screen (plan 0042): one-line empty live sections. */
 .dash-none-line { margin: 0 0 4px; }
+
+/* Load Summary: the load behind a fuse and the fold of circuits with no consumer (plan 0043). */
+.load-fold { margin: 0 0 8px; }
+.behind-row td { background: var(--surface-alt); }
+.behind-box { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 4px 28px; }
+.behind-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.load-summary td .zone-toggle { margin-right: 2px; }
+.behind-list .meta { margin-left: 6px; }

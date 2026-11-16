@@ -103,9 +103,9 @@ The expand arrow in the table row, the opened row, and the fold line.
 
 ## Implementation Steps
 
-- [ ] The pure helpers with tests.
-- [ ] The page: summary line, expand, status, fold.
-- [ ] CHANGELOG, README line if it describes the Load Summary, `docs` if the load
+- [x] The pure helpers with tests.
+- [x] The page: summary line, expand, status, fold.
+- [x] CHANGELOG, README line if it describes the Load Summary, `docs` if the load
       rules are described there, headless checks.
 
 ## Files to Create/Modify

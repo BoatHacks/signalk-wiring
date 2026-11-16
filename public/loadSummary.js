@@ -1,5 +1,8 @@
 import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
-import { calculateCircuitLoad, checkSummaryLine, incompleteReason } from './loadCalc.js'
+import {
+  calculateCircuitLoad, checkSummaryLine, incompleteReason, circuitsBehind, calculateBehindLoad, loadFindings, loadSummaryLine, isShownCircuit
+} from './loadCalc.js'
+import { readFlag, writeFlag } from './zones.js'
 import { hashForState } from './router.js'
 import { useSettings } from './settings.js'
 import { checkAll, countVerdicts } from './cableChecks.js'
@@ -43,6 +46,7 @@ function useResourceList (type) {
 // as tooltips and in the legend under the table.
 export const BADGE_HELP = {
   'over rating': 'The summed load is more than the fuse or breaker is rated for.',
+  'over rating behind': 'The load of everything behind this fuse, added up as if it all ran at once, is more than the fuse or breaker is rated for.',
   ok: 'The summed load is within the rating of the fuse or breaker.',
   incomplete: 'The check cannot be made yet: see the line under the badge.',
   measured: 'The total uses figures measured in an accepted calibration run.',
@@ -71,7 +75,27 @@ export function LoadSummary () {
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const activeCircuits = circuits.filter((c) => c.status === 'active' && c.derived)
   const loadOf = new Map(activeCircuits.map((c) => [c.id, calculateCircuitLoad(c, deviceById)]))
-  const STATUS_RANK = (load) => (load.overRating ? 0 : incompleteReason(load) ? 1 : 2)
+  const circuitById = new Map(activeCircuits.map((c) => [c.id, c]))
+  // What is behind each fuse: the circuits that hang on what its cables end at,
+  // and their summed load (plan 0043).
+  const behind = circuitsBehind(activeCircuits, cables, deviceById)
+  const behindOf = new Map()
+  for (const c of activeCircuits) {
+    const ids = (behind.get(c.id) || []).filter((id) => circuitById.has(id))
+    if (ids.length === 0) continue
+    behindOf.set(c.id, { circuits: ids.map((id) => circuitById.get(id)), load: calculateBehindLoad(c, ids.map((id) => circuitById.get(id)), deviceById) })
+  }
+  const behindLoadOf = (c) => (behindOf.has(c.id) ? behindOf.get(c.id).load : null)
+  const findingOf = new Map(activeCircuits.map((c) => [c.id, loadFindings(loadOf.get(c.id), behindLoadOf(c))]))
+  const shownOf = (c) => isShownCircuit(loadOf.get(c.id), behindLoadOf(c), findingOf.get(c.id))
+  const folded = activeCircuits.filter((c) => !shownOf(c))
+  const [showEmpty, setShowEmptyState] = useState(() => readFlag('loadSummaryEmpty', false))
+  const setShowEmpty = (v) => { setShowEmptyState(v); writeFlag('loadSummaryEmpty', v) }
+  const [openRows, setOpenRows] = useState(() => new Set())
+  const toggleRow = (id) => setOpenRows((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  const rows = activeCircuits.filter((c) => showEmpty || shownOf(c))
+  const summaryLine = loadSummaryLine(activeCircuits.map((c) => findingOf.get(c.id)))
+  const STATUS_RANK = (load, finding) => (finding.over ? 0 : incompleteReason(load) ? 1 : 2)
   const [sort, setSort, sorted] = useSort('loadSummary', {
     circuit: (c) => c.name,
     devices: (c) => loadOf.get(c.id).deviceCount,
@@ -80,7 +104,7 @@ export function LoadSummary () {
     voltage: (c) => loadOf.get(c.id).voltage,
     amps: (c) => loadOf.get(c.id).amps,
     protection: (c) => loadOf.get(c.id).ratingA,
-    status: (c) => STATUS_RANK(loadOf.get(c.id))
+    status: (c) => STATUS_RANK(loadOf.get(c.id), findingOf.get(c.id))
   })
   const checkLine = checkSummaryLine(countVerdicts(checkAll({ cables, circuits, devices, conduits, limits: limitsFrom(settings) })))
 
@@ -102,9 +126,16 @@ export function LoadSummary () {
           actually just a backup path. Treat this as a starting point, not a certified calculation.
         </p>
       </details>
+      ${summaryLine && html`<p class="meta" data-testid="load-summary-line">${summaryLine}.</p>`}
       ${checkLine && html`
         <p class="meta check-summary" data-testid="check-summary">${checkLine}
           ${' '}<a class="route-link" href=${hashForState({ tab: 'cables' })}>See the Cables tab</a>.</p>
+      `}
+      ${folded.length > 0 && html`
+        <label class="check-inline load-fold" data-testid="load-fold">
+          <input type="checkbox" class="checkbox-input" checked=${showEmpty} onChange=${(e) => setShowEmpty(e.target.checked)} />
+          Show ${folded.length} ${folded.length === 1 ? 'circuit' : 'circuits'} with no consumers
+        </label>
       `}
       ${circuitsLoading && html`<div class="empty-state">Loading…</div>`}
       <${LoadError} message=${circuitsError} what="load summary" onRetry=${retryCircuits} />
@@ -126,11 +157,19 @@ export function LoadSummary () {
             </tr>
           </thead>
           <tbody>
-            ${sorted(activeCircuits).map((circuit) => {
+            ${sorted(rows).flatMap((circuit) => {
               const load = loadOf.get(circuit.id)
-              return html`
+              const finding = findingOf.get(circuit.id)
+              const more = behindOf.get(circuit.id) || null
+              const open = more && openRows.has(circuit.id)
+              const main = html`
                 <tr key=${circuit.id}>
-                  <td><a class="route-link" href=${hashForState({ tab: 'circuits', id: circuit.id })}>${circuit.name}</a></td>
+                  <td>
+                    ${more && html`<button type="button" class="zone-toggle" data-testid="behind-toggle" aria-expanded=${Boolean(open)}
+                      aria-label=${open ? `Hide what is behind ${circuit.name}` : `Show what is behind ${circuit.name}`}
+                      onClick=${() => toggleRow(circuit.id)}>${open ? '\u25BE' : '\u25B8'}</button>`}
+                    <a class="route-link" href=${hashForState({ tab: 'circuits', id: circuit.id })}>${circuit.name}</a>
+                  </td>
                   <td>
                     ${load.deviceCount}
                     ${load.unknownWattageCount > 0 && html`
@@ -146,17 +185,33 @@ export function LoadSummary () {
                   <td>${formatAmps(load.amps)}</td>
                   <td>${load.ratingA ? `${load.ratingA} A` : 'none'}</td>
                   <td>
-                    ${load.overRating && html`<span class="badge over-rating" title=${BADGE_HELP['over rating']}>over rating</span>`}
-                    ${!load.overRating && incompleteReason(load) && html`
+                    ${finding.overOwn && html`<span class="badge over-rating" title=${BADGE_HELP['over rating']}>over rating</span>`}
+                    ${finding.overBehind && html`<span class="badge over-rating" data-testid="over-behind" title=${BADGE_HELP['over rating behind']}>over rating with everything behind it</span>`}
+                    ${!finding.over && incompleteReason(load) && html`
                       <span class="badge" title=${incompleteReason(load)}>incomplete</span>
                       <div class="meta incomplete-reason" data-testid="incomplete-reason">${incompleteReason(load)}</div>
                     `}
-                    ${!load.overRating && !incompleteReason(load) && html`
+                    ${!finding.over && !incompleteReason(load) && html`
                       <span class="ok-tick" role="img" aria-label="ok" title=${BADGE_HELP.ok}>\u2713</span>
                     `}
                   </td>
-                </tr>
-              `
+                </tr>`
+              if (!open) return [main]
+              const bl = more.load
+              return [main, html`
+                <tr key=${circuit.id + '-behind'} class="behind-row" data-testid="behind-row">
+                  <td colspan="8">
+                    <div class="behind-box">
+                      <strong>Everything behind this fuse</strong>
+                      <span class="meta">${more.circuits.length} ${more.circuits.length === 1 ? 'circuit' : 'circuits'}, ${Math.round(bl.totalWatts * 10) / 10} W${bl.amps != null ? `, ${bl.amps.toFixed(2)} A` : ''}${bl.ratingA ? ` of ${bl.ratingA} A` : ''}${bl.overRating ? ', over the rating' : ''}</span>
+                      <ul class="behind-list">
+                        ${more.circuits.map((c) => html`<li key=${c.id}><a class="route-link" href=${hashForState({ tab: 'circuits', id: c.id })}>${c.name}</a>
+                          <span class="meta">${Math.round(loadOf.get(c.id).totalWatts * 10) / 10} W</span></li>`)}
+                      </ul>
+                      <p class="meta" data-testid="behind-advisory">Advisory only: peaks are added as if everything ran at once, each device counts once, and converter losses are not counted.</p>
+                    </div>
+                  </td>
+                </tr>`]
             })}
           </tbody>
         </table></div>

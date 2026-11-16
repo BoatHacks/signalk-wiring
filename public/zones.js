@@ -87,3 +87,23 @@ export function writeShowRemoved (listKey, value, storage) {
     // the choice just is not remembered
   }
 }
+
+// A remembered on/off choice that is not tied to one list, such as a fold that
+// is open or closed. Storage may be missing or throw, so every access is
+// guarded and the default is `fallback`.
+export function readFlag (name, fallback = false, storage) {
+  try {
+    const v = (storage || globalThis.localStorage).getItem(`wiring.flag.${name}`)
+    return v === null ? fallback : v === '1'
+  } catch (err) {
+    return fallback
+  }
+}
+
+export function writeFlag (name, value, storage) {
+  try {
+    (storage || globalThis.localStorage).setItem(`wiring.flag.${name}`, value ? '1' : '0')
+  } catch (err) {
+    // the choice just is not remembered
+  }
+}

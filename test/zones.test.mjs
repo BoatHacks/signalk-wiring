@@ -96,3 +96,19 @@ test('the show-removed choice is remembered per list and survives missing or thr
   assert.doesNotThrow(() => writeShowRemoved('cables', true, broken))
   assert.equal(readShowRemoved('cables', undefined), false) // no localStorage on the host
 })
+
+import { readFlag, writeFlag } from '../public/zones.js'
+
+test('readFlag and writeFlag round trip, with a default and guarded storage', () => {
+  const m = new Map()
+  const st = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }
+  assert.equal(readFlag('fold', false, st), false)
+  assert.equal(readFlag('fold', true, st), true)
+  writeFlag('fold', true, st)
+  assert.equal(readFlag('fold', false, st), true)
+  writeFlag('fold', false, st)
+  assert.equal(readFlag('fold', true, st), false)
+  const broken = { getItem () { throw new Error('x') }, setItem () { throw new Error('x') } }
+  assert.equal(readFlag('fold', true, broken), true)
+  assert.doesNotThrow(() => writeFlag('fold', true, broken))
+})

@@ -765,7 +765,17 @@ A dedicated plugin webapp, reached from the SignalK admin UI, providing:
   or rated, and whether any figure is an estimate. An "incomplete" circuit
   says under its badge what is missing (voltage, rating or both) and what to
   do, the badges have tooltips and a legend sits under the table. A line above
-  the table counts the cable checks (see Cable checks below). A group figure is counted
+  the table counts the circuits by verdict (over rating, incomplete, ok) and
+  another counts the cable checks (see Cable checks below). A fuse or breaker
+  also shows, on expand, the summed load of every circuit behind it: circuit B
+  is behind circuit A when B's feed starts at a device that A's cables end at.
+  Each device counts once in the sum, peaks are added as if everything ran at
+  once, converter losses are not counted, and the sum is checked against the
+  rating like any circuit (the row then reads "over rating with everything
+  behind it"). A fuse fed only by a charging source (an alternator, solar
+  controller or charger) has nothing behind it. Circuits with no consumer of
+  their own or behind them and no finding are folded behind "Show N circuits
+  with no consumers", closed by default and remembered in the browser. A group figure is counted
   once per circuit, and a measured figure takes no power factor. The summary
   states its own known limitations in the UI (a device fed by more than one
   circuit counts its full wattage on each; peaks are summed as if they

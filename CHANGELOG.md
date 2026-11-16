@@ -7,6 +7,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Load Summary (plan 0043, issue 34): a fuse or breaker shows the summed load of everything behind it. A row with circuits behind it has an arrow that opens them with the sum, its amps and the rating check; the sum counts each device once, adds peaks as if everything ran at once and does not count converter losses, and a fuse that is over its rating only with everything behind it reads "over rating with everything behind it". A fuse fed only by a charging source has nothing behind it. Circuits with no consumer of their own or behind them (and no finding) are folded behind "Show N circuits with no consumers", closed by default and remembered in the browser. A line above the table counts all circuits: "55 circuits: 0 over rating, 1 incomplete, 54 ok".
+
+### Changed
+
 - The Dashboard order follows the data (plan 0042, issue 31). With no live value yet, Needs attention and Statistics come first and the live cards follow; the live power card collapses to one line with a closed "How to set it up" disclosure, battery banks show their recorded capacity with one shared note instead of "no live data" each, and the switches card is one line while every state is unknown. Once a live value arrives the live cards move first and stay there for the visit.
 - The Statistics tiles look like links (border, arrow, hover and focus state) and wrap and grow so no tile is left alone in a row. The battery tile shows energy in kWh, with each bank's own amp hours in its note; amp hours of separate banks are no longer added up.
 

@@ -149,3 +149,124 @@ export function incompleteReason (load) {
   }
   return parts.length ? parts.join('. ') : null
 }
+
+// ---- The load behind a fuse (plan 0043) ----
+
+const POSITIVE = new Set(['positive', 'line'])
+const CHARGING_FEED = /solar|mppt|alternator|charger/i
+
+function feedEnds (cable) {
+  const conductor = (cable.conductors || []).find((c) => POSITIVE.has(c.conductor))
+  return {
+    from: (conductor && conductor.fromDeviceId) || cable.fromDeviceId,
+    to: (conductor && conductor.toDeviceId) || cable.toDeviceId
+  }
+}
+
+// For each circuit id, the ids of the circuits behind it, direct and further.
+// Circuit B is directly behind circuit A when B's feed starts at a device that
+// A's cables end at (a bus bar, a switch, a converter). A circuit fed only by a
+// charging source (an alternator, a solar controller, a charger) has nothing
+// behind it: its fuse limits what the source puts in, not what loads take out.
+// `circuits` are the derived circuits, `cables` the cable records and
+// `deviceById` a Map of devices.
+export function circuitsBehind (circuits, cables, deviceById = new Map()) {
+  const cableById = new Map(cables.map((c) => [c.id, c]))
+  const ends = new Map()
+  for (const circuit of circuits) {
+    if (!circuit.derived) continue
+    const from = new Set()
+    const to = new Set()
+    for (const id of circuit.derived.cableIds || []) {
+      const cable = cableById.get(id)
+      if (!cable || cable.status === 'removed') continue
+      const e = feedEnds(cable)
+      if (e.from) from.add(e.from)
+      if (e.to) to.add(e.to)
+    }
+    const boundary = [...from].filter((d) => !to.has(d))
+    const chargingOnly = boundary.length > 0 && boundary.every((id) => {
+      const d = deviceById.get(id)
+      return d && CHARGING_FEED.test(d.type || '')
+    })
+    ends.set(circuit.id, { to, boundary: new Set(boundary), chargingOnly })
+  }
+  const direct = new Map()
+  for (const a of circuits) {
+    const ea = ends.get(a.id)
+    const next = []
+    if (ea && !ea.chargingOnly) {
+      for (const b of circuits) {
+        if (b.id === a.id) continue
+        const eb = ends.get(b.id)
+        if (eb && [...eb.boundary].some((d) => ea.to.has(d))) next.push(b.id)
+      }
+    }
+    direct.set(a.id, next)
+  }
+  const behind = new Map()
+  for (const a of circuits) {
+    const seen = new Set([a.id])
+    const queue = [...(direct.get(a.id) || [])]
+    const found = []
+    while (queue.length > 0) {
+      const id = queue.shift()
+      if (seen.has(id)) continue
+      seen.add(id)
+      found.push(id)
+      queue.push(...(direct.get(id) || []))
+    }
+    behind.set(a.id, found)
+  }
+  return behind
+}
+
+// The load of a circuit with everything behind it: one synthetic circuit with
+// the consumers and bus loads of the circuit and of each circuit behind it, each
+// device once, run through calculateCircuitLoad so the sum is made by the same
+// function as an own total. Converter losses are not counted.
+export function calculateBehindLoad (circuit, behindCircuits, deviceById) {
+  const endDeviceIds = new Set(circuit.derived.endDeviceIds || [])
+  const busLoads = []
+  const busSeen = new Set()
+  const addBus = (c) => {
+    for (const b of (c.derived && c.derived.busLoads) || []) {
+      const key = b.id || b.busId || JSON.stringify(b)
+      if (busSeen.has(key)) continue
+      busSeen.add(key)
+      busLoads.push(b)
+    }
+  }
+  addBus(circuit)
+  for (const c of behindCircuits) {
+    for (const id of (c.derived && c.derived.endDeviceIds) || []) endDeviceIds.add(id)
+    addBus(c)
+  }
+  const load = calculateCircuitLoad({ ...circuit, derived: { ...circuit.derived, endDeviceIds: [...endDeviceIds], busLoads } }, deviceById)
+  return { ...load, circuitCount: behindCircuits.length }
+}
+
+// Whether a row is a finding: over its rating on its own, over it with
+// everything behind it, or incomplete.
+export function loadFindings (load, behindLoad) {
+  const overOwn = Boolean(load.overRating)
+  const overBehind = Boolean(behindLoad && behindLoad.overRating && !load.overRating)
+  return { overOwn, overBehind, over: overOwn || overBehind, incomplete: !overOwn && !overBehind && incompleteReason(load) !== null }
+}
+
+// "55 circuits: 0 over rating, 1 incomplete, 54 ok", from the findings of every
+// circuit, shown or folded.
+export function loadSummaryLine (findings) {
+  const total = findings.length
+  if (total === 0) return null
+  const over = findings.filter((f) => f.over).length
+  const incomplete = findings.filter((f) => f.incomplete).length
+  return `${total} ${total === 1 ? 'circuit' : 'circuits'}: ${over} over rating, ${incomplete} incomplete, ${total - over - incomplete} ok`
+}
+
+// A circuit is shown when it has a consumer of its own or behind it (or a bus
+// load), or a finding; the rest are folded.
+export function isShownCircuit (load, behindLoad, finding) {
+  const carries = (l) => Boolean(l) && (l.deviceCount > 0 || (l.busWatts || 0) > 0)
+  return carries(load) || carries(behindLoad) || finding.over || finding.incomplete
+}
