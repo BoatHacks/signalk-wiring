@@ -109,3 +109,17 @@ test('stage one of Auto-arrange keeps marked devices fixed through the overlap p
   assert.equal(moved.b, undefined)
   assert.deepEqual(merged.b, { x: 0, y: 0 })
 })
+
+test('autoLayout: three cables between the same two boxes do not break the layout', () => {
+  // the cabinet page of a real boat: two bus bars feed a switch panel (an enclosure drawn
+  // with one port per incoming cable) over three cables each, next to unconnected devices
+  const plain = (id) => ({ id, name: id, role: 'consumer', terminals: [] })
+  const bus = (id) => ({ id, name: id, role: 'distribution', terminals: [] })
+  const ports = (n) => Array.from({ length: n }, (_, i) => ({ name: `In ${i + 1}`, side: 'left' }))
+  const panel = { id: 'panel', name: 'panel', role: 'enclosure', isEnclosure: true, terminals: ports(8) }
+  const devices = [panel, bus('bus1'), bus('bus2'), plain('a'), plain('b'), plain('c'), plain('d')]
+  const cable = (id, from) => ({ id, fromDeviceId: from, toDeviceId: 'panel', status: 'active', conductors: [] })
+  const cables = [cable('c1', 'bus1'), cable('c2', 'bus1'), cable('c3', 'bus1'), cable('c4', 'bus2'), cable('c5', 'bus2'), cable('c6', 'bus2')]
+  const out = L.autoLayout(dagre, devices, cables)
+  assert.equal(Object.keys(out).length, devices.length)
+})

@@ -49,7 +49,16 @@ export function autoLayout (dagre, devices, cables) {
     g.setNode(d.id, { width: box.w, height: box.h })
   }
   const live = cables.filter((c) => c.status !== 'removed' && ids.has(c.fromDeviceId) && ids.has(c.toDeviceId))
-  for (const c of live) g.setEdge(c.fromDeviceId, c.toDeviceId, {}, c.id)
+  // One edge per pair of devices is enough to rank them. Three or more parallel
+  // edges between the same two boxes (an enclosure fed by many cables) make
+  // dagre throw "Not possible to find intersection inside of the rectangle".
+  const paired = new Set()
+  for (const c of live) {
+    const key = c.fromDeviceId + '\n' + c.toDeviceId
+    if (paired.has(key)) continue
+    paired.add(key)
+    g.setEdge(c.fromDeviceId, c.toDeviceId, {}, c.id)
+  }
   dagre.layout(g)
   // Ranks: nodes with the same dagre x.
   const rankX = [...new Set(devices.map((d) => Math.round(g.node(d.id).x)))].sort((a, b) => a - b)

@@ -9,6 +9,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 - More choices for what a cable carries: Ethernet, CAN bus, USB, HDMI, serial (RS-232, RS-485, TTL such as VE.Direct and VE.Bus) and coaxial (antenna, RF), next to NMEA 2000, Seatalk-1, NMEA 0183, sensor and other. Each has its own colour on the schematics and the floorplan, in the day and the red night theme, and shows as a badge in the cable table.
 
+### Fixed
+
+- Auto-arrange on a schematic page did nothing when an enclosure was fed by three or more cables from the same device (for example a switch panel fed from a bus bar): the layout stopped with an error. Parallel cables between the same two boxes are now ranked as one connection.
+
 ## [0.9.4] - 2026-11-16
 
 ### Changed
