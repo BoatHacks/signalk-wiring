@@ -169,7 +169,7 @@ function Stat ({ label, value, href, note }) {
 
 const plural = (n, word) => (n === 1 ? word : word + 's')
 
-const ROLE_WORDS = { consumer: 'consumers', source: 'sources', storage: 'storage', distribution: 'distribution', converter: 'converters', enclosure: 'enclosures' }
+const ROLE_WORDS = { consumer: 'consumers', source: 'sources', storage: 'storage', distribution: 'distribution', converter: 'converters', enclosure: 'enclosures', ground: 'ground points' }
 
 function Statistics ({ stats }) {
   const tab = (t) => hashForState({ tab: t })
@@ -253,6 +253,7 @@ function Checks ({ checks }) {
         </ul>`}
       ${group('Circuits with no protection', c.unprotected, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Cables in no circuit', c.noCircuit, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.label}<//></li>`)}
+      ${c.noEarth.length > 0 && html`<div data-testid="no-earth" class="dash-quiet">${group('No earth path to a ground point (quiet note)', c.noEarth, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}</div>`}
       ${group(floorplanShown() ? 'Devices not placed on a plan or a schematic' : 'Devices not placed on a schematic', c.unplaced, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Schematic pages with overlapping devices', c.overlaps, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
     </div>`

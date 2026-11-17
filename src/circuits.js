@@ -25,6 +25,7 @@
 
 const POSITIVE_CONDUCTORS = new Set(['positive', 'line'])
 const RETURN_TARGET_ROLES = new Set(['storage', 'source', 'converter'])
+const EARTH_TARGET_ROLES = new Set(['ground'])
 const MAX_RETURN_PATHS = 5000
 
 const byString = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
@@ -180,8 +181,12 @@ function deriveCircuits ({ devices = [], cables = [] }) {
     groups.get(key).edges.push(e)
   }
 
-  // ---- Return (negative) network, over devices.
-  const negative = buildNegativeGraph(wiring)
+  // ---- Return networks, over devices: negative (DC), neutral (AC) and earth.
+  const negative = buildReturnGraph(wiring, 'negative')
+  const neutral = buildReturnGraph(wiring, 'neutral')
+  const earth = buildReturnGraph(wiring, 'earth')
+  const hasGround = [...live.values()].some((d) => d.role === 'ground')
+  const feedCables = new Set(edges.map((e) => e.id))
 
   const circuits = []
   for (const group of groups.values()) {
@@ -196,7 +201,30 @@ function deriveCircuits ({ devices = [], cables = [] }) {
     const endDeviceIds = unique(endNodes.map((n) => n.deviceId))
     const deviceIds = unique(group.edges.flatMap((e) => [e.from.deviceId, e.to.deviceId]))
 
-    const returns = traceReturns(endDeviceIds, live, negative, warnings)
+    const ac = group.edges.some((e) => e.conductor === 'line')
+    const feedIds = new Set(cableIds)
+    // A combined cable (line with neutral and earth) is recorded only on its own
+    // circuit: its neutral is part of that circuit's feed, and adding it to every
+    // circuit downstream would count their loads on the feeder again.
+    const skipCable = (id) => feedCables.has(id) && !feedIds.has(id)
+    let returns
+    let noEarth = []
+    if (ac) {
+      // A consumer whose neutral is only inside its own feed cable never warns.
+      const n = traceReturns(endDeviceIds, live, neutral, warnings, {
+        targets: RETURN_TARGET_ROLES, code: 'neutral-incomplete', label: 'neutral', feedIds, skipCable
+      })
+      const e = traceReturns(endDeviceIds, live, earth, [], { targets: EARTH_TARGET_ROLES, code: 'earth-incomplete', label: 'earth', silent: true, skipCable })
+      returns = {
+        cableIds: unique([...n.cableIds, ...e.cableIds]),
+        implicitDeviceIds: n.implicitDeviceIds
+      }
+      noEarth = hasGround ? unique(endDeviceIds.filter((id) => !e.reachedIds.has(id) && isConsumerDevice(live.get(id)))) : []
+    } else {
+      const n = traceReturns(endDeviceIds, live, negative, warnings, { targets: RETURN_TARGET_ROLES, code: 'return-incomplete', label: 'negative' })
+      const e = traceReturns(endDeviceIds, live, earth, [], { targets: EARTH_TARGET_ROLES, code: 'earth-incomplete', label: 'earth', silent: true, skipCable })
+      returns = { cableIds: unique([...n.cableIds, ...e.cableIds]), implicitDeviceIds: n.implicitDeviceIds }
+    }
 
     circuits.push({
       key,
@@ -205,12 +233,13 @@ function deriveCircuits ({ devices = [], cables = [] }) {
       cableIds,
       returnCableIds: returns.cableIds,
       implicitReturnDeviceIds: returns.implicitDeviceIds,
+      noEarthDeviceIds: noEarth,
       deviceIds,
       supplyDeviceIds: unique(supply.map((n) => n.deviceId)),
       endDeviceIds,
       ratingA: group.protector ? group.protector.tripRatingA : null,
       voltage: firstNumber(supply.map((n) => n.voltage)),
-      ac: group.edges.some((e) => e.conductor === 'line')
+      ac
     })
   }
 
@@ -265,7 +294,12 @@ function buildBanks (bankCables) {
     .sort((a, b) => byString(a.batteryIds[0], b.batteryIds[0]))
 }
 
-function buildNegativeGraph (wiring) {
+const isConsumerDevice = (d) => Boolean(d) && (!d.role || d.role === 'consumer')
+
+// The conductors of one type as a graph over devices: adjacency from a device
+// to { to, cableId }, both ways. A conductor that names its own end devices
+// uses them, otherwise the cable's ends.
+function buildReturnGraph (wiring, type) {
   const adjacency = new Map()
   const add = (a, b, cableId) => {
     if (!adjacency.has(a)) adjacency.set(a, [])
@@ -273,7 +307,7 @@ function buildNegativeGraph (wiring) {
   }
   for (const cable of wiring) {
     for (const c of cable.conductors) {
-      if (c.conductor !== 'negative') continue
+      if (c.conductor !== type) continue
       const a = c.fromDeviceId || cable.fromDeviceId
       const b = c.toDeviceId || cable.toDeviceId
       add(a, b, cable.id)
@@ -283,33 +317,42 @@ function buildNegativeGraph (wiring) {
   return adjacency
 }
 
-// Cables that lie on a path from a load back to a supply end (a battery,
-// source or converter), without passing through another consumer. A wire
-// shared by several loads therefore serves each of their circuits. A
-// consumer with no negative recorded at all is assumed to return alongside
-// its feed.
-function traceReturns (endDeviceIds, live, negative, warnings) {
+// Cables that lie on a path from a load back to a target (a battery, source or
+// converter for negative and neutral, a ground device for earth), without
+// passing through another consumer. A wire shared by several loads therefore
+// serves each of their circuits. A consumer with no wire of the type recorded
+// at all is assumed to return alongside its feed.
+//   opts.targets: the roles that end a path; opts.code and opts.label: the
+//   warning raised when no path is found; opts.silent: never warn;
+//   opts.feedIds: when given, a failed walk warns only for a consumer that has
+//   a wire of this type on a cable that is not one of these feed cables.
+//   opts.skipCable: cables the walk crosses but does not record (a cable that
+//   carries a positive or line conductor belongs to the circuit that feeds
+//   through it, so the neutral inside it is not added to downstream circuits).
+// Returns { cableIds, implicitDeviceIds, reachedIds }.
+function traceReturns (endDeviceIds, live, graph, warnings, opts) {
   const cableIds = new Set()
   const implicit = []
+  const reached = new Set()
   for (const startId of endDeviceIds) {
     const start = live.get(startId)
     if (!start || (start.role && start.role !== 'consumer')) continue
-    if (!negative.has(startId)) { implicit.push(startId); continue }
+    if (!graph.has(startId)) { implicit.push(startId); continue }
 
     let found = false
     let paths = 0
     const stack = []
     const visit = (id, seen) => {
       if (paths > MAX_RETURN_PATHS) return
-      for (const step of negative.get(id) || []) {
+      for (const step of graph.get(id) || []) {
         if (seen.has(step.to)) continue
         const next = live.get(step.to)
         if (!next) continue
         stack.push(step.cableId)
-        if (RETURN_TARGET_ROLES.has(next.role)) {
+        if (opts.targets.has(next.role)) {
           paths++
           found = true
-          for (const id2 of stack) cableIds.add(id2)
+          for (const id2 of stack) if (!opts.skipCable || !opts.skipCable(id2)) cableIds.add(id2)
         } else if (next.role !== 'consumer' || next.id === startId) {
           seen.add(step.to)
           visit(step.to, seen)
@@ -319,15 +362,17 @@ function traceReturns (endDeviceIds, live, negative, warnings) {
       }
     }
     visit(startId, new Set([startId]))
-    if (!found) {
+    if (found) reached.add(startId)
+    const ownCableOnly = opts.feedIds && !(graph.get(startId) || []).some((step) => !opts.feedIds.has(step.cableId))
+    if (!found && !opts.silent && !ownCableOnly) {
       warnings.push({
-        code: 'return-incomplete',
+        code: opts.code,
         deviceId: startId,
-        message: `The negative wire from ${start.name || startId} does not reach a battery, source or converter.`
+        message: `The ${opts.label} wire from ${start.name || startId} does not reach a ${opts.targets === EARTH_TARGET_ROLES ? 'ground point' : 'battery, source or converter'}.`
       })
     }
   }
-  return { cableIds: [...cableIds].sort(byString), implicitDeviceIds: implicit.sort(byString) }
+  return { cableIds: [...cableIds].sort(byString), implicitDeviceIds: implicit.sort(byString), reachedIds: reached }
 }
 
 // Walks upstream from the circuit's first devices to the sources, batteries

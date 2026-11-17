@@ -633,3 +633,17 @@ test('dashboardOrder: live first only with live on and a value seen', () => {
   assert.equal(dashboardOrder({ liveOn: false, seen: true }), 'findings-first')
 })
 
+
+test('dashboardChecks: loads with no earth path are a quiet note, not counted in attention', () => {
+  const devices = [{ id: 'd1', name: 'Toaster', status: 'active' }, { id: 'd2', name: 'Lamp', status: 'active' }]
+  const derived = (noEarth) => ({ cableIds: [], returnCableIds: [], noEarthDeviceIds: noEarth })
+  const circuits = [
+    { id: 'c1', name: 'A', status: 'active', derived: derived(['d1']) },
+    { id: 'c2', name: 'B', status: 'active', derived: derived(['d1', 'd2']) }
+  ]
+  const c = dashboardChecks({ devices, cables: [], circuits, conduits: [], schematics: [] })
+  assert.deepEqual(c.noEarth.map((x) => x.name), ['Lamp', 'Toaster']) // sorted, each load once
+  const without = dashboardChecks({ devices, cables: [], circuits: circuits.map((x) => ({ ...x, derived: derived([]) })), conduits: [], schematics: [] })
+  assert.equal(c.attention, without.attention)
+  assert.deepEqual(without.noEarth, [])
+})

@@ -6,7 +6,7 @@
 // test/openapi.test.js, so a field added to the data model without a schema
 // entry shows up there.
 
-const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure']
+const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure', 'ground']
 const CONDUCTOR_TYPES = ['positive', 'negative', 'line', 'neutral', 'earth', 'signal']
 
 const str = (description, extra = {}) => ({ type: 'string', description, ...extra })
@@ -58,7 +58,7 @@ const schemas = {
     id: id(),
     name: str('Name of the device as it is called on the boat.'),
     type: nullable(str('Free-text kind of device, for example "Bilge pump", "Fuse", "Battery". Suggestions exist per role; any text is allowed. Some words (bilge pump, refrigerator, autopilot, navigation light, windlass) mark the device as critical for the cable checks.')),
-    role: str('Part the device plays in the electrical system. "consumer" draws power; "source" makes it; "storage" is a battery; "distribution" is a fuse, breaker, switch, bus bar or splice; "converter" is an inverter, charger or DC-DC unit (it joins separate circuits); "enclosure" is a box that holds other devices (cables go to what is inside, never to the box).', { enum: DEVICE_ROLES, default: 'consumer' }),
+    role: str('Part the device plays in the electrical system. "consumer" draws power; "source" makes it; "storage" is a battery; "distribution" is a fuse, breaker, switch, bus bar or splice; "converter" is an inverter, charger or DC-DC unit (it joins separate circuits); "enclosure" is a box that holds other devices (cables go to what is inside, never to the box); "ground" is the ground or bonding point of the boat that earth wires end on.', { enum: DEVICE_ROLES, default: 'consumer' }),
     iconAttachmentId: nullable(str('Id of the attachment used as the device icon. The image is served by GET /plugins/signalk-wiring/devices/{id}/icon.')),
     len: nullable(num('Load equivalency number (LEN) of an NMEA 2000 device; one LEN is 50 mA. Empty when unknown.')),
     schematicBoxColor: nullable(str('Colour of the device box on schematics, a CSS colour.')),
@@ -159,8 +159,9 @@ const schemas = {
     derivedVoltage: nullable(num('Voltage worked out from the supply.', { unit: 'V' })),
     ac: bool('True when the circuit carries AC (line conductors).'),
     cableIds: idList('Cables on the supply (positive or line) side.'),
-    returnCableIds: idList('Negative or neutral cables that serve the circuit.'),
-    implicitReturnDeviceIds: idList('Devices the return is assumed to reach without a cable (a chassis or bus).'),
+    returnCableIds: idList('Negative, neutral or earth cables that serve the circuit: the wires its loads return or ground through.'),
+    implicitReturnDeviceIds: idList('Devices the return (negative or neutral) is assumed to reach without a cable (a chassis or bus).'),
+    noEarthDeviceIds: idList('Loads of an AC circuit that have no earth path to a ground device. Only filled when the boat has a device with the role ground.'),
     deviceIds: idList('Every device the circuit touches.'),
     supplyDeviceIds: idList('Where the power comes from.'),
     endDeviceIds: idList('The devices the circuit ends at (the loads).'),

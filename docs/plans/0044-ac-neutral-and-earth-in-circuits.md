@@ -67,15 +67,22 @@ These are my proposals, to be reviewed before the build:
   page line and the Dashboard list appear only when at least one live ground
   device exists. The Dashboard list is not counted in the Needs attention total:
   it is a muted section, "No earth path (N)", listing the consumers.
+- **A combined cable is recorded on its own circuit only (found while building).**
+  A cable that carries a line conductor with its neutral and earth belongs to the
+  circuit that feeds through it. The walk crosses it to reach the target, but does
+  not add it to the circuits downstream, because their loads would then be counted
+  on the feeder a second time (the demo boat's inverter-to-main-breaker cable read
+  "too small" against the sum of every branch). Only cables with no line conductor
+  (neutral bars, ground bars) are shared between circuits.
 - **A transfer switch or other enclosure passes the walk through**, like any
   non-consumer device, so the earth wires I recorded on the box itself work.
-- **Cable checks (reviewed with the user).**
-  - Neutral cables are checked against the circuit current, as the line is
-    (single phase: the neutral carries the line current).
-  - Earth-only cables are exempt from the current and voltage drop checks. A
-    protective conductor is not sized by the load, and checking it against the
-    load would add false "cable too small" results. They show as "protective
-    earth", not as "cannot be checked".
+- **Cable checks (reviewed with the user).** Neutral cables are checked against
+  the circuit current, as the line is (single phase: the neutral carries the line
+  current). Earth-only cables are exempt from the current and voltage drop checks,
+  on AC and DC circuits alike. A protective conductor is not sized by the load.
+  While building I found `isNonPower` in `public/cableChecks.js` already exempts
+  earth-only (and signal-only) cables, so no change is needed there and no new
+  "protective earth" badge was added: exempt cables show no check result, as today.
 - **Wording stays advisory**, as everywhere else.
 
 ## Relevant SPEC/ARCHITECTURE Sections
@@ -124,8 +131,7 @@ warnings list gets the new code.
   line becomes "Return assumed alongside the feed for"; a new muted line "No
   earth path found for: ..." from `noEarthDeviceIds`. The return cables table
   already lists `returnCableIds`.
-- Cable checks (`public/cableChecks.js`): earth-only cables return the exempt
-  result with the badge "protective earth".
+- Cable checks: nothing to change, earth-only cables are already exempt.
 - Dashboard (`public/dashboard.js`, `public/dashboardView.js`): a muted "No
   earth path (N)" list from the circuits' `noEarthDeviceIds`, outside the
   attention count, shown only when a ground device exists.
@@ -166,11 +172,11 @@ it describes the circuit rules.
 
 ## Implementation Steps
 
-- [ ] The `ground` role (store, API enum, picker, icon fallback, legend).
-- [ ] The trace in `src/circuits.js` with unit tests.
-- [ ] Resource and OpenAPI text, `noEarthDeviceIds`.
-- [ ] Cable checks: protective earth exemption, with tests.
-- [ ] The circuit page lines and the Dashboard list.
+- [x] The `ground` role (store, API enum, picker, icon fallback, legend).
+- [x] The trace in `src/circuits.js` with unit tests.
+- [x] Resource and OpenAPI text, `noEarthDeviceIds`.
+- [x] Cable checks: nothing to change, earth-only cables are already exempt.
+- [x] The circuit page lines and the Dashboard list.
 - [ ] SPEC, CHANGELOG, headless checks on the demo and the real boat copy.
 
 ## Files to Create/Modify
@@ -178,8 +184,7 @@ it describes the circuit rules.
 - `src/circuits.js`, `src/resources.js`, `src/store.js`, `src/openapiSchemas.js`,
   `public/roles.js`, `public/builtinIcons.js`, `public/floorplanLegend.js`,
   `public/dashboard.js`, `public/dashboardView.js`,
-  `public/cableChecks.js`, `public/app.js`, `test/circuits.test.js`,
-  `test/cableChecks.test.mjs` (or the existing cable check tests),
+  `public/app.js`, `test/circuitsAcReturn.test.js`,
   `SPEC.md`, `CHANGELOG.md`.
 
 ## Open questions

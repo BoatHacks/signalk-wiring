@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { ROLES, roleLabel, isConsumer } from '../public/roles.js'
 
 test('the roles are consumer, source, storage, distribution, converter and enclosure', () => {
-  assert.deepEqual(ROLES.map((r) => r.value), ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure'])
+  assert.deepEqual(ROLES.map((r) => r.value), ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure', 'ground'])
   for (const r of ROLES) assert.ok(r.label && r.hint)
 })
 

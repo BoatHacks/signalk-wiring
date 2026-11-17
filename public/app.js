@@ -2085,7 +2085,8 @@ function CircuitDetail ({ circuitId, onBack, onNotFound = () => {} }) {
             <div class="meta">Protected by: ${d.protectorId ? html`<${DeviceLink} id=${d.protectorId} names=${deviceNameById} devices=${deviceById} />` : 'nothing (no fuse or breaker)'}</div>
             <div class="meta">Supply: ${names(d.supplyDeviceIds)}</div>
             <div class="meta">Ends at: ${names(d.endDeviceIds)}</div>
-            ${d.implicitReturnDeviceIds.length > 0 && html`<div class="meta">Negative assumed alongside the feed for: ${names(d.implicitReturnDeviceIds)}</div>`}
+            ${d.implicitReturnDeviceIds.length > 0 && html`<div class="meta">Return (negative or neutral) assumed alongside the feed for: ${names(d.implicitReturnDeviceIds)}</div>`}
+            ${(d.noEarthDeviceIds || []).length > 0 && html`<div class="meta" data-testid="no-earth">No earth path to a ground point found for: ${names(d.noEarthDeviceIds)}</div>`}
           `}
           ${d && d.warnings.map((w, i) => html`<div key=${i} class="error-banner">${w.message}</div>`)}
           ${circuit.notes && html`<p>${circuit.notes}</p>`}

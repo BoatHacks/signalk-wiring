@@ -92,6 +92,19 @@ constraint enforced on the data model.
     bar, and belongs to every circuit whose consumers return through it. A
     consumer with no negative recorded is assumed to return alongside its
     feed.
+  - The same holds for AC (plan 0044). On an AC circuit the neutral cables, and
+    on any circuit the earth cables, that the loads return or ground through
+    belong to the circuit (`returnCableIds`). A neutral path ends at a storage,
+    source or converter, like a negative; an earth path ends only at a device
+    with the role `ground` (the boat's central ground or bonding point), so earth
+    cables join circuits once such a device exists. A load with no neutral
+    recorded anywhere is assumed to return alongside its feed. A load whose
+    neutral is a separate cable that does not reach a target raises a
+    `neutral-incomplete` warning; a load whose neutral is only inside its own
+    feed cable never warns. An AC load with no earth path is listed in
+    `noEarthDeviceIds` (a quiet note on the circuit page and the Dashboard, never
+    a warning) and only while the boat has a ground device. An earth-only cable is
+    not size-checked.
   - A cable entered the wrong way round (From a load, or To a source) is
     reported as a warning on the circuit overview.
 - A **device** can be fed by more than one circuit (e.g. a device with a
@@ -171,8 +184,8 @@ them.
   - The resource also carries `derived`, never stored: `protectorId`,
     `unprotected`, `ratingA` (the trip rating of the protecting device),
     `voltage` (override, else the supply voltage), `derivedVoltage`, `ac`,
-    `cableIds` (feed cables), `returnCableIds` (negative cables serving
-    it), `implicitReturnDeviceIds`, `deviceIds`, `supplyDeviceIds`,
+    `cableIds` (feed cables), `returnCableIds` (negative, neutral and earth cables serving
+    it), `implicitReturnDeviceIds`, `noEarthDeviceIds`, `deviceIds`, `supplyDeviceIds`,
     `endDeviceIds` and `warnings`. It is null for a removed circuit.
   - `meterPath` and `meterUnit` (optional, `A` or `W`): a SignalK path that
     measures this whole derived circuit, used by load calibration.
@@ -247,7 +260,7 @@ them.
     icon color is stored and shown on the device page only; nothing draws it
     until icons are drawn in the boxes. Floorplan markers keep role colors.
     `role`
-    (consumer | source | storage | distribution | converter | enclosure; consumer by
+    (consumer | source | storage | distribution | converter | enclosure | ground; consumer by
     default, so devices recorded before roles existed stay valid), `current`
     (ac | dc, or unset for either: whether the device works on AC or DC, used
     to choose the type of a new cable; a new device gets it from its type, for

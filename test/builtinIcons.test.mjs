@@ -13,7 +13,7 @@ test('every suggested type of every role gets its own simple icon, never the gen
       const { simple } = iconFor({ type, role })
       assert.ok(SIMPLE_ICONS[simple], `${type}: no icon for ${simple}`)
       assert.notEqual(simple, 'generic', `${type} fell back to generic`)
-      if (role !== 'enclosure') assert.notEqual(simple, role, `${type} fell back to the role icon`)
+      if (role !== 'enclosure' && role !== 'ground') assert.notEqual(simple, role, `${type} fell back to the role icon`)
     }
   }
 })

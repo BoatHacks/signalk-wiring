@@ -72,7 +72,7 @@ const TABLES = {
 // breakers, fuses, bus bars, panels, isolators and relays; converters are
 // inverters, chargers and DC-DC units. An enclosure (plan 0024) is a housing
 // that holds other devices; cables go to what is inside, never to it.
-const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure']
+const DEVICE_ROLES = ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure', 'ground']
 
 // Tables whose rows can belong to a zone.
 const ZONED_TABLES = ['devices', 'wire_runs', 'conduits']

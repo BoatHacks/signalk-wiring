@@ -1266,3 +1266,7 @@ form.form-box .form-field { gap: 4px; }
 .behind-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .load-summary td .zone-toggle { margin-right: 2px; }
 .behind-list .meta { margin-left: 6px; }
+
+/* A quiet note on the Dashboard: listed, not counted as needing attention (plan 0044). */
+.dash-quiet h3 { color: var(--text-muted-strong); font-weight: 500; }
+.dash-quiet .dash-row a { color: var(--text-muted-strong); }

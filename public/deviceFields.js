@@ -11,10 +11,10 @@ import { normalizeHex } from './colorTone.js'
 export function deviceFieldVisible (key, values, context = {}) {
   const role = values.role || 'consumer'
   switch (key) {
-    case 'len': return role !== 'enclosure'
+    case 'len': return role !== 'enclosure' && role !== 'ground'
     case 'tripRatingA': return role === 'distribution'
     // Only an enclosure's contents carry power, so the power fields do not apply to it.
-    case 'ratedPowerW': case 'current': return role !== 'enclosure'
+    case 'ratedPowerW': case 'current': return role !== 'enclosure' && role !== 'ground'
     // Ratings are printed on switches, breakers, fuses, bus bars and panels.
     case 'ratedAcA': case 'ratedAcV': case 'ratedDcA': case 'ratedDcV': return role === 'distribution'
     case 'nominalVoltage': return role === 'storage' || role === 'source'

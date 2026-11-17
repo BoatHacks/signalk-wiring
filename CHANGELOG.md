@@ -7,6 +7,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- AC neutral and earth in circuits (plan 0044). The neutral cables an AC circuit's loads return through, and the earth cables they ground through, now belong to the circuit, the way negative cables do on the DC side, so neutral bars and ground bars stop showing as "Cables in no circuit". A new device role, Ground (the boat's central ground or bonding point), is where an earth path ends; earth cables join circuits once one exists. A load whose separate neutral cable does not reach a source or converter raises a warning; a load with no earth path is a quiet note on the circuit page and the Dashboard, only once the boat has a ground device, and never a warning.
+
 - More choices for what a cable carries: Ethernet, CAN bus, USB, HDMI, serial (RS-232, RS-485, TTL such as VE.Direct and VE.Bus) and coaxial (antenna, RF), next to NMEA 2000, Seatalk-1, NMEA 0183, sensor and other. Each has its own colour on the schematics and the floorplan, in the day and the red night theme, and shows as a badge in the cable table.
 
 ### Fixed

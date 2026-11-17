@@ -15,6 +15,7 @@ export const SIMPLE_ICONS = {
   distribution: '<path d="M4 12h6M10 12l6-6h4M10 12l6 6h4M10 12h10"/>',
   converter: '<path d="M4 9h13l-3-3M20 15H7l3 3"/>',
   enclosure: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M12 3v18M9 11v2"/>',
+  ground: '<path d="M12 3v9M5 12h14M8 16h8M10.5 20h3"/>',
   // consumers
   light: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3 11c.7.6 1 1.3 1 2h4c0-.7.3-1.4 1-2a6 6 0 0 0-3-11z"/>',
   pump: '<circle cx="12" cy="12" r="8"/><path d="M9 8l7 4-7 4z"/>',
@@ -122,7 +123,7 @@ const TYPE_RULES = [
   [/cabinet|box/, 'enclosure']
 ]
 
-const ROLE_FALLBACKS = ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure']
+const ROLE_FALLBACKS = ['consumer', 'source', 'storage', 'distribution', 'converter', 'enclosure', 'ground']
 
 function simpleKeyFor (device) {
   const type = String(device.type || '').trim().toLowerCase()

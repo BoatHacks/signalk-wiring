@@ -107,6 +107,7 @@ function withDerived (resource, derived) {
       cableIds: found.cableIds,
       returnCableIds: found.returnCableIds,
       implicitReturnDeviceIds: found.implicitReturnDeviceIds,
+      noEarthDeviceIds: found.noEarthDeviceIds || [],
       deviceIds: found.deviceIds,
       supplyDeviceIds: found.supplyDeviceIds,
       endDeviceIds: found.endDeviceIds,

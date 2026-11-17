@@ -279,6 +279,19 @@ export function dashboardChecks (data) {
     .map((c) => ({ id: c.id, label: cableLabel(c, deviceById), href: hashForState({ tab: 'cables' }) }))
     .sort((a, b) => a.label.localeCompare(b.label))
 
+  // AC loads with no earth path to a ground device (plan 0044). A quiet note:
+  // not counted in `attention`, and empty while the boat has no ground device.
+  const noEarth = []
+  const seenEarth = new Set()
+  for (const c of circuits) {
+    for (const id of c.derived.noEarthDeviceIds || []) {
+      if (seenEarth.has(id) || !deviceById.has(id)) continue
+      seenEarth.add(id)
+      noEarth.push({ id, name: deviceById.get(id).name, href: hashForState({ tab: 'devices', id }) })
+    }
+  }
+  noEarth.sort((a, b) => a.name.localeCompare(b.name))
+
   const onSchematic = schematicPlaced(devices, data.schematics)
   const unplaced = devices
     .filter((d) => (data.floorplan === false || !onFloorplan(d, deviceById)) && !onSchematic.has(d.id))
@@ -298,7 +311,7 @@ export function dashboardChecks (data) {
 
   const attention = counts.fail + counts.warning + counts.cannot + busCounts.fail + busCounts.warning + busCounts.cannot +
     unprotected.length + noCircuit.length + unplaced.length + overlaps.length
-  return { cables: counts, worstCables, buses: busCounts, worstBuses, unprotected, noCircuit, unplaced, overlaps, attention }
+  return { cables: counts, worstCables, buses: busCounts, worstBuses, unprotected, noCircuit, noEarth, unplaced, overlaps, attention }
 }
 
 // ---- Live readings ----
