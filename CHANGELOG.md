@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-11-17
+
 ### Added
 
 - AC neutral and earth in circuits (plan 0044). The neutral cables an AC circuit's loads return through, and the earth cables they ground through, now belong to the circuit, the way negative cables do on the DC side, so neutral bars and ground bars stop showing as "Cables in no circuit". A new device role, Ground (the boat's central ground or bonding point), is where an earth path ends; earth cables join circuits once one exists. A load whose separate neutral cable does not reach a source or converter raises a warning; a load with no earth path is a quiet note on the circuit page and the Dashboard, only once the boat has a ground device, and never a warning.
