@@ -279,6 +279,22 @@ interface. How a given bridge discovers and reads it has not been tried here.
 - **Advisory.** The data is documentation of one boat's wiring, and the load and
   cable checks are advice, not a safety guarantee.
 
+## Documenting your boat with an AI agent
+
+Filling in a whole boat by hand takes a long time. The
+[`document-boat-wiring`](skills/document-boat-wiring/SKILL.md) skill lets an AI
+coding agent (such as Claude Code) do most of it with you:
+
+1. It gathers what you have: owner's manual wiring sheets, refit plans and parts
+   lists, phone photos of panels and bus bars.
+2. It builds the model on a local sandbox server.
+3. It asks you about the gaps one question at a time.
+4. It installs the result on your boat's server once you have reviewed it.
+
+It writes only through the plugin's API, asks before each write to the boat, and never
+needs your password. To get a token it uses an access request that you approve in the
+Admin UI. See [skills/README.md](skills/README.md) to install it.
+
 ## Why Node ≥ 22.13
 
 The plugin stores its data with Node's built-in `node:sqlite`, so there is
