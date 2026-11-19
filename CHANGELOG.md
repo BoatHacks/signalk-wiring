@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-11-19
+
 ### Added
 
 - Icons in Schematics (issue #44, plan 0045). Each device box now shows the device's icon above its name: its own attached image when it has one, otherwise the built-in icon for its type. Boxes are about 26 px taller to make room. Saved layouts keep their positions, so on a tightly packed page boxes may touch until you run Auto-arrange.
