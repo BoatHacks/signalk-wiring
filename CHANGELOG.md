@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- An agent skill, `skills/document-boat-wiring` (plan 0045), that documents a whole boat's wiring with the owner. An AI coding agent gathers the owner's drawings, plans and photos, builds the model on a local sandbox server, asks about the gaps one question at a time, and installs the result on the boat's server through the API. Its tools, plain Node.js with no packages:
+  - a sandbox server with the plugin;
+  - a rerunnable loader for a data file;
+  - a gap report;
+  - a server-to-server copy with photos and drawings;
+  - an access-request token helper, so the owner never shares a password;
+  - an image crop helper.
+
 ## [0.9.5] - 2026-11-17
 
 ### Added
