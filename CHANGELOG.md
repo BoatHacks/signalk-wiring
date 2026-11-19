@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Pinch zooming on a trackpad in Schematics (issue #43). Every small pinch or scroll event used to zoom by a full step, so the smallest gesture zoomed far too much. A pinch and a trackpad scroll now zoom in proportion to the gesture; a mouse wheel notch keeps the fixed step.
+
 ## [0.9.5] - 2026-11-17
 
 ### Added

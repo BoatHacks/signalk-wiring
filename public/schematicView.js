@@ -487,7 +487,7 @@ function SchematicEditor ({ schematic, data, reload, onBack, onOpen, onError, re
     if (!svg) return undefined
     const onWheel = (e) => {
       e.preventDefault()
-      zoomAt(e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, toCanvas(e))
+      zoomAt(G.wheelZoomFactor(e, ZOOM_STEP), toCanvas(e))
     }
     svg.addEventListener('wheel', onWheel, { passive: false })
     return () => svg.removeEventListener('wheel', onWheel)

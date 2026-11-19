@@ -350,3 +350,15 @@ test('isDoubleTap: same device, within 350 ms and 20 px', async () => {
   assert.equal(S.isDoubleTap(a, { id: 'd1', t: 900, x: 100, y: 100 }), false)
   assert.equal(S.deviceHash('abc'), '#/devices/abc')
 })
+
+test('wheelZoomFactor: a small pinch delta zooms a little, a mouse notch keeps the step (issue #43)', () => {
+  const f = S.wheelZoomFactor
+  assert.ok(f({ deltaY: -1, ctrlKey: true }) > 1 && f({ deltaY: -1, ctrlKey: true }) < 1.02)
+  assert.ok(f({ deltaY: 2, ctrlKey: true }) < 1 && f({ deltaY: 2, ctrlKey: true }) > 0.97)
+  assert.equal(f({ deltaY: -100 }), 1.25)
+  assert.equal(f({ deltaY: 100 }), 1 / 1.25)
+  assert.equal(f({ deltaY: -3, deltaMode: 1 }), 1.25)
+  assert.equal(f({ deltaY: 0, ctrlKey: true }), 1)
+  assert.equal(f({ deltaY: -500, ctrlKey: true }), 2)
+  assert.ok(f({ deltaY: -40 }) <= 2 && f({ deltaY: -40 }) > 1)
+})

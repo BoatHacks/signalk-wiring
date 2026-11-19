@@ -803,3 +803,16 @@ export function withDevicePlaced (devices, placed, index) {
 export function withWireBends (wires, wireRunId, points) {
   return [...wires.filter((w) => w.wireRunId !== wireRunId), { wireRunId, points }]
 }
+
+// How much one wheel event zooms (issue #43). A trackpad pinch (ctrlKey set)
+// and a trackpad scroll arrive as streams of small deltas, so they zoom in
+// proportion to the delta; a mouse wheel notch (a large pixel delta, or a line
+// delta) keeps the fixed step. A factor above 1 zooms in.
+export function wheelZoomFactor ({ deltaY, deltaMode = 0, ctrlKey = false }, step = 1.25) {
+  const dy = Number(deltaY) || 0
+  if (dy === 0) return 1
+  const notch = deltaMode !== 0 || (!ctrlKey && Math.abs(dy) >= 50)
+  if (notch) return dy < 0 ? step : 1 / step
+  const factor = Math.exp(-dy * (ctrlKey ? 0.01 : 0.004))
+  return Math.min(2, Math.max(0.5, factor))
+}
