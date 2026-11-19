@@ -744,6 +744,7 @@ main:has(.cables-table) { max-width: none; }
 .sch-device.selected .sch-device-box { stroke-width: 3; }
 .sch-device.dim { opacity: 0.3; }
 .sch-device.lit .sch-device-box { stroke: var(--wire-highlight); stroke-width: 3; }
+.sch-device-icon { color: var(--text-muted-strong); pointer-events: none; }
 .sch-device-name { font-size: 12px; font-weight: 600; fill: var(--text); pointer-events: none; }
 .sch-device-type, .sch-terminal-label { font-size: 9px; fill: var(--text-muted-strong); pointer-events: none; }
 .sch-terminal { stroke: var(--surface); stroke-width: 1; }

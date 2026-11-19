@@ -5,6 +5,10 @@ import { readFileSync } from 'node:fs'
 import * as S from '../../public/schematic.js'
 import * as R from '../../public/wireRouter.js'
 
+// These positions were laid out before the icon header of plan 0045 made boxes
+// taller; the router rules do not depend on it, so the boxes keep the old header.
+const LEGACY_BOX = { headerH: 30, minH: 46 }
+
 const data = JSON.parse(readFileSync(new URL('../fixtures/boat-pages.json', import.meta.url), 'utf8'))
 
 export const pageNames = data.schematics.map((s) => s.name)
@@ -12,7 +16,7 @@ export const pageNames = data.schematics.map((s) => s.name)
 export function pageInput (name, { stubPos = {} } = {}) {
   const sch = data.schematics.find((s) => s.name === name)
   const devs = new Map(data.devices.map((d) => [d.id, d]))
-  const boxes = sch.devices.map((p) => S.deviceBox(devs.get(p.deviceId), { x: p.x, y: p.y }))
+  const boxes = sch.devices.map((p) => S.deviceBox(devs.get(p.deviceId), { x: p.x, y: p.y }, LEGACY_BOX))
   const boxById = new Map(boxes.map((b) => [b.id, b]))
   const cables = data.cables.filter((c) => c.status !== 'removed')
   const onPage = cables.filter((c) => boxById.has(c.fromDeviceId) && boxById.has(c.toDeviceId))

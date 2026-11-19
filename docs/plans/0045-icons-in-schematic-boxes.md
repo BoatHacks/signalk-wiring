@@ -43,17 +43,17 @@ The remaining details are mine, for the diff review:
 - **Geometry.** `HEADER_H` 30 to 56 and `BOX_MIN_H` 46 to 72 in
   `public/schematic.js`. Terminal and port rows are all placed from `HEADER_H`,
   so wire anchors, port blocks, lanes and routing follow without other changes.
-  The device name moves from y 14 to y 40 and the type from y 25 to y 53.
+  The device name moves from y 14 to y 43 and the type from y 25 to y 54.
 - **The icon** is centered horizontally at y 5 to 33 (28 px). A built-in icon is
   the same inline SVG that circuit diagrams draw (`SIMPLE_ICONS`, a 24 unit
   viewBox, stroke `currentColor`); an image is an SVG `<image>` with
   `preserveAspectRatio="xMidYMid meet"`.
 - **Live reading position.** A box without bottom ports draws its reading at
   `box.h - 5`, which still fits. A box with bottom ports draws it at y 26, which
-  would now sit on the icon, so it moves to y 61 (below the type line).
-- **A shared SVG icon component.** `DeviceIconSvg` in `public/deviceIcon.js`
-  draws an icon at a fixed x and a height for circuit nodes. It gets an optional
-  `size` and `x` so the schematic reuses it instead of a second copy.
+  would now sit on the icon, so it moves to y 66 (below the type line).
+- **A small SVG icon component.** `DeviceIconSlot` in `public/deviceIcon.js`
+  draws the built-in icon or the image in a square slot at a given position,
+  from the same `SIMPLE_ICONS` the circuit diagrams use.
 - **Wiring and hit areas.** The icon takes no pointer events (`pointer-events:
   none`), so dragging a box, double clicking an enclosure and the connect handle
   work as before.
@@ -92,10 +92,10 @@ same variable the device name already follows.
 
 ## Implementation Steps
 
-- [ ] Geometry change with tests.
-- [ ] Icon drawn in the box, name, type and reading moved, enclosures.
-- [ ] Style rule; fix tests that hard code the old sizes.
-- [ ] CHANGELOG (Added, and a note that saved layouts keep their positions and
+- [x] Geometry change with tests.
+- [x] Icon drawn in the box, name, type and reading moved, enclosures.
+- [x] Style rule; fix tests that hard code the old sizes.
+- [x] CHANGELOG (Added, and a note that saved layouts keep their positions and
       boxes are taller), headless checks.
 
 ## Files to Create/Modify

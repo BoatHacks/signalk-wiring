@@ -44,3 +44,16 @@ export function DeviceIconSvg ({ choice, height, headerRow }) {
     fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
     dangerouslySetInnerHTML=${{ __html: inner }}></svg>`
 }
+
+// A fixed slot icon for a diagram box (plan 0045): the built-in icon or the
+// attached image scaled to fit a size by size square at (x, y).
+export function DeviceIconSlot ({ choice, x, y, size = 28 }) {
+  if (!choice) return null
+  if (choice.kind === 'image') {
+    return html`<image class="sch-device-icon" href=${choice.url} x=${x} y=${y} width=${size} height=${size} preserveAspectRatio="xMidYMid meet" />`
+  }
+  const inner = SIMPLE_ICONS[choice.key] || SIMPLE_ICONS.generic
+  return html`<svg class="sch-device-icon" x=${x} y=${y} width=${size} height=${size} viewBox="0 0 24 24" aria-hidden="true"
+    fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+    dangerouslySetInnerHTML=${{ __html: inner }}></svg>`
+}

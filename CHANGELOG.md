@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Icons in Schematics (issue #44, plan 0045). Each device box now shows the device's icon above its name: its own attached image when it has one, otherwise the built-in icon for its type. Boxes are about 26 px taller to make room. Saved layouts keep their positions, so on a tightly packed page boxes may touch until you run Auto-arrange.
+
 ### Fixed
 
 - Pinch zooming on a trackpad in Schematics (issue #43). Every small pinch or scroll event used to zoom by a full step, so the smallest gesture zoomed far too much. A pinch and a trackpad scroll now zoom in proportion to the gesture; a mouse wheel notch keeps the fixed step.

@@ -9,8 +9,8 @@ import { hashForState } from './router.js'
 // x, y its top-left corner. A side is 'left', 'right', 'top' or 'bottom'.
 
 export const BOX_W = 150
-export const BOX_MIN_H = 46
-export const HEADER_H = 30
+export const BOX_MIN_H = 72
+export const HEADER_H = 56
 export const TERMINAL_ROW_H = 18
 export const STUB = 18
 export const LANE_GAP = 10
@@ -104,6 +104,8 @@ export function devicePorts (device) {
 }
 
 // opts.w: the box width (default BOX_W); a box with bottom ports may grow.
+// opts.headerH and opts.minH override the header and minimum height (the
+// router tests lay boxes out with the old, shorter header).
 export function deviceBox (device, pos, opts = {}) {
   if (hasPorts(device)) return portBox(device, pos, opts)
   const terminals = device.terminals || []
@@ -111,7 +113,8 @@ export function deviceBox (device, pos, opts = {}) {
   const count = { left: 0, right: 0 }
   for (const s of sides) count[s]++
   const rows = Math.max(count.left, count.right)
-  const h = Math.max(BOX_MIN_H, HEADER_H + rows * TERMINAL_ROW_H + 6)
+  const headerH = opts.headerH || HEADER_H
+  const h = Math.max(opts.minH || BOX_MIN_H, headerH + rows * TERMINAL_ROW_H + 6)
   const w = opts.w || device.boxW || BOX_W
   const seen = { left: 0, right: 0 }
   return {
@@ -132,7 +135,7 @@ export function deviceBox (device, pos, opts = {}) {
         port: t.port || '',
         side,
         x: side === 'left' ? pos.x : pos.x + w,
-        y: pos.y + HEADER_H + row * TERMINAL_ROW_H + TERMINAL_ROW_H / 2
+        y: pos.y + headerH + row * TERMINAL_ROW_H + TERMINAL_ROW_H / 2
       }
     })
   }
@@ -140,7 +143,9 @@ export function deviceBox (device, pos, opts = {}) {
 
 function portBox (device, pos, opts) {
   const groups = devicePorts(device)
-  const cursor = { left: HEADER_H, right: HEADER_H }
+  const headerH = opts.headerH || HEADER_H
+  const minH = opts.minH || BOX_MIN_H
+  const cursor = { left: headerH, right: headerH }
   const placed = []
   let bottomW = 0
   const bottomGroups = groups.filter((g) => g.side === 'bottom')
@@ -158,7 +163,7 @@ function portBox (device, pos, opts) {
     cursor[g.side] = firstRowTop + g.terminals.length * TERMINAL_ROW_H + PORT_GAP
     placed.push(g)
   }
-  const bodyH = Math.max(BOX_MIN_H - (hasBottom ? BOTTOM_H : 0), cursor.left - PORT_GAP + 4, cursor.right - PORT_GAP + 4)
+  const bodyH = Math.max(minH - (hasBottom ? BOTTOM_H : 0), cursor.left - PORT_GAP + 4, cursor.right - PORT_GAP + 4)
   const h = bodyH + (hasBottom ? BOTTOM_H : 0)
 
   let bx = (w - (bottomW - PORT_GAP)) / 2

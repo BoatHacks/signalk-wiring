@@ -362,3 +362,13 @@ test('wheelZoomFactor: a small pinch delta zooms a little, a mouse notch keeps t
   assert.equal(f({ deltaY: -500, ctrlKey: true }), 2)
   assert.ok(f({ deltaY: -40 }) <= 2 && f({ deltaY: -40 }) > 1)
 })
+
+test('deviceBox: the header leaves room for the icon above the name (plan 0045)', () => {
+  assert.equal(S.HEADER_H, 56)
+  const b = box('a', 10, 20, { terminals: [{ name: 'in', conductor: 'positive' }] })
+  assert.equal(b.h, Math.max(S.BOX_MIN_H, S.HEADER_H + S.TERMINAL_ROW_H + 6))
+  assert.equal(box('p', 0, 0).h, S.BOX_MIN_H)
+  assert.equal(b.terminals[0].y, 20 + S.HEADER_H + S.TERMINAL_ROW_H / 2)
+  const big = box('b', 0, 0, { terminals: Array.from({ length: 6 }, (_, i) => ({ name: 't' + i, conductor: 'positive' })) })
+  assert.ok(big.h >= S.HEADER_H + 3 * S.TERMINAL_ROW_H)
+})

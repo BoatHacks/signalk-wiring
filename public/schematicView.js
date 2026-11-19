@@ -4,7 +4,8 @@ import dagre from './vendor/dagre.esm.js'
 import { newId } from './ids.js'
 import { TYPE_SUGGESTIONS } from './deviceTypes.js'
 import { roleLabel } from './roles.js'
-import { DeviceIcon } from './deviceIcon.js'
+import { DeviceIcon, DeviceIconSlot } from './deviceIcon.js'
+import { iconChoice } from './deviceIcons.js'
 import * as G from './schematic.js'
 import { startValues } from './quickCable.js'
 import { boxColors } from './colorTone.js'
@@ -1510,13 +1511,14 @@ function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
     <g class=${cls} transform="translate(${box.x}, ${box.y})" style=${colorStyle} data-device=${box.id} data-live=${live ? live.look : undefined}>
       ${live && live.title && html`<title>${live.title}</title>`}
       <rect width=${box.w} height=${box.h} rx="5" class="sch-device-box" />
-      <text x=${box.w / 2} y="14" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
+      <${DeviceIconSlot} choice=${iconChoice(device)} x=${box.w / 2 - 14} y=${5} size=${28} />
+      <text x=${box.w / 2} y="43" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
       ${device.isEnclosure
-        ? html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type" data-testid="enclosure-holds">${shorten(device.type || 'Enclosure', 18)}, holds ${device.holds}</text>
+        ? html`<text x=${box.w / 2} y="54" text-anchor="middle" class="sch-device-type" data-testid="enclosure-holds">${shorten(device.type || 'Enclosure', 18)}, holds ${device.holds}</text>
             <g class="sch-enclosure-link" data-testid="enclosure-link" transform=${'translate(' + (box.w - 16) + ' 4)'}><title>Double-click to open the inside</title><rect width="12" height="12" rx="2" /><path d="M3 9 L9 3 M5 3 H9 V7" /></g>`
-        : device.type && html`<text x=${box.w / 2} y="25" text-anchor="middle" class="sch-device-type">${shorten(device.type, 26)}</text>`}
+        : device.type && html`<text x=${box.w / 2} y="54" text-anchor="middle" class="sch-device-type">${shorten(device.type, 26)}</text>`}
       ${live && live.look === 'locked' && html`<${LiveLock} x=${box.w - 10} y=${10} size=${13} />`}
-      ${live && html`<${LiveReading} x=${box.w / 2} y=${box.bottomPorts ? 26 : box.h - 5} size=${live.reading && live.reading.length > 28 ? 8.5 : 10} text=${live.reading} stale=${live.stale} />`}
+      ${live && html`<${LiveReading} x=${box.w / 2} y=${box.bottomPorts ? 66 : box.h - 5} size=${live.reading && live.reading.length > 28 ? 8.5 : 10} text=${live.reading} stale=${live.stale} />`}
       ${!live && !device.isEnclosure && html`<circle cx=${box.w / 2} cy=${box.bottomPorts ? 0 : box.h} r="6" class="sch-connect-handle" data-testid="connect-handle"><title>Drag to connect</title></circle>`}
       <${PortBlocks} box=${box} labels=${!!device.isEnclosure} />
     </g>
