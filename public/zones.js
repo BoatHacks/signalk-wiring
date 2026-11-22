@@ -107,3 +107,28 @@ export function writeFlag (name, value, storage) {
     // the choice just is not remembered
   }
 }
+
+// What a zone holds: the items that are not removed, devices sorted by name.
+export function zoneContents (zoneId, { devices = [], wireRuns = [], conduits = [] } = {}) {
+  const here = (item) => item.zoneId === zoneId && item.status !== 'removed'
+  return {
+    devices: devices.filter(here).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    wireRuns: wireRuns.filter(here),
+    conduits: conduits.filter(here)
+  }
+}
+
+// Why Remove is disabled for a zone, or null when it is empty and can go.
+// `counts` is { devices, wireRuns, conduits }; `canMerge` says another zone exists.
+export function removeBlockedReason (counts, canMerge) {
+  const noun = (n, one) => `${n} ${n === 1 ? one : one + 's'}`
+  const parts = []
+  if (counts.devices) parts.push(noun(counts.devices, 'device'))
+  if (counts.wireRuns) parts.push(noun(counts.wireRuns, 'cable'))
+  if (counts.conduits) parts.push(noun(counts.conduits, 'conduit'))
+  if (parts.length === 0) return null
+  const what = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+  return canMerge
+    ? `In use by ${what}. Merge it into another zone first.`
+    : `In use by ${what}. Move them to another zone first.`
+}

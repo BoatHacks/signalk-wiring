@@ -6,7 +6,7 @@ import { ROLES, roleLabel } from './roles.js'
 import { insideOptions, insideText, matchesInside, NOT_INSIDE, pathOf, childrenOf, contentsOf, cablesTouching, removalText } from './enclosures.js'
 import {
   NO_ZONE, parseTags, tagsToText, collectTags, matchesFilter, circuitMatches, matchesSearch, matchesRemoved,
-  readShowRemoved, writeShowRemoved
+  readShowRemoved, writeShowRemoved, zoneContents, removeBlockedReason
 } from './zones.js'
 import { duplicateDevicePayload, duplicateCablePrefill } from './duplicate.js'
 import {
@@ -1173,14 +1173,11 @@ function ZonesManager () {
 
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   const deviceNameById = new Map(devices.map((d) => [d.id, d.name]))
-  const devicesIn = (zoneId) => devices
-    .filter((d) => d.zoneId === zoneId && d.status !== 'removed')
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-  const usage = (zoneId) => ({
-    conduits: conduits.filter((c) => c.zoneId === zoneId && c.status !== 'removed').length,
-    devices: devicesIn(zoneId).length,
-    wireRuns: wireRuns.filter((w) => w.zoneId === zoneId && w.status !== 'removed').length
-  })
+  const contentsOf = (zoneId) => zoneContents(zoneId, { devices, wireRuns, conduits })
+  const usage = (zoneId) => {
+    const c = contentsOf(zoneId)
+    return { conduits: c.conduits.length, devices: c.devices.length, wireRuns: c.wireRuns.length }
+  }
   const [sort, setSort, sorted] = useSort('zones', {
     name: (z) => z.name,
     devices: (z) => usage(z.id).devices,
@@ -1237,41 +1234,63 @@ function ZonesManager () {
         </div>
       `}
       ${sorted(zones).map((zone) => {
+        const contents = contentsOf(zone.id)
         const u = usage(zone.id)
-        const inUse = u.devices + u.wireRuns + u.conduits > 0
-        const expanded = open.has(zone.id) && u.devices > 0
+        const blocked = removeBlockedReason(u, zones.length > 1)
+        const expanded = open.has(zone.id)
+        const renaming = editingId === zone.id
+        const headToggle = () => { if (!renaming) toggle(zone.id) }
         return html`
-          <div class="list-item" key=${zone.id}>
-            <div>
-              <div class="zone-head">
-                <button type="button" class="zone-toggle" disabled=${u.devices === 0}
-                  aria-expanded=${expanded} aria-label=${expanded ? `Hide the devices in ${zone.name}` : `Show the devices in ${zone.name}`}
-                  title=${u.devices === 0 ? 'No devices in this zone' : ''}
-                  onClick=${() => toggle(zone.id)}>${expanded ? '▾' : '▸'}</button>
-                ${editingId === zone.id
-                  ? html`<input type="text" value=${editName} onInput=${(e) => setEditName(e.target.value)}
-                      onKeyDown=${(e) => { if (e.key === 'Enter') rename(zone) }} />`
-                  : html`<div>${zone.name}</div>`}
+          <div class="list-item zone-item" key=${zone.id}>
+            <div class="zone-main">
+              <div class="zone-header" role="button" tabindex="0" aria-expanded=${expanded}
+                aria-label=${`${zone.name}, ${expanded ? 'hide' : 'show'} what is in it`}
+                onClick=${headToggle}
+                onKeyDown=${(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); headToggle() } }}>
+                <div class="zone-head">
+                  <span class="zone-caret" aria-hidden="true">${expanded ? '▾' : '▸'}</span>
+                  <div class="zone-name">${zone.name}</div>
+                </div>
+                <div class="meta">${plural(u.devices, 'device')}, ${plural(u.wireRuns, 'cable')}, ${plural(u.conduits, 'conduit')}</div>
               </div>
-              <div class="meta">${plural(u.devices, 'device')}, ${plural(u.wireRuns, 'cable')}, ${plural(u.conduits, 'conduit')}</div>
               ${expanded && html`
-                <ul class="zone-devices">
-                  ${devicesIn(zone.id).map((d) => html`<li key=${d.id}><${DeviceLink} id=${d.id} names=${deviceNameById} devices=${deviceById} /></li>`)}
-                </ul>
+                <div class="zone-body">
+                  ${u.devices + u.wireRuns + u.conduits === 0 && html`<div class="meta">Nothing in this zone yet.</div>`}
+                  ${u.devices > 0 && html`
+                    <div class="zone-section"><div class="zone-section-title">Devices</div>
+                      <ul class="zone-devices">
+                        ${contents.devices.map((d) => html`<li key=${d.id}><${DeviceLink} id=${d.id} names=${deviceNameById} devices=${deviceById} /></li>`)}
+                      </ul></div>`}
+                  ${u.wireRuns > 0 && html`
+                    <div class="zone-section"><div class="zone-section-title">Cables</div>
+                      <ul class="zone-devices">
+                        ${contents.wireRuns.map((w) => html`<li key=${w.id}><${RouteLink} tab="cables" id=${w.id}>${cableTitle(w, deviceNameById)}<//></li>`)}
+                      </ul></div>`}
+                  ${u.conduits > 0 && html`
+                    <div class="zone-section"><div class="zone-section-title">Conduits</div>
+                      <ul class="zone-devices">
+                        ${contents.conduits.map((c) => html`<li key=${c.id}><${RouteLink} tab="conduits" id=${c.id}>${c.name}<//></li>`)}
+                      </ul></div>`}
+                  <div class="zone-actions">
+                    ${renaming && html`
+                      <input type="text" value=${editName} aria-label="Zone name" autofocus
+                        onInput=${(e) => setEditName(e.target.value)}
+                        onKeyDown=${(e) => { if (e.key === 'Enter') rename(zone); if (e.key === 'Escape') setEditingId(null) }} />
+                      <button onClick=${() => rename(zone)}>Save</button>
+                      <button onClick=${() => setEditingId(null)}>Cancel</button>`}
+                    ${!renaming && html`
+                      <button onClick=${() => { setEditingId(zone.id); setEditName(zone.name) }}>Rename</button>
+                      ${zones.length > 1 && html`
+                        <select value="" aria-label=${`Merge ${zone.name} into another zone`} onChange=${(e) => e.target.value && merge(zone, e.target.value)}>
+                          <option value="">Merge into…</option>
+                          ${zones.filter((z) => z.id !== zone.id).map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
+                        </select>
+                      `}
+                      <button disabled=${!!blocked} title=${blocked || ''} onClick=${() => remove(zone)}>Remove</button>`}
+                  </div>
+                  ${!renaming && blocked && html`<div class="meta zone-reason" data-testid="zone-remove-reason">${blocked}</div>`}
+                </div>
               `}
-            </div>
-            <div class="row-actions">
-              ${editingId === zone.id
-                ? html`<button onClick=${() => rename(zone)}>Save</button><button onClick=${() => setEditingId(null)}>Cancel</button>`
-                : html`<button onClick=${() => { setEditingId(zone.id); setEditName(zone.name) }}>Rename</button>`}
-              ${zones.length > 1 && html`
-                <select value="" onChange=${(e) => e.target.value && merge(zone, e.target.value)}>
-                  <option value="">Merge into…</option>
-                  ${zones.filter((z) => z.id !== zone.id).map((z) => html`<option value=${z.id} key=${z.id}>${z.name}</option>`)}
-                </select>
-              `}
-              <button disabled=${inUse} title=${inUse ? 'In use: merge it or move its items first' : ''}
-                onClick=${() => remove(zone)}>Remove</button>
             </div>
           </div>
         `

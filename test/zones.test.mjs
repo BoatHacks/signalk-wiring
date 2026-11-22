@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  parseTags, tagsToText, collectTags, matchesFilter, circuitMatches, matchesSearch, matchesRemoved, readShowRemoved, writeShowRemoved
+  parseTags, tagsToText, collectTags, matchesFilter, circuitMatches, matchesSearch, matchesRemoved, readShowRemoved, writeShowRemoved, zoneContents, removeBlockedReason
 } from '../public/zones.js'
 
 test('parseTags splits on commas, trims, drops empties and duplicates', () => {
@@ -111,4 +111,23 @@ test('readFlag and writeFlag round trip, with a default and guarded storage', ()
   const broken = { getItem () { throw new Error('x') }, setItem () { throw new Error('x') } }
   assert.equal(readFlag('fold', true, broken), true)
   assert.doesNotThrow(() => writeFlag('fold', true, broken))
+})
+
+test('zoneContents keeps only this zone, drops removed items and sorts devices', () => {
+  const c = zoneContents('z1', {
+    devices: [{ id: 'a', name: 'Pump', zoneId: 'z1' }, { id: 'b', name: 'Fan', zoneId: 'z1' }, { id: 'c', name: 'Gone', zoneId: 'z1', status: 'removed' }, { id: 'd', name: 'Other', zoneId: 'z2' }],
+    wireRuns: [{ id: 'w', zoneId: 'z1' }, { id: 'x', zoneId: 'z2' }],
+    conduits: [{ id: 'k', zoneId: 'z1', status: 'removed' }]
+  })
+  assert.deepEqual(c.devices.map((d) => d.id), ['b', 'a'])
+  assert.deepEqual(c.wireRuns.map((w) => w.id), ['w'])
+  assert.deepEqual(c.conduits, [])
+  assert.deepEqual(zoneContents('z1'), { devices: [], wireRuns: [], conduits: [] })
+})
+
+test('removeBlockedReason names what is in use and what to do', () => {
+  assert.equal(removeBlockedReason({ devices: 48, wireRuns: 0, conduits: 0 }, true), 'In use by 48 devices. Merge it into another zone first.')
+  assert.equal(removeBlockedReason({ devices: 1, wireRuns: 3, conduits: 0 }, true), 'In use by 1 device and 3 cables. Merge it into another zone first.')
+  assert.equal(removeBlockedReason({ devices: 2, wireRuns: 1, conduits: 1 }, false), 'In use by 2 devices, 1 cable and 1 conduit. Move them to another zone first.')
+  assert.equal(removeBlockedReason({ devices: 0, wireRuns: 0, conduits: 0 }, true), null)
 })
