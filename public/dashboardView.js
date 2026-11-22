@@ -210,6 +210,8 @@ function Statistics ({ stats }) {
     </div>`
 }
 
+import { StatusBadge, StatusWord } from './statusBadge.js'
+
 const VERDICT_CLASS = { fail: 'check-fail', warning: 'check-warning', cannot: 'check-cannot' }
 const VERDICT_WORDS = { fail: 'fail', warning: 'warning', cannot: 'cannot check' }
 
@@ -240,7 +242,7 @@ function Checks ({ checks }) {
         <ul class="dash-list" data-testid="worst-cables">
           ${c.worstCables.map((w) => html`
             <li key=${w.id} class="dash-row dash-check"><${Link} href=${w.href}>${w.label}<//>
-              <span class=${'badge check-badge ' + VERDICT_CLASS[w.verdict]}>${w.text}</span>
+              <${StatusBadge} kind=${w.verdict} text=${w.text} className=${'check-badge ' + VERDICT_CLASS[w.verdict]} />
               ${w.reason && html`<div class="meta dash-reason" data-testid="reason">${w.reason}</div>`}</li>`)}
         </ul>`}
       ${busLine.length > 0 && html`<p data-testid="bus-checks">Buses: ${busLine.join(', ')}; ${c.buses.ok} ok.</p>`}
@@ -248,8 +250,8 @@ function Checks ({ checks }) {
         <ul class="dash-list" data-testid="worst-buses">
           ${c.worstBuses.map((b) => html`
             <li key=${b.id} class="dash-row dash-check"><${Link} href=${b.href}>${b.name}<//>
-              <span class=${'badge check-badge ' + VERDICT_CLASS[b.verdict]}>${VERDICT_WORDS[b.verdict]}</span>
-              ${(b.reasons || []).length > 0 && html`<ul class="dash-reasons" data-testid="reason">${b.reasons.map((r, i) => html`<li key=${i} class="meta">${r.title}: ${VERDICT_WORDS[r.verdict]}${r.text ? ', ' + r.text : ''}</li>`)}</ul>`}</li>`)}
+              <${StatusBadge} kind=${b.verdict} text=${VERDICT_WORDS[b.verdict]} className=${'check-badge ' + VERDICT_CLASS[b.verdict]} />
+              ${(b.reasons || []).length > 0 && html`<ul class="dash-reasons" data-testid="reason">${b.reasons.map((r, i) => html`<li key=${i} class="meta">${r.title}: <${StatusWord} kind=${r.verdict} text=${VERDICT_WORDS[r.verdict]} />${r.text ? ', ' + r.text : ''}</li>`)}</ul>`}</li>`)}
         </ul>`}
       ${group('Circuits with no protection', c.unprotected, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Cables in no circuit', c.noCircuit, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.label}<//></li>`)}

@@ -3,10 +3,11 @@
 // GET /buses; nothing here works a limit out.
 import { html } from './vendor/preact-standalone.module.js'
 import { verdictWord, BUS_ADVISORY } from './buses.js'
+import { StatusBadge, StatusWord } from './statusBadge.js'
 
 export function VerdictBadge ({ verdict }) {
   if (!verdict) return null
-  return html`<span class=${`badge check-badge check-${verdict}`} data-testid="bus-verdict" data-verdict=${verdict}>${verdictWord(verdict)}</span>`
+  return html`<${StatusBadge} kind=${verdict} text=${verdictWord(verdict)} className=${`check-badge check-${verdict}`} data-testid="bus-verdict" data-verdict=${verdict} />`
 }
 
 export function BusChecks ({ entry }) {
@@ -15,7 +16,7 @@ export function BusChecks ({ entry }) {
     <div class="bus-checks" data-testid="bus-checks">
       ${entry.checks.map((c) => html`
         <details class="check-section" key=${c.id} data-testid="bus-check" data-verdict=${c.verdict} open=${c.verdict === 'fail' || c.verdict === 'warning'}>
-          <summary><strong>${c.title}</strong>: <span class=${`check-verdict check-${c.verdict}`}>${verdictWord(c.verdict)}</span></summary>
+          <summary><strong>${c.title}</strong>: <${StatusWord} kind=${c.verdict} className=${`check-verdict check-${c.verdict}`} text=${verdictWord(c.verdict)} /></summary>
           <ul>${(c.reasoning || []).map((l, i) => html`<li key=${i}>${l}</li>`)}</ul>
           ${(c.missing || []).length > 0 && html`<div class="meta">Missing: ${c.missing.join('; ')}</div>`}
           ${(c.sources || []).length > 0 && html`

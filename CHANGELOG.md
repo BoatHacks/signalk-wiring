@@ -11,6 +11,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Solar panel strings (issue #15, plan 0048). A cable between two Solar panels can be a series or parallel link, like a battery link, and the array is worked out from the links (layout such as 3S or 2S2P, string Voc, Vmp, Isc, Imp and power). Panels get Voc, Isc, Vmp, Imp and a Voc temperature coefficient; a charge controller gets its maximum PV voltage, current and power and optional PV voltage and power paths. A new Solar tab shows each array with advisory checks: the open-circuit voltage at a cold temperature (the new `coldTemperatureC` option, default -10 C) against the controller's PV voltage limit, the short-circuit current against its PV input current limit, and the panel power against its PV rating. The circuit an array feeds takes the array's voltage at maximum power, panel-to-panel links no longer raise "runs from a supply the wrong way round", and array warnings appear in the Dashboard's Needs attention. `GET /derived` also returns the arrays.
 - Schema version 22: new device columns for the figures above. The migration turns a cable between two Solar panels that has only negative conductors and no link into a series link with one positive conductor.
 
+### Changed
+
+- Status marks that do not rely on color (issue #35, plan 0050). In the red night theme every status was a red outline, so "ok" and "too small" looked alike. Each level now has its own form, used in the day theme too: passed is quiet text with a check, "cannot check" and "incomplete" are a dashed outline with a dash, a warning is a solid outline with a triangle, and a failure is a filled badge with a cross in an octagon. Applied to the cable check badges and their reasoning, the Load Summary status, the bus checks, the Dashboard findings, the circuit list and the solar array checks.
+- Device roles also have a shape, not only a color: consumer circle, source triangle up, storage square, distribution triangle down, converter diamond. It shows in the Floorplan markers, the Floorplan legend and a small mark in the top left corner of Schematics device boxes. Live state follows the same idea: on is filled, off is a hollow outline and unknown is a dashed outline.
+- The night theme's muted text (the "no live data" lines, inactive links, hints) is brighter, at least 4.5 to 1 on the page and card colors, and the main night text is a little brighter to stay above it. The day theme's muted grey is about 3.5 to 1 on white and is unchanged for now.
+
 ## [0.9.6] - 2026-11-19
 
 ### Added

@@ -4,6 +4,7 @@
 import { html, useEffect, useRef } from './vendor/preact-standalone.module.js'
 import { badgesFor, explain, TABLE_URL } from './cableChecks.js'
 import { placePopover } from './popoverPlace.js'
+import { StatusBadge, StatusWord, StatusMark } from './statusBadge.js'
 
 const POP_SIZE = { width: 340, height: 360 }
 
@@ -17,6 +18,11 @@ export function limitsFrom (settings) {
 
 const VERDICT_WORDS = { ok: 'ok', warning: 'warning', fail: 'too small', cannot: 'cannot check' }
 
+function openAt (e, onOpen) {
+  const r = e.currentTarget.getBoundingClientRect()
+  onOpen({ x: r.left + r.width / 2, y: r.bottom })
+}
+
 // The badges of one result; each opens the reasoning. Nothing for a cable
 // that has no result (signal only cables, removed cables).
 //   onOpen(anchor): called with the screen point of the badge that was pressed.
@@ -26,10 +32,12 @@ export function CheckBadges ({ result, onOpen }) {
   return html`
     <span class="check-badges" data-testid="check-badges" data-verdict=${result.verdict}>
       ${badges.map((b) => html`
-        <button type="button" key=${b.text} class=${b.kind === 'ok' ? 'check-ok-tick' : `badge check-badge check-${b.kind}`} data-testid="check-badge" data-kind=${b.kind}
-          title=${b.kind === 'ok' ? `${b.text}, show how this was worked out` : 'Show how this was worked out'}
-          aria-label=${b.kind === 'ok' ? b.text : undefined}
-          onClick=${(e) => { const r = e.currentTarget.getBoundingClientRect(); onOpen({ x: r.left + r.width / 2, y: r.bottom }) }}>${b.kind === 'ok' ? '\u2713' : b.text}</button>
+        ${b.kind === 'ok'
+          ? html`<button type="button" key=${b.text} class="check-ok-tick" data-testid="check-badge" data-kind=${b.kind}
+            title=${`${b.text}, show how this was worked out`} aria-label=${b.text}
+            onClick=${(e) => openAt(e, onOpen)}><${StatusMark} level="pass" /></button>`
+          : html`<${StatusBadge} key=${b.text} tag="button" type="button" kind=${b.kind} text=${b.text} className=${`check-badge check-${b.kind}`} data-testid="check-badge" data-kind=${b.kind}
+            title="Show how this was worked out" onClick=${(e) => openAt(e, onOpen)} />`}
       `)}
     </span>
   `
@@ -57,7 +65,7 @@ export function CheckPopover ({ result, title, anchor, onClose }) {
       <div class="meta">Advisory. ${e.circuits.length ? `Circuit: ${e.circuits.join(', ')}.` : 'Not part of a circuit.'}</div>
       ${e.sections.map((s) => html`
         <div class="check-section" key=${s.heading}>
-          <div class="check-heading">${s.heading}: <span class=${`check-verdict check-${s.verdict}`}>${VERDICT_WORDS[s.verdict] || s.verdict}</span></div>
+          <div class="check-heading">${s.heading}: <${StatusWord} kind=${s.verdict} className=${`check-verdict check-${s.verdict}`} text=${VERDICT_WORDS[s.verdict] || s.verdict} /></div>
           <ul>${s.lines.map((l, i) => html`<li key=${i}>${l}</li>`)}</ul>
         </div>
       `)}

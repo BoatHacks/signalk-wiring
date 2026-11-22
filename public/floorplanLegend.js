@@ -2,6 +2,7 @@
 // A small static legend: what the dot colors, numbered badges, line styles and
 // edge arrows on a plan mean. Always available, not only in Live mode.
 import { html } from './vendor/preact-standalone.module.js'
+import { RoleShape } from './statusBadge.js'
 
 const ROLE_SWATCHES = [
   ['consumer', 'Consumer'], ['source', 'Source'], ['storage', 'Storage'], ['distribution', 'Distribution'], ['converter', 'Converter']
@@ -14,7 +15,7 @@ export function FloorplanLegend () {
       <div class="show-menu-body legend-body">
         <div class="legend-row"><span class="meta">Device dots</span>
           <span class="legend-swatches">${ROLE_SWATCHES.map(([role, label]) => html`
-            <span class="legend-item" key=${role}><i class=${'legend-dot role-' + role}></i>${label}</span>`)}
+            <span class="legend-item" key=${role}><${RoleShape} role=${role} size=${14} />${label}</span>`)}
           </span>
         </div>
         <div class="legend-row"><span class="legend-item"><i class="legend-badge">3</i></span>

@@ -61,6 +61,7 @@ import { describeEntry } from './changes.js'
 import { TabBar } from './tabBar.js'
 import { checkAll } from './cableChecks.js'
 import { CheckBadges, CheckPopover, limitsFrom } from './cableCheckView.js'
+import { StatusBadge as MarkBadge } from './statusBadge.js'
 import { canBeIcon, iconChoice, attachmentKind } from './deviceIcons.js'
 import { DeviceIcon, DeviceLabel, DeviceIconSvg, iconSpace } from './deviceIcon.js'
 
@@ -1981,8 +1982,8 @@ function CircuitsList ({ onSelect }) {
               <div class="meta">${circuitFacts(circuit)}${d && d.supplyDeviceIds.length ? html` | from ${labels(d.supplyDeviceIds)}` : ''}${d && d.endDeviceIds.length ? html` | to ${labels(d.endDeviceIds)}` : ''}</div>
             </div>
             <div>
-              ${d && d.unprotected && html`<span class="badge over-rating">no protection</span> `}
-              ${d && d.warnings.length > 0 && html`<span class="badge">${d.warnings.length} warning${d.warnings.length === 1 ? '' : 's'}</span> `}
+              ${d && d.unprotected && html`<${MarkBadge} kind="fail" text="no protection" /> `}
+              ${d && d.warnings.length > 0 && html`<${MarkBadge} kind="warning" text=${`${d.warnings.length} warning${d.warnings.length === 1 ? '' : 's'}`} /> `}
               <${StatusBadge} status=${circuit.status} />
             </div>
           </div>

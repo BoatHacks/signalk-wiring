@@ -9,6 +9,7 @@ import { checkAll, countVerdicts } from './cableChecks.js'
 import { limitsFrom } from './cableCheckView.js'
 import { useSort, SortHeader } from './sortView.js'
 import { LoadError } from './loadError.js'
+import { StatusBadge, StatusMark } from './statusBadge.js'
 
 export { calculateCircuitLoad, checkSummaryLine, incompleteReason }
 
@@ -185,14 +186,14 @@ export function LoadSummary () {
                   <td>${formatAmps(load.amps)}</td>
                   <td>${load.ratingA ? `${load.ratingA} A` : 'none'}</td>
                   <td>
-                    ${finding.overOwn && html`<span class="badge over-rating" title=${BADGE_HELP['over rating']}>over rating</span>`}
-                    ${finding.overBehind && html`<span class="badge over-rating" data-testid="over-behind" title=${BADGE_HELP['over rating behind']}>over rating with everything behind it</span>`}
+                    ${finding.overOwn && html`<${StatusBadge} kind="over rating" text="over rating" title=${BADGE_HELP['over rating']} />`}
+                    ${finding.overBehind && html`<${StatusBadge} kind="over rating" text="over rating with everything behind it" data-testid="over-behind" title=${BADGE_HELP['over rating behind']} />`}
                     ${!finding.over && incompleteReason(load) && html`
-                      <span class="badge" title=${incompleteReason(load)}>incomplete</span>
+                      <${StatusBadge} kind="incomplete" text="incomplete" title=${incompleteReason(load)} />
                       <div class="meta incomplete-reason" data-testid="incomplete-reason">${incompleteReason(load)}</div>
                     `}
                     ${!finding.over && !incompleteReason(load) && html`
-                      <span class="ok-tick" role="img" aria-label="ok" title=${BADGE_HELP.ok}>\u2713</span>
+                      <span class="ok-tick" role="img" aria-label="ok" title=${BADGE_HELP.ok}><${StatusMark} level="pass" /></span>
                     `}
                   </td>
                 </tr>`

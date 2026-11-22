@@ -3,7 +3,7 @@ import { formatGauge } from './gauge.js'
 import dagre from './vendor/dagre.esm.js'
 import { newId } from './ids.js'
 import { TYPE_SUGGESTIONS } from './deviceTypes.js'
-import { roleLabel } from './roles.js'
+import { roleLabel, roleShape, shapePath } from './roles.js'
 import { DeviceIcon, DeviceIconSlot } from './deviceIcon.js'
 import { iconChoice } from './deviceIcons.js'
 import * as G from './schematic.js'
@@ -1511,6 +1511,7 @@ function DeviceShape ({ box, device, selected, dim, lit, target, live }) {
     <g class=${cls} transform="translate(${box.x}, ${box.y})" style=${colorStyle} data-device=${box.id} data-live=${live ? live.look : undefined}>
       ${live && live.title && html`<title>${live.title}</title>`}
       <rect width=${box.w} height=${box.h} rx="5" class="sch-device-box" />
+      ${!device.isEnclosure && html`<path class="sch-role-shape" data-testid="sch-role-shape" d=${shapePath(roleShape(device.role), 11, 11, 5)} />`}
       <${DeviceIconSlot} choice=${iconChoice(device)} x=${box.w / 2 - 14} y=${5} size=${28} />
       <text x=${box.w / 2} y="43" text-anchor="middle" class="sch-device-name">${shorten(device.name, 22)}</text>
       ${device.isEnclosure

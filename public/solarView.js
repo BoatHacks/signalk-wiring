@@ -2,6 +2,7 @@ import { html, useState, useEffect } from './vendor/preact-standalone.module.js'
 import { hashForState } from './router.js'
 import { useLive } from './live.js'
 import { LoadError } from './loadError.js'
+import { StatusBadge } from './statusBadge.js'
 import {
   arrayTitle, missingText, stringsText, allArrays, fmtV, fmtA, fmtW, pvReading, pvPathsToWatch, LEVEL_LABELS
 } from './solar.js'
@@ -64,7 +65,7 @@ function ArrayCard ({ array, deviceById, values }) {
         ${incomplete && html`<div class="meta bank-incomplete" data-testid="array-incomplete">Incomplete: ${incomplete}. No totals are shown until it is filled in.</div>`}
         ${array.assumedCoeff && array.vocCold !== null && html`<div class="meta" data-testid="array-assumed">Cold voltage assumes a Voc temperature coefficient of -0.30 %/C where none is entered.</div>`}
         <div class="bank-line"><span class="bank-line-label">Charge controller</span> ${controllers.length === 0 ? 'none found' : controllers.map((c, i) => html`<span key=${c.id}>${i > 0 ? ', ' : ''}<${DeviceLink} id=${c.id} deviceById=${deviceById} /></span>`)}</div>
-        ${array.checks.map((c, i) => html`<div class=${'array-check array-check-' + c.level} key=${i} data-testid="array-check"><span class="badge">${LEVEL_LABELS[c.level] || c.level}</span> ${c.message}</div>`)}
+        ${array.checks.map((c, i) => html`<div class=${'array-check array-check-' + c.level} key=${i} data-testid="array-check"><${StatusBadge} kind=${c.level} text=${LEVEL_LABELS[c.level] || c.level} /> ${c.message}</div>`)}
         ${values && html`<div class="bank-live" data-testid="array-live"><span class="bank-line-label">Live</span> ${live || 'no values yet'}</div>`}
       </div>
       ${array.warnings.map((w, i) => html`<div class="warning-banner" key=${i}>${w.message}</div>`)}

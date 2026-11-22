@@ -25,6 +25,7 @@ import { CablePopover } from './cablePopover.js'
 import { useSettings, wireRunInitialValues } from './settings.js'
 import { useLive } from './live.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
+import { roleShape, shapePath } from './roles.js'
 import { visibleLabels, labelWidth, labelSide } from './floorLabels.js'
 import {
   loadLayers, saveLayers, toggleLayer, toggleRole, roleShown, rolesPresent, layersChanged, focusSet, LAYER_SWITCHES
@@ -862,7 +863,7 @@ function PlanViewer ({ plan, data, ctx, actions, onSaved, onError }) {
               ${liveState && html`<title>${liveState.title}</title>`}
               ${device.role === 'enclosure'
                 ? html`<rect class="enclosure-box" x=${px[0] - unit * 1.5} y=${px[1] - unit * 1.5} width=${unit * 3} height=${unit * 3} rx=${unit * 0.5} />`
-                : html`<circle cx=${px[0]} cy=${px[1]} r=${unit * 1.3} />`}
+                : html`<path class="marker-shape" d=${shapePath(roleShape(device.role), px[0], px[1], unit * 1.3)} />`}
               ${device.role === 'enclosure' && html`
                 <text class="enclosure-count" data-testid="enclosure-count" x=${px[0]} y=${px[1] + unit * 0.7} font-size=${unit * 2} text-anchor="middle">${contentsOf(data.devices, device.id).length}</text>
                 <title>${device.name}: holds ${contentsOf(data.devices, device.id).length}</title>
