@@ -39,7 +39,11 @@ const schemas = {
     name: str('Name of the terminal, for example "AC in L" or "DC +".'),
     conductor: str('What the terminal carries.', { enum: CONDUCTOR_TYPES }),
     voltage: nullable(num('Voltage at the terminal, in volts.', { unit: 'V' })),
-    port: nullable(str('Name of the port the terminal belongs to, for example "ac-in". Terminals of one port are drawn together; on a converter the port tells which circuit a cable lands on.'))
+    port: nullable(str('Name of the port the terminal belongs to, for example "ac-in". Terminals of one port are drawn together; on a converter the port tells which circuit a cable lands on.')),
+    connector: nullable(str('Physical connector kind, for example "M8 stud", "ferrule", "RJ45" or "USB-C". Free text, the web app offers a list.')),
+    size: nullable(str('Size of the connector, for example "M8" or "6 mm2".')),
+    gender: nullable(str('Whether the connector is a socket or a plug.', { enum: ['socket', 'plug'] })),
+    pins: nullable(num('Number of pins or poles, a whole number of 1 or more.', { minimum: 1 }))
   }, 'A named connection point on a device.', { required: ['name', 'conductor'] }),
 
   Measured: nullable(obj({

@@ -2,6 +2,8 @@
 // carries, how the form values become a wire run and back, which terminals
 // are worth asking for, and the default for the negative landing.
 
+import { describeConnector } from './connectors.js'
+
 // DC first: the three common choices. AC and earth sit behind "More".
 export const CABLE_KINDS = [
   { value: 'positive', label: 'Positive', conductors: ['positive'], more: false },
@@ -80,6 +82,13 @@ export function needsTerminal (device) {
   if (!device) return false
   const terminals = device.terminals || []
   return terminals.length > 0 && (device.role === 'converter' || terminals.length > 1)
+}
+
+// The label of a terminal in an end picker: its name, then the port and the
+// connector in brackets when they are recorded ("B+ (M8 stud)").
+export function terminalLabel (t) {
+  const extra = [t.port, describeConnector(t)].filter(Boolean).join(', ')
+  return extra ? `${t.name} (${extra})` : t.name
 }
 
 // The terminals of a device that suit a conductor type, in order.

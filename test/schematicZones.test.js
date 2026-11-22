@@ -8,7 +8,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { Database } = require('../src/db')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 
 function setup () {
@@ -119,7 +119,7 @@ test('migration 14: a version 13 database gains the table, twice over', () => {
   raw.close()
   for (let i = 0; i < 2; i++) {
     const store = new Store(file)
-    assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+    assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
     const zone = store.ensureZone('Z')
     const page = store.create('schematic', { name: 'P', zone_shapes: [rect(zone.id)] })
     assert.equal(store.get('schematic', page.id).zone_shapes.length, 1)

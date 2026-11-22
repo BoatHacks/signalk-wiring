@@ -4,7 +4,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 
 function setup () {
@@ -58,13 +58,13 @@ test('migration 16 adds hand_placed, is safe to run twice, and old rows read as 
   assert.equal(columns(store).includes('hand_placed'), false)
   store.db.pragma('user_version = 15')
   store._migrate()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+  assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
   assert.ok(columns(store).includes('hand_placed'))
   assert.deepEqual(store.get('schematic', page.id).devices, [{ deviceId: a.id, x: 5, y: 6 }])
   // running it again, with the column already there, changes nothing
   store.db.pragma('user_version = 15')
   assert.doesNotThrow(() => store._migrate())
-  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+  assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
   assert.equal(columns(store).filter((c) => c === 'hand_placed').length, 1)
   store.update('schematic', page.id, { devices: [{ deviceId: a.id, x: 5, y: 6, handPlaced: true }] })
   assert.equal(store.get('schematic', page.id).devices[0].handPlaced, true)

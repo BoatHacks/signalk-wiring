@@ -43,8 +43,8 @@ test('cleanTerminals trims, drops nameless rows and normalises numbers and ports
     { name: '', conductor: 'negative' },
     { name: 'AC L', conductor: 'line', voltage: '', port: '' }
   ]), [
-    { name: 'DC +', conductor: 'positive', voltage: 12, port: 'DC in' },
-    { name: 'AC L', conductor: 'line', voltage: null, port: null }
+    { name: 'DC +', conductor: 'positive', voltage: 12, port: 'DC in', connector: null, size: null, gender: null, pins: null },
+    { name: 'AC L', conductor: 'line', voltage: null, port: null, connector: null, size: null, gender: null, pins: null }
   ])
   assert.deepEqual(cleanTerminals(undefined), [])
 })

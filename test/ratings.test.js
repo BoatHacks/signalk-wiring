@@ -8,7 +8,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { Database } = require('../src/db')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 
 test('ratings are stored, validated, cleared and logged like any field', () => {
@@ -73,7 +73,7 @@ test('migration 12 adds the rating columns to an older database, safe to run twi
   raw.close()
   for (let i = 0; i < 2; i++) {
     const store = new Store(file)
-    assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+    assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
     const d = store.list('device')[0]
     assert.equal(d.name, 'Old switch')
     assert.equal(d.rated_dc_a, i === 0 ? null : 300)

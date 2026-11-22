@@ -7,7 +7,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 const b = require('../src/batteries')
 
@@ -143,7 +143,7 @@ test('migration 11 fills chemistry and purpose once, never overrides, is safe tw
   store.close()
   for (let i = 0; i < 2; i++) {
     const again = new Store(file)
-    assert.equal(again.db.pragma('user_version', { simple: true }), 20)
+    assert.equal(again.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
     const g = (k) => again.get('device', ids[k])
     assert.equal(g('lead').chemistry, 'flooded')
     assert.equal(g('agm').chemistry, 'agm')

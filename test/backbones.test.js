@@ -4,7 +4,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 
 const dev = (store, name, extra = {}) => store.create('device', { name, ...extra })
@@ -25,7 +25,7 @@ test('migration 18 creates the tables, adds len, and is safe twice', () => {
   // Run it again with everything in place.
   store.db.pragma('user_version = 17')
   store._migrate()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+  assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
   store.close()
 })
 

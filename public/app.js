@@ -11,7 +11,7 @@ import {
 import { duplicateDevicePayload, duplicateCablePrefill } from './duplicate.js'
 import {
   CABLE_KINDS, CONDUCTOR_LABELS, kindByValue, defaultNegativeLanding, negativeLandingCandidates, needsTerminal,
-  terminalOptions, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle,
+  terminalOptions, terminalLabel, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle,
   LINK_CHOICES, linkApplies, linkKind, resolveLink, PROTOCOLS, protocolLabel
 } from './cableForm.js'
 import dagre from './vendor/dagre.esm.js'
@@ -43,6 +43,7 @@ import { describeMeasured, describeGroup } from './measured.js'
 import { useLive } from './live.js'
 import { CalibrateDialog } from './calibrate.js'
 import { LiveLock, LiveReading, LiveBar } from './liveMarks.js'
+import { CONNECTOR_KINDS, CONNECTOR_GENDERS, connectorOptions, hasConnectorExtras } from './connectors.js'
 import { NMEA2000_PORT, deviceFieldVisible, acConsumerIds, cleanTerminals, describeTerminal, terminalPreset, ratedLine, colorFieldState, terminalPresetList, newPresetTerminals } from './deviceFields.js'
 import { useSort, SortHeader, SortControl } from './sortView.js'
 import { plural } from './wording.js'
@@ -363,7 +364,9 @@ function TerminalsEditor ({ value, role, type, onChange }) {
   const preset = terminalPreset(type)
   const update = (index, patch) => onChange(value.map((t, i) => (i === index ? { ...t, ...patch } : t)))
   const remove = (index) => onChange(value.filter((_, i) => i !== index))
-  const add = () => onChange([...value, { name: '', conductor: 'positive', voltage: '', port: '' }])
+  const add = () => onChange([...value, { name: '', conductor: 'positive', voltage: '', port: '', connector: '', size: '', gender: '', pins: '' }])
+  const [more, setMore] = useState({})
+  const options = connectorOptions(value.map((t) => t.connector), '')
   return html`
     <div class="terminals-editor">
       ${value.map((t, i) => html`
@@ -375,6 +378,20 @@ function TerminalsEditor ({ value, role, type, onChange }) {
           <input type="number" step="any" value=${t.voltage ?? ''} placeholder="Volts" onInput=${(e) => update(i, { voltage: e.target.value })} />
           ${role === 'converter' && html`
             <input type="text" value=${t.port || ''} placeholder="Port, e.g. DC in" onInput=${(e) => update(i, { port: e.target.value })} />
+          `}
+          <input type="text" list=${`connector-kinds-${i}`} value=${t.connector || ''} data-testid="terminal-connector" placeholder="Connector, e.g. M8 stud"
+            aria-label="Connector" onInput=${(e) => update(i, { connector: e.target.value })} />
+          <datalist id=${`connector-kinds-${i}`}>
+            ${[...CONNECTOR_KINDS.terminal, ...CONNECTOR_KINDS.port, ...options.used].map((k) => html`<option value=${k} key=${k} />`)}
+          </datalist>
+          <input type="text" value=${t.size || ''} placeholder="Size, e.g. M8, 6 mm2" onInput=${(e) => update(i, { size: e.target.value })} />
+          <button type="button" onClick=${() => setMore({ ...more, [i]: !more[i] })}>${more[i] || hasConnectorExtras(t) ? 'Less' : 'More'}</button>
+          ${(more[i] || hasConnectorExtras(t)) && html`
+            <select value=${t.gender || ''} aria-label="Socket or plug" onChange=${(e) => update(i, { gender: e.target.value })}>
+              <option value="">Socket or plug…</option>
+              ${CONNECTOR_GENDERS.map((g) => html`<option value=${g} key=${g}>${g}</option>`)}
+            </select>
+            <input type="number" min="1" step="1" value=${t.pins ?? ''} placeholder="Pins" onInput=${(e) => update(i, { pins: e.target.value })} />
           `}
           <button type="button" onClick=${() => remove(i)}>Remove</button>
         </div>
@@ -1453,14 +1470,14 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
               <select value=${(values.terminals[conductor] || {}).from || ''}
                 onChange=${(e) => setTerminal(conductor, 'from', e.target.value)}>
                 <option value="">${fromDevice.name}: terminal…</option>
-                ${terminalOptions(fromDevice, conductor).map((t) => html`<option value=${t.name} key=${t.name}>${t.name}${t.port ? ` (${t.port})` : ''}</option>`)}
+                ${terminalOptions(fromDevice, conductor).map((t) => html`<option value=${t.name} key=${t.name}>${terminalLabel(t)}</option>`)}
               </select>
             `}
             ${needsTerminal(toDevice) && html`
               <select value=${(values.terminals[conductor] || {}).to || ''}
                 onChange=${(e) => setTerminal(conductor, 'to', e.target.value)}>
                 <option value="">${toDevice.name}: terminal…</option>
-                ${terminalOptions(toDevice, conductor).map((t) => html`<option value=${t.name} key=${t.name}>${t.name}${t.port ? ` (${t.port})` : ''}</option>`)}
+                ${terminalOptions(toDevice, conductor).map((t) => html`<option value=${t.name} key=${t.name}>${terminalLabel(t)}</option>`)}
               </select>
             `}
           </div>

@@ -551,6 +551,9 @@ it only for a JPEG, PNG or WebP attachment of the same device, and
 `deleteAttachment` clears it (with a change-log entry) when its image is
 deleted.
 
+Plan 0047's migration (version 21) adds `connector`, `size`, `gender` and `pins` to
+`device_terminals`, all nullable; old terminals read null.
+
 Plan 0015's migration (version 6) adds the `conduits` and
 `wire_run_conduits` tables. They come from `schema.sql` on every open, so
 the migration only guards the version for databases that somehow lack them.

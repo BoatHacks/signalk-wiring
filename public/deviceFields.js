@@ -1,4 +1,5 @@
 import { normalizeHex } from './colorTone.js'
+import { cleanConnector, describeConnector } from './connectors.js'
 
 // Pure helpers for the extra device fields of plan 0014: a trip rating on
 // fuses and breakers, a nominal voltage on batteries and sources, a power
@@ -51,7 +52,8 @@ export function cleanTerminals (list) {
       name: String(t.name || '').trim(),
       conductor: t.conductor || 'positive',
       voltage: t.voltage === '' || t.voltage == null || Number.isNaN(Number(t.voltage)) ? null : Number(t.voltage),
-      port: String(t.port || '').trim() || null
+      port: String(t.port || '').trim() || null,
+      ...cleanConnector(t)
     }))
     .filter((t) => t.name)
 }
@@ -65,7 +67,7 @@ export function portNames (terminals) {
 
 // A one-line description of a terminal, for lists.
 export function describeTerminal (t) {
-  return [t.name, t.conductor, t.voltage != null ? `${t.voltage} V` : null, t.port ? `port ${t.port}` : null]
+  return [t.name, t.conductor, t.voltage != null ? `${t.voltage} V` : null, t.port ? `port ${t.port}` : null, describeConnector(t) || null]
     .filter(Boolean).join(', ')
 }
 

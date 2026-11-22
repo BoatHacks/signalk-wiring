@@ -5,6 +5,10 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Connector types on terminals and ports (issue #17, plan 0047). A terminal can record its physical connector: a kind from a list or free text (M8 stud, ferrule, Schuko, RJ45, USB-C and so on), a size, a socket or plug, and a pin count. It shows in the device page's terminal list and in the terminal pickers of the cable form. Schema version 21. Nothing is checked against it yet.
+
 ## [0.9.6] - 2026-11-19
 
 ### Added

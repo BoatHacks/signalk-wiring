@@ -4,7 +4,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 
 const columns = (store) => store.db.prepare('PRAGMA table_info(devices)').all().map((c) => c.name)
@@ -16,7 +16,7 @@ test('migration 17 adds both color columns, twice over safely, old rows read nul
   store.db.exec('ALTER TABLE devices DROP COLUMN schematic_icon_color')
   store.db.pragma('user_version = 16')
   store._migrate()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+  assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
   assert.ok(columns(store).includes('schematic_box_color'))
   assert.ok(columns(store).includes('schematic_icon_color'))
   assert.equal(store.get('device', d.id).schematic_box_color, null)

@@ -4,7 +4,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 
 function setup () {
   const store = new Store(':memory:')
@@ -14,9 +14,9 @@ function setup () {
   return { store, dev, bus, page }
 }
 
-test('the schema is at version 20 and the placement table exists', () => {
+test('the schema is at the latest version and the placement table exists', () => {
   const { store } = setup()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+  assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
   assert.ok(store.db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'schematic_backbones'").get())
 })
 

@@ -108,7 +108,11 @@ CREATE TABLE IF NOT EXISTS device_terminals (
   name TEXT NOT NULL,
   conductor TEXT NOT NULL,
   voltage REAL,
-  port TEXT
+  port TEXT,
+  connector TEXT,
+  size TEXT,
+  gender TEXT,
+  pins INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS plans (

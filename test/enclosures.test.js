@@ -8,7 +8,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { Database } = require('../src/db')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 const { createResourceProvider } = require('../src/resources')
 const { contentsOf, pathOf, wouldCycle, boundaryCables, childrenOf } = require('../src/enclosures')
 
@@ -76,7 +76,7 @@ test('migration 15: a version 14 database gains the columns, twice over', () => 
   raw.close()
   for (let i = 0; i < 2; i++) {
     const store = new Store(file)
-    assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+    assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
     const box = store.create('device', { name: 'Box', role: 'enclosure' })
     const lamp = store.create('device', { name: 'Lamp', parent_id: box.id })
     assert.equal(store.get('device', lamp.id).parent_id, box.id)

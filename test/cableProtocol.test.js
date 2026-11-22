@@ -4,7 +4,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 
 function setup () {
   const store = new Store(':memory:')
@@ -38,7 +38,7 @@ test('an unknown protocol is refused, on create and update', () => {
   assert.throws(() => store.update('wireRun', run.id, { protocol: 'x' }), /protocol must be one of/)
 })
 
-test('the schema is at version 20', () => {
+test('the schema is at the latest version', () => {
   const { store } = setup()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+  assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
 })

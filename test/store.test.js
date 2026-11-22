@@ -1257,3 +1257,45 @@ test('gauge: 1/0 to 4/0 are stored as 0 to -3 and only for AWG', () => {
   assert.equal(store.update('wireRun', ok.id, { gauge: '' }).gauge, null)
   store.close()
 })
+
+// ---- Plan 0047: terminal and port connector types ----
+
+test('terminal connector fields round trip and are validated', () => {
+  const store = freshStore()
+  const d = store.create('device', {
+    name: 'Router',
+    terminals: [
+      { name: 'LAN 1', conductor: 'signal', port: 'LAN', connector: ' RJ45 ', size: '', gender: 'socket', pins: 8 },
+      { name: 'B+', conductor: 'positive', connector: 'M8 stud', size: 'M8' }
+    ]
+  })
+  assert.deepEqual(
+    [d.terminals[0].connector, d.terminals[0].size, d.terminals[0].gender, d.terminals[0].pins],
+    ['RJ45', null, 'socket', 8])
+  assert.equal(d.terminals[1].size, 'M8')
+  assert.equal(d.terminals[1].gender, null)
+  const bad = (t, re) => assert.throws(() => store.update('device', d.id, { terminals: [{ name: 'x', conductor: 'signal', ...t }] }), re)
+  bad({ gender: 'both' }, /gender must be one of/)
+  bad({ pins: 0 }, /pins must be a whole number/)
+  bad({ pins: 1.5 }, /pins must be a whole number/)
+  bad({ connector: 'x'.repeat(61) }, /too long/)
+  store.update('device', d.id, { terminals: [{ name: 'x', conductor: 'signal', connector: 'USB-C' }] })
+  assert.equal(store.get('device', d.id).terminals[0].connector, 'USB-C')
+  const diff = JSON.parse(store.changeLog('device', d.id)[1].diff_json)
+  assert.deepEqual(Object.keys(diff), ['terminals'])
+  store.close()
+})
+
+test('migration 21 adds the connector columns to an older terminals table and keeps its rows', () => {
+  const store = freshStore()
+  const d = store.create('device', { name: 'Old', terminals: [{ name: 'a', conductor: 'positive' }] })
+  store.db.exec('ALTER TABLE device_terminals DROP COLUMN connector; ALTER TABLE device_terminals DROP COLUMN size; ' +
+    'ALTER TABLE device_terminals DROP COLUMN gender; ALTER TABLE device_terminals DROP COLUMN pins')
+  store.db.pragma('user_version = 20')
+  store._migrate()
+  const t = store.get('device', d.id).terminals[0]
+  assert.equal(t.name, 'a')
+  assert.deepEqual([t.connector, t.size, t.gender, t.pins], [null, null, null, null])
+  store._migrate()
+  store.close()
+})

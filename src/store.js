@@ -537,9 +537,20 @@ const MIGRATIONS = [
       const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
       if (!has('wire_runs', 'protocol')) db.exec('ALTER TABLE wire_runs ADD COLUMN protocol TEXT')
     }
+  },
+  {
+    version: 21,
+    description: 'plan 0047: device_terminals + connector, size, gender, pins (the physical connector of a terminal or port)',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      for (const [col, type] of [['connector', 'TEXT'], ['size', 'TEXT'], ['gender', 'TEXT'], ['pins', 'INTEGER']]) {
+        if (!has('device_terminals', col)) db.exec(`ALTER TABLE device_terminals ADD COLUMN ${col} ${type}`)
+      }
+    }
   }
 ]
 
+const TERMINAL_GENDERS = ['socket', 'plug']
 const CABLE_PROTOCOLS = ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'ethernet', 'canbus', 'usb', 'hdmi', 'serial', 'coax', 'other']
 const BACKBONE_CLASSES = ['micro', 'mini', 'maxi']
 const ZONE_SHAPE_KINDS = ['rect', 'oval', 'polygon']
@@ -655,19 +666,41 @@ const CHILDREN = {
     field: 'terminals',
     table: 'device_terminals',
     parent: 'device_id',
-    columns: ['name', 'conductor', 'voltage', 'port'],
+    columns: ['name', 'conductor', 'voltage', 'port', 'connector', 'size', 'gender', 'pins'],
     toKey: (column) => column,
-    fromRow: (r) => ({ name: r.name, conductor: r.conductor, voltage: r.voltage, port: r.port }),
+    fromRow: (r) => ({
+      name: r.name,
+      conductor: r.conductor,
+      voltage: r.voltage,
+      port: r.port,
+      connector: r.connector ?? null,
+      size: r.size ?? null,
+      gender: r.gender ?? null,
+      pins: r.pins ?? null
+    }),
     normalize: (i) => ({
       name: textOrNull(i.name),
       conductor: i.conductor,
       voltage: numberOrNull(i.voltage),
-      port: textOrNull(i.port)
+      port: textOrNull(i.port),
+      connector: textOrNull(i.connector),
+      size: textOrNull(i.size),
+      gender: textOrNull(i.gender),
+      pins: numberOrNull(i.pins)
     }),
     check (item) {
       const out = CHILDREN.device.normalize(item)
       if (!out.name) throw new Error('a terminal needs a name')
       checkConductorType(out.conductor, 'terminal conductor')
+      if (out.gender !== null && !TERMINAL_GENDERS.includes(out.gender)) {
+        throw new Error(`terminal gender must be one of: ${TERMINAL_GENDERS.join(', ')}`)
+      }
+      if (out.pins !== null && (!Number.isInteger(out.pins) || out.pins < 1)) {
+        throw new Error('terminal pins must be a whole number of 1 or more')
+      }
+      for (const key of ['connector', 'size']) {
+        if (out[key] !== null && out[key].length > 60) throw new Error(`terminal ${key} is too long (60 characters at most)`)
+      }
       return out
     }
   }

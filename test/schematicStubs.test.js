@@ -4,7 +4,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { Store } = require('../src/store')
+const { Store, LATEST_SCHEMA_VERSION } = require('../src/store')
 
 function setup () {
   const store = new Store(':memory:')
@@ -63,6 +63,6 @@ test('an older database gets the stub table by migration', () => {
   store.db.exec('DROP TABLE schematic_stubs')
   store.db.pragma('user_version = 12')
   store._migrate()
-  assert.equal(store.db.pragma('user_version', { simple: true }), 20)
+  assert.equal(store.db.pragma('user_version', { simple: true }), LATEST_SCHEMA_VERSION)
   assert.ok(store.db.prepare("SELECT name FROM sqlite_master WHERE name = 'schematic_stubs'").get())
 })

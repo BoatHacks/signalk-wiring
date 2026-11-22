@@ -274,7 +274,12 @@ them.
     `powerFactor` (optional, on a consumer; applied by the load check once
     its circuit is AC, blank counts as 1), `terminals` (a list of `name`,
     `conductor` (positive, negative, line, neutral, earth or signal),
-    optional `voltage` and, on a converter, `port`; only needed where they
+    optional `voltage` and, on a converter, `port`, and an optional physical
+    connector (plan 0047): `connector` (a kind such as "M8 stud", "ferrule",
+    "RJ45" or "USB-C", picked from a list or free text), `size` (free text, for
+    example "M8" or "6 mm2"), `gender` (socket or plug) and `pins` (a whole
+    number of 1 or more); shown on the device page and in the cable form's
+    terminal pickers; only needed where they
     remove ambiguity: converter ports, a battery with several posts, a fuse
     block). Terminals sharing a port name form one port ("DC in" with "DC in +"
     and "DC in -"); signal terminals (VE.Bus, relay contacts) are drawn but take
