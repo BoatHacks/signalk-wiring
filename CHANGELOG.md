@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-11-22
+
 ### Added
 
 - Connector types on terminals and ports (issue #17, plan 0047). A terminal can record its physical connector: a kind from a list or free text (M8 stud, ferrule, Schuko, RJ45, USB-C and so on), a size, a socket or plug, and a pin count. It shows in the device page's terminal list and in the terminal pickers of the cable form. Schema version 21. Nothing is checked against it yet.
@@ -16,9 +18,6 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Status marks that do not rely on color (issue #35, plan 0050). In the red night theme every status was a red outline, so "ok" and "too small" looked alike. Each level now has its own form, used in the day theme too: passed is quiet text with a check, "cannot check" and "incomplete" are a dashed outline with a dash, a warning is a solid outline with a triangle, and a failure is a filled badge with a cross in an octagon. Applied to the cable check badges and their reasoning, the Load Summary status, the bus checks, the Dashboard findings, the circuit list and the solar array checks.
 - Device roles also have a shape, not only a color: consumer circle, source triangle up, storage square, distribution triangle down, converter diamond. It shows in the Floorplan markers, the Floorplan legend and a small mark in the top left corner of Schematics device boxes. Live state follows the same idea: on is filled, off is a hollow outline and unknown is a dashed outline.
 - The night theme's muted text (the "no live data" lines, inactive links, hints) is brighter, at least 4.5 to 1 on the page and card colors, and the main night text is a little brighter to stay above it. The day theme's muted grey is about 3.5 to 1 on white and is unchanged for now.
-
-### Changed
-
 - Zones tab (issue #36, plan 0049). A closed zone row shows only its name and counts, and the whole header opens it. The opened row lists the devices, cables and conduits in the zone and holds Rename, Merge into and Remove. Rename edits the name in place (Enter saves, Escape cancels). Empty zones can be opened too. A disabled Remove now says why, for example "In use by 48 devices. Merge it into another zone first."
 
 ## [0.9.6] - 2026-11-19
