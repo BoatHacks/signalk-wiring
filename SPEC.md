@@ -209,9 +209,19 @@ them.
     current one; the ISO 13297 clause wording was not confirmed), so it is a
     design rule of this plugin and not a quotation of the standard.
   - `link` (series | parallel, optional): only on a cable whose two ends are
-    both batteries (storage devices); any other cable refuses it. A cable
-    between two batteries without one counts as parallel. A series link is one
-    positive conductor, a parallel link carries positive and negative.
+    both batteries (storage devices) or both solar panels (type "Solar
+    panel", plan 0048); any other cable refuses it. A cable between two
+    batteries or two panels without one counts as parallel. A series link is one
+    positive conductor, a parallel link carries positive and negative. A cable
+    between two solar panels is never a circuit: it joins them into a solar
+    array, derived like a battery bank (`arrays` in `GET /derived`): layout,
+    string and array Voc, Voc at the cold temperature setting, Vmp, Isc (the
+    weakest panel of a string, strings added), Imp and power, from the device
+    fields `vocV`, `iscA`, `vmpV`, `impA`, `vocTempCoeff` and `ratedPowerW`.
+    The charge controller is the first converter reached downstream. Advisory
+    checks compare the cold Voc with its `pvMaxV` (note from 90 %, warning above),
+    the Isc with `pvMaxA` (same levels) and the power with `pvMaxW` (a note
+    only). The circuit fed by an array takes the array's Vmp as its voltage.
   - `gauge` + `gaugeUnit` (AWG | mm²; one gauge per cable), `length` +
     `lengthUnit` (m | ft), `zoneId`
     (optional, a Zone; the response also carries the zone's name as

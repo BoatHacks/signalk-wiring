@@ -15,6 +15,10 @@ function dropLimit (value, fallback) {
     : fallback
 }
 
+const COLD_MIN = -40
+const COLD_MAX = 25
+const COLD_DEFAULT = -10
+
 const DASHBOARD_MAX_ENTRIES = 12
 const DASHBOARD_LABEL_MAX = 40
 const DASHBOARD_PATH_MAX = 200
@@ -100,6 +104,7 @@ function resolveSettings (options, demoMode = false) {
     demoMode: demo,
     voltageDropLimitCritical: dropLimit(o.voltageDropLimitCritical, DROP_LIMIT_CRITICAL),
     voltageDropLimitNormal: dropLimit(o.voltageDropLimitNormal, DROP_LIMIT_NORMAL),
+    coldTemperatureC: typeof o.coldTemperatureC === 'number' && Number.isFinite(o.coldTemperatureC) && o.coldTemperatureC >= COLD_MIN && o.coldTemperatureC <= COLD_MAX ? o.coldTemperatureC : COLD_DEFAULT,
     dashboardInputs: resolveDashboardList(o.dashboardInputs, 'Dashboard input').entries,
     dashboardOutputs: resolveDashboardList(o.dashboardOutputs, 'Dashboard output').entries
   }

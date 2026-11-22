@@ -63,7 +63,7 @@ const resourceExample = {
   wiringZones: { id: 'z-1', name: 'Bilge' },
   wiringPlans: { id: 'p-1', name: 'Deck', view: 'top', status: 'active' },
   wiringSchematics: { id: 's-1', name: '12 V DC', enclosureId: null, status: 'active', devices: [{ deviceId: 'a1b2c3', x: 40, y: 40 }], wires: [], stubs: [], zoneShapes: [], backboneBoxes: [] },
-  wiringSettings: { convention: 'freestyle', defaultGaugeUnit: 'AWG', defaultLengthUnit: 'm', autoTheme: false, showFloorplan: true, demoMode: false, voltageDropLimitCritical: 3, voltageDropLimitNormal: 10, dashboardInputs: [{ label: 'Shore', path: 'electrical.shore.power', unit: 'W', voltage: null, voltagePath: null }], dashboardOutputs: [] }
+  wiringSettings: { convention: 'freestyle', defaultGaugeUnit: 'AWG', defaultLengthUnit: 'm', autoTheme: false, showFloorplan: true, demoMode: false, voltageDropLimitCritical: 3, voltageDropLimitNormal: 10, coldTemperatureC: -10, dashboardInputs: [{ label: 'Shore', path: 'electrical.shore.power', unit: 'W', voltage: null, voltagePath: null }], dashboardOutputs: [] }
 }
 
 const json = (schema, description, example) => ({ description, schema, ...(example !== undefined ? { example } : {}) })
@@ -246,8 +246,8 @@ const META = {
   'GET /derived': {
     tag: 'Derived data',
     summary: 'Battery banks and wiring warnings',
-    description: `The derived data that belongs to no single circuit: the battery banks (layout such as 2S1P, voltage, capacity, energy, what protects them) and all warnings found in the wiring (a cable to a missing device, a converter terminal that is not named, and similar). Circuits are in the wiringCircuits resource. ${ADVISORY}`,
-    responses: { 200: json(ref('Derived'), 'Banks and warnings.', { banks: [], warnings: [{ code: 'missing-device', cableId: 'w-9', message: 'Cable w-9 goes to a device that does not exist or has been removed.' }] }) },
+    description: `The derived data that belongs to no single circuit: the battery banks (layout such as 2S1P, voltage, capacity, energy, what protects them), the solar arrays (layout such as 3S1P, string voltage and current, and advisory checks against the charge controller) and all warnings found in the wiring (a cable to a missing device, a converter terminal that is not named, and similar). Circuits are in the wiringCircuits resource. ${ADVISORY}`,
+    responses: { 200: json(ref('Derived'), 'Banks, arrays and warnings.', { banks: [], arrays: [], warnings: [{ code: 'missing-device', cableId: 'w-9', message: 'Cable w-9 goes to a device that does not exist or has been removed.' }] }) },
     errors: [503]
   },
 

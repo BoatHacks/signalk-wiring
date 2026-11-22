@@ -328,8 +328,8 @@ function registerRoutes (router, getStore, dataDir, getSettings = () => resolveS
 
   // Banks and warnings of the derivation that belong to no single circuit.
   readOnlyRoutes.get('/derived', requireStore, (req, res) => {
-    const { banks, warnings } = req.wiringStore.deriveAll()
-    res.json({ banks, warnings })
+    const { banks, arrays, warnings } = req.wiringStore.deriveAll({ coldTemperatureC: getSettings().coldTemperatureC })
+    res.json({ banks, arrays, warnings })
   })
 
   // The query routes (plan 0036): derived answers for assistants and

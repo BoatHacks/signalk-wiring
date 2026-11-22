@@ -605,6 +605,24 @@ monitor's, `resolveBatteryPaths` in `src/switchability.js`), and
 `public/liveBattery.js` turns stream values into the reading shown on the
 Batteries tab (`public/batteriesView.js`), the diagrams and the device page.
 
+Plan 0048 adds solar arrays on the same footing. Migration 22 adds the panel
+figures to `devices` (`voc_v`, `isc_a`, `vmp_v`, `imp_a`, `voc_temp_coeff`), the
+charge controller limits (`pv_max_v`, `pv_max_a`, `pv_max_w`) and live paths
+(`pv_voltage_path`, `pv_power_path`), and turns a cable between two Solar panels
+that was written with only negative conductors and no link into a series link
+with one positive conductor. The store allows a link on a cable between two
+devices of type "Solar panel" as well as two batteries. `src/seriesParallel.js`
+holds the series and parallel reduction shared by `src/banks.js` and
+`src/arrays.js`; `deriveArrays` (called by `deriveAll`, served by `/derived`)
+returns one array per group of linked panels with string and array voltages
+(Voc, cold Voc, Vmp), currents (the weakest panel of a string, strings added),
+power, the charge controller found by walking downstream, and advisory checks
+against the controller's limits. `deriveCircuits` leaves panel-to-panel cables
+out of the positive graph, and `deriveAll` passes it the array's Vmp as the
+nominal voltage of its panels, so the circuit fed by the array takes that
+voltage. The cold temperature is the `coldTemperatureC` plugin option.
+`public/solar.js` and `public/solarView.js` are the browser side (the Solar tab).
+
 Plan 0019's migration (version 10) adds `devices.current` (`ac`, `dc` or
 null) and fills it once for existing devices: from the type (the same table
 `src/current.js` and `public/deviceTypes.js` hold), then from terminals (all

@@ -3,6 +3,7 @@
 // are worth asking for, and the default for the negative landing.
 
 import { describeConnector } from './connectors.js'
+import { isSolarPanel } from './solar.js'
 
 // DC first: the three common choices. AC and earth sit behind "More".
 export const CABLE_KINDS = [
@@ -126,9 +127,18 @@ export const LINK_CHOICES = [
   { value: 'series', label: 'Series link', kind: 'positive' }
 ]
 
-// The link choice applies only when both ends are storage devices.
+// What a link joins: 'battery' when both ends are storage devices, 'panel' when
+// both are solar panels (plan 0048), else null.
+export function linkSubject (from, to) {
+  if (!from || !to) return null
+  if ((from.role || 'consumer') === 'storage' && (to.role || 'consumer') === 'storage') return 'battery'
+  if (isSolarPanel(from) && isSolarPanel(to)) return 'panel'
+  return null
+}
+
+// The link choice applies only when both ends are batteries or both are solar panels.
 export function linkApplies (from, to) {
-  return Boolean(from && to && (from.role || 'consumer') === 'storage' && (to.role || 'consumer') === 'storage')
+  return linkSubject(from, to) !== null
 }
 
 // The cable type a link choice sets.

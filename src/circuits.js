@@ -11,7 +11,7 @@
 //   by its first cable and flagged unprotected.
 //
 // Input
-//   devices: [{ id, name, role, status, tripRatingA?, nominalVoltage?,
+//   devices: [{ id, name, type?, role, status, tripRatingA?, nominalVoltage?,
 //               terminals?: [{ name, conductor, port?, voltage? }] }]
 //   cables:  [{ id, fromDeviceId, toDeviceId, status,
 //               conductors?: [{ conductor, fromDeviceId?, toDeviceId?,
@@ -22,6 +22,8 @@
 // Output
 //   { circuits, banks, warnings, feeds }, everything sorted so the same data always
 //   gives the same answer.
+
+const { isSolarPanelType } = require('./seriesParallel')
 
 const POSITIVE_CONDUCTORS = new Set(['positive', 'line'])
 const RETURN_TARGET_ROLES = new Set(['storage', 'source', 'converter'])
@@ -60,7 +62,11 @@ function deriveCircuits ({ devices = [], cables = [] }) {
     live.get(cable.fromDeviceId).role === 'storage' && live.get(cable.toDeviceId).role === 'storage'
   const bankCables = usable.filter(isBankLink)
   const banks = buildBanks(bankCables)
-  const wiring = usable.filter((c) => !isBankLink(c))
+  // Plan 0048: a cable between two solar panels joins them into an array, like a
+  // battery link; it is no circuit and never "backwards".
+  const isArrayLink = (cable) =>
+    isSolarPanelType(live.get(cable.fromDeviceId).type) && isSolarPanelType(live.get(cable.toDeviceId).type)
+  const wiring = usable.filter((c) => !isBankLink(c) && !isArrayLink(c))
 
   // ---- The positive graph: one edge per cable that carries a positive or line conductor.
   const nodes = new Map()

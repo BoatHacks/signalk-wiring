@@ -10,6 +10,7 @@ import { checkAll, countVerdicts, lengthMetres, isNonPower, badgesFor, wireMark 
 import { effectiveCableRoute } from './floorplan.js'
 import { loadFigures } from './measured.js'
 import { allBanks, bankTitle } from './batteries.js'
+import { arrayWarnings, arrayTitle } from './solar.js'
 import { stateFromValue } from './live.js'
 import { batteryInputs, bankReadingInput, formatDuration, STALE_MS } from './liveBattery.js'
 import { deviceBox } from './schematic.js'
@@ -292,6 +293,14 @@ export function dashboardChecks (data) {
   }
   noEarth.sort((a, b) => a.name.localeCompare(b.name))
 
+  // Solar array checks that read "may exceed" or a broken link (plan 0048).
+  const solar = arrayWarnings(data.arrays || []).map(({ array, check }, i) => ({
+    id: `${array.panelIds[0]}:${check.code || i}:${check.controllerId || ''}`,
+    title: arrayTitle(array, deviceById),
+    text: check.message,
+    href: hashForState({ tab: 'solar', id: null })
+  }))
+
   const onSchematic = schematicPlaced(devices, data.schematics)
   const unplaced = devices
     .filter((d) => (data.floorplan === false || !onFloorplan(d, deviceById)) && !onSchematic.has(d.id))
@@ -310,8 +319,8 @@ export function dashboardChecks (data) {
   overlaps.sort((a, b) => a.name.localeCompare(b.name))
 
   const attention = counts.fail + counts.warning + counts.cannot + busCounts.fail + busCounts.warning + busCounts.cannot +
-    unprotected.length + noCircuit.length + unplaced.length + overlaps.length
-  return { cables: counts, worstCables, buses: busCounts, worstBuses, unprotected, noCircuit, noEarth, unplaced, overlaps, attention }
+    unprotected.length + noCircuit.length + unplaced.length + overlaps.length + solar.length
+  return { cables: counts, worstCables, buses: busCounts, worstBuses, unprotected, noCircuit, noEarth, solar, unplaced, overlaps, attention }
 }
 
 // ---- Live readings ----

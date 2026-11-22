@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
   demoMode: false,
   voltageDropLimitCritical: 3,
   voltageDropLimitNormal: 10,
+  coldTemperatureC: -10,
   dashboardInputs: [],
   dashboardOutputs: []
 }

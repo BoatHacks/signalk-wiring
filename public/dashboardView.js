@@ -43,11 +43,11 @@ function useDashboardData () {
     const lists = Object.entries(RESOURCES).map(([key, type]) =>
       getJson(`${RESOURCE_BASE}/${type}`).then((map) => [key, Object.values(map)]))
     const extra = [
-      getJson(`${ROUTES_BASE}/derived`).then((d) => ['banks', d.banks || []]).catch(() => ['banks', []]),
+      getJson(`${ROUTES_BASE}/derived`).then((d) => [['banks', d.banks || []], ['arrays', d.arrays || []]]).catch(() => [['banks', []], ['arrays', []]]),
       getJson(`${ROUTES_BASE}/buses`).then((b) => ['buses', b]).catch(() => ['buses', null])
     ]
     Promise.all([...lists, ...extra])
-      .then((pairs) => { if (!cancelled) setState({ loading: false, error: null, data: Object.fromEntries(pairs) }) })
+      .then((pairs) => { if (!cancelled) setState({ loading: false, error: null, data: Object.fromEntries(pairs.flatMap((p) => (Array.isArray(p[0]) ? p : [p]))) }) })
       .catch((err) => { if (!cancelled) setState({ loading: false, error: err.message, data: null }) })
     return () => { cancelled = true }
   }, [attempt])
@@ -254,6 +254,7 @@ function Checks ({ checks }) {
       ${group('Circuits with no protection', c.unprotected, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Cables in no circuit', c.noCircuit, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.label}<//></li>`)}
       ${c.noEarth.length > 0 && html`<div data-testid="no-earth" class="dash-quiet">${group('No earth path to a ground point (quiet note)', c.noEarth, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}</div>`}
+      ${group('Solar array checks', c.solar, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.title}<//> <span class="meta">${x.text}</span></li>`)}
       ${group(floorplanShown() ? 'Devices not placed on a plan or a schematic' : 'Devices not placed on a schematic', c.unplaced, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
       ${group('Schematic pages with overlapping devices', c.overlaps, (x) => html`<li key=${x.id} class="dash-row"><${Link} href=${x.href}>${x.name}<//></li>`)}
     </div>`

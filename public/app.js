@@ -12,7 +12,7 @@ import { duplicateDevicePayload, duplicateCablePrefill } from './duplicate.js'
 import {
   CABLE_KINDS, CONDUCTOR_LABELS, kindByValue, defaultNegativeLanding, negativeLandingCandidates, needsTerminal,
   terminalOptions, terminalLabel, buildCablePayload, defaultColorFor, buildBulkPayload, cableToValues, validateCable, circuitsOfCable, cableTitle,
-  LINK_CHOICES, linkApplies, linkKind, resolveLink, PROTOCOLS, protocolLabel
+  LINK_CHOICES, linkApplies, linkSubject, linkKind, resolveLink, PROTOCOLS, protocolLabel
 } from './cableForm.js'
 import dagre from './vendor/dagre.esm.js'
 import { CsvImport } from './import.js'
@@ -22,6 +22,8 @@ import { FloorplanTab } from './floorplanView.js'
 import { setFloorplanShown, floorplanShown } from './floorplanSwitch.js'
 import { SchematicsTab } from './schematicView.js'
 import { BatteriesTab } from './batteriesView.js'
+import { SolarTab } from './solarView.js'
+import { solarFieldVisible } from './solar.js'
 import { GaugeField } from './gaugeField.js'
 import { formatGauge } from './gauge.js'
 import { toast } from './canvasRemoval.js'
@@ -1041,6 +1043,45 @@ const DEVICE_FIELDS = [
     clearable: true,
     hint: 'Watts are better. With amps the plugin multiplies by the circuit voltage and assumes a power factor of 1, and marks the result as an estimate. Blank counts as amps.'
   },
+  ...[
+    ['vocV', 'Open-circuit voltage, Voc (V)', 'From the panel label or datasheet, at 25 C.'],
+    ['iscA', 'Short-circuit current, Isc (A)', null],
+    ['vmpV', 'Voltage at max power, Vmp (V)', null],
+    ['impA', 'Current at max power, Imp (A)', null],
+    ['vocTempCoeff', 'Voc temperature coefficient (%/C)', 'Negative, typically -0.3. Used for the cold voltage of the array. Left empty, -0.30 is assumed.']
+  ].map(([key, label, hint]) => ({
+    key,
+    label,
+    type: 'number',
+    clearable: true,
+    group: 'Solar panel',
+    showWhen: (values) => solarFieldVisible(key, values),
+    ...(hint ? { hint } : {})
+  })),
+  ...[
+    ['pvMaxV', 'Maximum PV voltage (V)', 'The highest open-circuit voltage the controller accepts, printed on it (for example 150 on a 150/35). The array check compares the cold string voltage with it.'],
+    ['pvMaxA', 'Maximum PV input current (A)', 'The PV input current limit from the datasheet.'],
+    ['pvMaxW', 'Maximum PV input power (W)', 'Optional. The array check only notes when the panels exceed it.']
+  ].map(([key, label, hint]) => ({
+    key,
+    label,
+    type: 'number',
+    clearable: true,
+    group: 'Solar charge controller',
+    showWhen: (values) => solarFieldVisible(key, values),
+    hint
+  })),
+  ...[
+    ['pvVoltagePath', 'PV voltage path', 'e.g. electrical.solar.mppt.panelVoltage'],
+    ['pvPowerPath', 'PV power path', 'e.g. electrical.solar.mppt.panelPower']
+  ].map(([key, label, placeholder]) => ({
+    key,
+    label,
+    type: 'signalkPath',
+    placeholder,
+    group: 'Solar charge controller',
+    showWhen: (values) => solarFieldVisible(key, values)
+  })),
   {
     key: 'schematicBoxColor',
     label: 'Schematic box color',
@@ -1382,6 +1423,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
     : kindByValue(values.kind).conductors
   const askTerminals = needsTerminal(fromDevice) || needsTerminal(toDevice)
   const showLink = linkApplies(fromDevice, toDevice)
+  const linkWhat = linkSubject(fromDevice, toDevice) === 'panel' ? 'panels' : 'batteries'
   const mismatch = !cable && fromDevice && toDevice ? suggestKind(fromDevice, '', toDevice, '').mismatch : null
   const kinds = CABLE_KINDS.filter((k) => !k.more || more || k.value === values.kind)
 
@@ -1416,7 +1458,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
 
       ${showLink && html`
         <div class="form-field" data-testid="link-choice">
-          <span>Link between the batteries</span>
+          <span>Link between the ${linkWhat}</span>
           <div class="kind-choice">
             ${LINK_CHOICES.map((l) => html`
               <label key=${l.value} class="radio-chip">
@@ -1426,7 +1468,7 @@ function CableForm ({ cable, prefill, devices, cables, circuits, onDevicesChange
               </label>
             `)}
           </div>
-          <small class="hint">Parallel joins positive and negative and makes one bigger bank. Series is a single positive conductor between two batteries and adds their voltages.</small>
+          <small class="hint">${linkWhat === 'panels' ? 'Parallel joins positive and negative and makes strings side by side, adding their currents. Series is a single positive conductor between two panels and adds their voltages.' : 'Parallel joins positive and negative and makes one bigger bank. Series is a single positive conductor between two batteries and adds their voltages.'}</small>
         </div>
       `}
       <div class="form-field">
@@ -3199,7 +3241,7 @@ function AppBody () {
   const named = { circuits: 'circuit', devices: 'device', conduits: 'conduit', buses: 'bus' }
   const detailMissing = (nextTab) => () => missing(nextTab)(`That ${named[nextTab]} was not found.`)
   const nav = [
-    ['dashboard', 'Dashboard'], ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['conduits', 'Conduits'], ['buses', 'Buses'],
+    ['dashboard', 'Dashboard'], ['circuits', 'Circuits'], ['cables', 'Cables'], ['devices', 'Devices'], ['batteries', 'Batteries'], ['solar', 'Solar'], ['conduits', 'Conduits'], ['buses', 'Buses'],
     ['load', 'Load Summary'], ['zones', 'Zones'], ['schematics', 'Schematics'], ['floorplan', 'Floorplan'], ['changes', 'Changes']
   ].filter(([key]) => key !== 'floorplan' || floorplanOn)
   const cableForm = (props) => html`<${CableForm} ...${props} />`
@@ -3237,6 +3279,7 @@ function AppBody () {
         <${BusDetail} key=${id} busId=${id} onBack=${back('buses')} onNotFound=${detailMissing('buses')} />
       `}
       ${tab === 'batteries' && html`<${BatteriesTab} />`}
+      ${tab === 'solar' && html`<${SolarTab} />`}
       ${tab === 'load' && html`<${LoadSummary} />`}
       ${tab === 'zones' && html`<${ZonesManager} />`}
       ${tab === 'schematics' && html`<${SchematicsTab} renderCableForm=${cableForm}

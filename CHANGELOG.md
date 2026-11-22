@@ -8,6 +8,8 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 
 - Connector types on terminals and ports (issue #17, plan 0047). A terminal can record its physical connector: a kind from a list or free text (M8 stud, ferrule, Schuko, RJ45, USB-C and so on), a size, a socket or plug, and a pin count. It shows in the device page's terminal list and in the terminal pickers of the cable form. Schema version 21. Nothing is checked against it yet.
+- Solar panel strings (issue #15, plan 0048). A cable between two Solar panels can be a series or parallel link, like a battery link, and the array is worked out from the links (layout such as 3S or 2S2P, string Voc, Vmp, Isc, Imp and power). Panels get Voc, Isc, Vmp, Imp and a Voc temperature coefficient; a charge controller gets its maximum PV voltage, current and power and optional PV voltage and power paths. A new Solar tab shows each array with advisory checks: the open-circuit voltage at a cold temperature (the new `coldTemperatureC` option, default -10 C) against the controller's PV voltage limit, the short-circuit current against its PV input current limit, and the panel power against its PV rating. The circuit an array feeds takes the array's voltage at maximum power, panel-to-panel links no longer raise "runs from a supply the wrong way round", and array warnings appear in the Dashboard's Needs attention. `GET /derived` also returns the arrays.
+- Schema version 22: new device columns for the figures above. The migration turns a cable between two Solar panels that has only negative conductors and no link into a series link with one positive conductor.
 
 ## [0.9.6] - 2026-11-19
 

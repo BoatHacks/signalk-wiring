@@ -95,6 +95,16 @@ const schemas = {
     currentPath: nullable(str('SignalK path of the battery current.')),
     socPath: nullable(str('SignalK path of the state of charge.')),
     timeRemainingPath: nullable(str('SignalK path of the time remaining.')),
+    vocV: nullable(num('Open-circuit voltage of a solar panel at 25 C, volts.', { unit: 'V' })),
+    iscA: nullable(num('Short-circuit current of a solar panel, amperes.', { unit: 'A' })),
+    vmpV: nullable(num('Voltage of a solar panel at maximum power, volts.', { unit: 'V' })),
+    impA: nullable(num('Current of a solar panel at maximum power, amperes.', { unit: 'A' })),
+    vocTempCoeff: nullable(num('Temperature coefficient of a solar panel Voc, percent per degree C, from -1.5 to 0 (typically -0.3). Blank assumes -0.30.', { unit: '%/C', minimum: -1.5, maximum: 0 })),
+    pvMaxV: nullable(num('Maximum PV open-circuit voltage a solar charge controller accepts, volts.', { unit: 'V' })),
+    pvMaxA: nullable(num('Maximum PV input current of a solar charge controller, amperes.', { unit: 'A' })),
+    pvMaxW: nullable(num('Maximum PV input power of a solar charge controller, watts.', { unit: 'W' })),
+    pvVoltagePath: nullable(str('SignalK path of the PV voltage a solar charge controller reports.')),
+    pvPowerPath: nullable(str('SignalK path of the PV power a solar charge controller reports.')),
     posX: nullable(num('Position along the boat in metres: 0 at the transom, increasing toward the bow.', { unit: 'm' })),
     posY: nullable(num('Position athwartships in meters, 0 on the centerline.', { unit: 'm' })),
     posZ: nullable(num('Height in meters.', { unit: 'm' })),
@@ -145,7 +155,7 @@ const schemas = {
     zoneId: nullable(str('Id of the zone the cable is in.')),
     cableLabel: nullable(str('The label printed on the cable.')),
     switchRef: nullable(str('Reference of the switch or breaker position that controls it.')),
-    link: nullable(str('Only on cables between two batteries: "series" or "parallel" (the default).', { enum: ['series', 'parallel'] })),
+    link: nullable(str('Only on cables between two batteries or two solar panels: "series" or "parallel" (the default).', { enum: ['series', 'parallel'] })),
     protocol: nullable(str('What the cable carries, a label only: an NMEA 2000 cable, Seatalk-1, NMEA 0183, a sensor, Ethernet, CAN bus, USB, HDMI, a serial link (RS-232, RS-485, TTL such as VE.Direct), coaxial (antenna, RF) or other. Empty for none.', { enum: ['nmea2000', 'seatalk1', 'nmea0183', 'sensor', 'ethernet', 'canbus', 'usb', 'hdmi', 'serial', 'coax', 'other'] })),
     route: nullable(list(ref('RoutePoint'), 'Path of the cable through the boat, as points.')),
     tags: nullable(list(str('A tag.'), 'Free-text tags.')),
@@ -284,6 +294,7 @@ const schemas = {
     demoMode: bool('Whether demo mode is on (a demo-mode-active file in the plugin data directory). The web app then shows a note in the header.'),
     voltageDropLimitCritical: num('Voltage drop limit for circuits with a critical device, percent of the circuit voltage.', { unit: '%', minimum: 0.5, maximum: 20 }),
     voltageDropLimitNormal: num('Voltage drop limit for other circuits, percent.', { unit: '%', minimum: 0.5, maximum: 20 }),
+    coldTemperatureC: num('Lowest expected panel temperature for the solar array voltage check, degrees C.', { unit: 'C', minimum: -40, maximum: 25 }),
     dashboardInputs: list(DASHBOARD_SOURCE, 'Where the Dashboard reads live power in, in the order shown. At most 12. Empty means the device paths are used.'),
     dashboardOutputs: list(DASHBOARD_SOURCE, 'Where the Dashboard reads live power out, in the order shown. At most 12. Empty means the device paths are used.')
   }, 'The plugin settings. Read only through this API: they are changed in the plugin configuration of the SignalK admin UI.'),
@@ -348,8 +359,29 @@ const schemas = {
     warnings: list(obj({}, 'A warning.', { additionalProperties: true }), 'Problems with the bank.')
   }, 'A battery bank worked out from the batteries and the cables between them.'),
 
+  SolarArray: obj({
+    panelIds: idList('Solar panels in the array.'),
+    cableIds: idList('Cables that link them.'),
+    strings: list(idList('Panels in series.'), 'Series strings; strings are in parallel.'),
+    layout: obj({ series: int('Panels per string.'), parallel: int('Strings.'), label: str('For example "3S1P".') }),
+    voc: nullable(num('Open-circuit voltage at 25 C, volts.', { unit: 'V' })),
+    vocCold: nullable(num('Open-circuit voltage at the cold temperature setting, volts.', { unit: 'V' })),
+    vmp: nullable(num('Voltage at maximum power, volts.', { unit: 'V' })),
+    iscA: nullable(num('Short-circuit current, amperes (the weakest panel of a string, strings added).', { unit: 'A' })),
+    impA: nullable(num('Current at maximum power, amperes.', { unit: 'A' })),
+    powerW: nullable(num('Rated power, watts.', { unit: 'W' })),
+    controllerIds: idList('Charge controllers found downstream of the array.'),
+    coldTemperatureC: num('The cold temperature used for vocCold.', { unit: 'C' }),
+    assumedCoeff: bool('True when a panel has no temperature coefficient and -0.30 %/C was assumed.'),
+    complete: bool('True when every panel has its figures and the links reduce to strings.'),
+    missing: list(obj({}, 'A panel and its missing fields.', { additionalProperties: true }), 'Panels with figures missing.'),
+    checks: list(obj({}, 'An advisory check against a controller: code, level (ok, note, warning), message.', { additionalProperties: true }), 'The checks against the controller limits.'),
+    warnings: list(obj({}, 'A warning.', { additionalProperties: true }), 'Problems with the array.')
+  }, 'A solar array worked out from the solar panels and the cables between them.'),
+
   Derived: obj({
     banks: list(ref('Bank'), 'Battery banks.'),
+    arrays: list(ref('SolarArray'), 'Solar arrays.'),
     warnings: list(ref('DerivedWarning'), 'Problems of the whole derivation, including those that belong to no single circuit.')
   }, 'The derived data that belongs to no single circuit.'),
 

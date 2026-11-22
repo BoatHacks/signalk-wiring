@@ -134,6 +134,13 @@ to someone else doesn't depend on the current owner being present.
   (layout like 2S2P, voltage, total and usable capacity, energy). A Batteries
   tab shows each bank, what protects it, and with Live mode on its voltage,
   state of charge and the monitor's time remaining.
+- **Solar arrays**: panels carry Voc, Isc, Vmp, Imp and a Voc temperature
+  coefficient, and cables between two solar panels are series or parallel links.
+  The array is worked out from them (layout like 3S or 2S2P, string voltage and
+  current, power) and checked, in advisory wording, against the charge
+  controller's maximum PV voltage (at a cold temperature setting, default
+  -10 C), PV input current and PV power. A Solar tab shows each array, and
+  the circuit it feeds takes the array's voltage at maximum power.
 - **AC and DC aware**: mark devices AC or DC (new devices get it from their
   type) and a new cable's type is chosen from its two ends, with a warning when
   they disagree. A cable cannot carry both AC and DC, a conduit holding both

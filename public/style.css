@@ -873,6 +873,10 @@ main:has(.schematic-editor) { max-width: none; }
 .bank-incomplete { color: var(--warn); margin-bottom: 6px; }
 .battery-live { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
 .live-stale { font-style: italic; }
+/* Solar arrays (plan 0048): the card reuses the bank classes; a check is a line with a word badge. */
+.array-check { font-size: 13px; margin-top: 6px; }
+.array-check-warning { color: var(--warn); }
+.array-check .badge { margin-right: 4px; }
 .bank-live:empty { display: none; }
 .bank-live { font-size: 13px; margin-top: 4px; }
 .bank-live.stale { color: var(--text-muted-strong); font-style: italic; }

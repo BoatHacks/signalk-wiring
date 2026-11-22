@@ -11,7 +11,7 @@ const dev = (store, name, extra = {}) => store.create('device', { name, ...extra
 
 test('migration 18 creates the tables, adds len, and is safe twice', () => {
   const store = new Store(':memory:')
-  assert.ok(store.db.pragma('user_version', { simple: true }) >= 20)
+  assert.ok(store.db.pragma('user_version', { simple: true }) >= 22)
   const cols = (t) => store.db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name)
   assert.ok(cols('devices').includes('len'))
   assert.deepEqual(cols('backbone_taps').filter((c) => ['along', 'drop_length', 'power_feed', 'fed_from_device_id'].includes(c)).sort(),

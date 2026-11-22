@@ -9,6 +9,8 @@ const { attachBusLoads } = require('./buses')
 const { isCriticalType } = require('./safety')
 const { CHEMISTRIES, PURPOSES, LINKS, typeChemistry, typePurpose } = require('./batteries')
 const { deriveBanks } = require('./banks')
+const { deriveArrays } = require('./arrays')
+const { isSolarPanelType } = require('./seriesParallel')
 const { CURRENTS, typeCurrent, terminalsCurrent, mixesAcAndDc } = require('./current')
 const { deriveSwitchability } = require('./switchability')
 const { wouldCycle, contentsOf, childrenOf, boundaryCables, cablesTouching } = require('./enclosures')
@@ -35,6 +37,7 @@ const TABLES = {
       'trip_rating_a', 'rated_ac_a', 'rated_ac_v', 'rated_dc_a', 'rated_dc_v', 'nominal_voltage', 'power_factor', 'current', 'switch_path', 'confirm_switching', 'never_remote',
       'meter_path', 'meter_unit', 'chemistry', 'purpose', 'capacity_ah', 'usable_fraction', 'make_model', 'installed_on',
       'monitor_device_id', 'voltage_path', 'current_path', 'soc_path', 'time_remaining_path',
+      'voc_v', 'isc_a', 'vmp_v', 'imp_a', 'voc_temp_coeff', 'pv_max_v', 'pv_max_a', 'pv_max_w', 'pv_voltage_path', 'pv_power_path',
       'schematic_box_color', 'schematic_icon_color', 'len',
       'pos_x', 'pos_y', 'pos_z', 'zone_id', 'parent_id', 'tags', 'status', 'notes'
     ]
@@ -547,6 +550,32 @@ const MIGRATIONS = [
         if (!has('device_terminals', col)) db.exec(`ALTER TABLE device_terminals ADD COLUMN ${col} ${type}`)
       }
     }
+  },
+  {
+    version: 22,
+    description: 'plan 0048: devices + solar panel figures (Voc, Isc, Vmp, Imp, Voc temperature coefficient), PV controller limits and live paths; panel-to-panel cables written as negative conductors become series links',
+    apply (db) {
+      const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+      for (const col of ['voc_v', 'isc_a', 'vmp_v', 'imp_a', 'voc_temp_coeff', 'pv_max_v', 'pv_max_a', 'pv_max_w']) {
+        if (!has('devices', col)) db.exec(`ALTER TABLE devices ADD COLUMN ${col} REAL`)
+      }
+      for (const col of ['pv_voltage_path', 'pv_power_path']) {
+        if (!has('devices', col)) db.exec(`ALTER TABLE devices ADD COLUMN ${col} TEXT`)
+      }
+      // The workaround of a string recorded before arrays existed: a cable between
+      // two solar panels, no link, every conductor negative. It becomes a series
+      // link with one positive conductor, as a battery series link is.
+      const isPanel = db.prepare("SELECT 1 FROM devices WHERE id = ? AND LOWER(TRIM(type)) = 'solar panel'")
+      const runs = db.prepare("SELECT id, from_device_id, to_device_id FROM wire_runs WHERE link IS NULL AND status != 'removed'").all()
+      const conductorsOf = db.prepare('SELECT conductor FROM wire_run_conductors WHERE wire_run_id = ?')
+      for (const run of runs) {
+        if (!isPanel.get(run.from_device_id) || !isPanel.get(run.to_device_id)) continue
+        const conductors = conductorsOf.all(run.id)
+        if (conductors.length === 0 || !conductors.every((c) => c.conductor === 'negative')) continue
+        db.prepare("UPDATE wire_runs SET link = 'series' WHERE id = ?").run(run.id)
+        db.prepare("UPDATE wire_run_conductors SET conductor = 'positive' WHERE wire_run_id = ?").run(run.id)
+      }
+    }
   }
 ]
 
@@ -776,7 +805,7 @@ class Store {
     else if (ZONED_KINDS.includes(kind)) row = this._resolveZone(this._checkConduit(kind, row, true))
     // A new device starts with a LEN of 0; null stays the value for "unknown".
     if (kind === 'device' && !('len' in row)) row = { ...row, len: 0 }
-    if (kind === 'device') row = this._checkLen(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true))))
+    if (kind === 'device') row = this._checkLen(this._checkSolar(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(row), null))), true)))))
     else if (kind === 'circuit') row = this._checkSwitching(row, false)
     if (kind === 'backbone') row = this._checkBackbone(kind, row, true)
     if (kind === 'wireRun') { this._checkWireRunEnds(row); row = this._checkProtocol(this._checkLink(row, null)); row = this._checkGauge(row, null) }
@@ -1177,12 +1206,22 @@ class Store {
   }
 
   // What the cables and devices imply right now (src/circuits.js).
-  deriveAll () {
+  deriveAll ({ coldTemperatureC } = {}) {
     const devices = this.list('device').map((d) => ({
       id: d.id,
       name: d.name,
+      type: d.type,
       role: d.role,
       status: d.status,
+      ratedPowerW: d.rated_power_w,
+      vocV: d.voc_v,
+      iscA: d.isc_a,
+      vmpV: d.vmp_v,
+      impA: d.imp_a,
+      vocTempCoeff: d.voc_temp_coeff,
+      pvMaxV: d.pv_max_v,
+      pvMaxA: d.pv_max_a,
+      pvMaxW: d.pv_max_w,
       tripRatingA: d.trip_rating_a,
       nominalVoltage: d.nominal_voltage,
       terminals: d.terminals,
@@ -1199,11 +1238,19 @@ class Store {
       link: w.link,
       conductors: w.conductors
     }))
-    const derived = deriveCircuits({ devices, cables })
+    const arrays = deriveArrays({ devices, cables, coldTemperatureC })
+    // Plan 0048: the circuit an array feeds takes the array's voltage at maximum
+    // power, in place of a nominal voltage typed on one panel as a workaround.
+    const arrayVmp = new Map()
+    for (const a of arrays) if (a.vmp !== null) for (const id of a.panelIds) arrayVmp.set(id, a.vmp)
+    const derived = deriveCircuits({
+      devices: devices.map((d) => (arrayVmp.has(d.id) ? { ...d, nominalVoltage: arrayVmp.get(d.id) } : d)),
+      cables
+    })
     // Plan 0037: a powered bus loads the circuit its power feed joins.
     const { backbones, busDevices } = this.busInputs()
     const circuits = backbones.length > 0 ? attachBusLoads(derived.circuits, backbones, busDevices) : derived.circuits
-    return { ...derived, circuits, banks: deriveBanks({ devices, cables, circuits }) }
+    return { ...derived, circuits, banks: deriveBanks({ devices, cables, circuits }), arrays }
   }
 
   // Backbones and the device fields the bus code reads, in the shape of the
@@ -1335,7 +1382,7 @@ class Store {
     }
     if (kind === 'zone' && 'name' in patch) patch = { ...patch, name: this._checkZoneName(patch.name, id) }
     else if (ZONED_KINDS.includes(kind)) patch = this._resolveZone(this._checkConduit(kind, patch, false))
-    if (kind === 'device') patch = this._checkLen(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing))), false))))
+    if (kind === 'device') patch = this._checkLen(this._checkSolar(this._checkRatings(this._checkBattery(id, this._checkSwitching(this._checkColors(this._checkIcon(id, this._checkParent(id, this._checkRole(patch), existing))), false)))))
     else if (kind === 'circuit') patch = this._checkSwitching(patch, false)
 
     if (kind === 'backbone') {
@@ -1606,6 +1653,31 @@ class Store {
     return out
   }
 
+  // Plan 0048 solar fields: panel figures and PV controller limits are positive
+  // numbers (the Voc temperature coefficient is a negative percent per degree C
+  // down to -1.5, zero allowed), paths are dotted SignalK names. An empty value
+  // clears a field.
+  _checkSolar (fields) {
+    let out = fields
+    const empty = (v) => v === null || v === undefined || v === ''
+    for (const key of ['voc_v', 'isc_a', 'vmp_v', 'imp_a', 'pv_max_v', 'pv_max_a', 'pv_max_w', 'voc_temp_coeff']) {
+      if (!(key in out)) continue
+      if (empty(out[key])) { out = { ...out, [key]: null }; continue }
+      const n = typeof out[key] === 'string' ? Number(out[key]) : out[key]
+      const coeff = key === 'voc_temp_coeff'
+      const ok = typeof n === 'number' && Number.isFinite(n) && (coeff ? n <= 0 && n >= -1.5 : n > 0)
+      if (!ok) throw new Error(coeff ? 'voc_temp_coeff must be a number from -1.5 to 0 (percent per degree C)' : `${key} must be a positive number`)
+      out = { ...out, [key]: n }
+    }
+    for (const key of ['pv_voltage_path', 'pv_power_path']) {
+      if (!(key in out)) continue
+      const v = textOrNull(out[key])
+      if (v !== null && !/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/.test(v)) throw new Error(`${key} must be a dotted SignalK path`)
+      out = { ...out, [key]: v }
+    }
+    return out
+  }
+
   // The optional protocol label of a cable (plan 0037): one of CABLE_PROTOCOLS or null.
   _checkProtocol (fields) {
     if (!('protocol' in fields)) return fields
@@ -1614,7 +1686,7 @@ class Store {
     return { ...fields, protocol: v }
   }
 
-  // A link type only applies to a cable between two storage devices. `existing`
+  // A link type only applies to a cable between two storage devices or two solar panels. `existing`
   // supplies the ends a patch leaves alone.
   _checkLink (fields, existing) {
     let out = fields
@@ -1629,8 +1701,14 @@ class Store {
         const r = id ? this.db.prepare('SELECT role FROM devices WHERE id = ?').get(id) : null
         return r ? r.role : null
       }
-      if (role(merged.from_device_id) !== 'storage' || role(merged.to_device_id) !== 'storage') {
-        throw new Error('A link type only applies to a cable between two batteries')
+      const type = (id) => {
+        const r = id ? this.db.prepare('SELECT type FROM devices WHERE id = ?').get(id) : null
+        return r ? r.type : null
+      }
+      const batteries = role(merged.from_device_id) === 'storage' && role(merged.to_device_id) === 'storage'
+      const panels = isSolarPanelType(type(merged.from_device_id)) && isSolarPanelType(type(merged.to_device_id))
+      if (!batteries && !panels) {
+        throw new Error('A link type only applies to a cable between two batteries or two solar panels')
       }
     }
     return out

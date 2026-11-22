@@ -90,6 +90,14 @@ module.exports = function (app, deps = {}) {
         maximum: 20,
         default: 10
       },
+      coldTemperatureC: {
+        type: 'number',
+        title: 'Lowest expected panel temperature (C)',
+        description: 'The solar array check works out the open-circuit voltage of a string at this temperature and compares it with the charge controller\'s maximum PV voltage. Advisory only. -40 to 25.',
+        minimum: -40,
+        maximum: 25,
+        default: -10
+      },
       dashboardInputs: dashboardList('Dashboard inputs', 'Where the Dashboard reads live power in (Shore, Solar, Alternator ...), in the order shown. A filled list replaces the automatic rule that uses the device paths. Up to 12.'),
       dashboardOutputs: dashboardList('Dashboard outputs', 'Where the Dashboard reads live power out (Total load, Inverter ...), in the order shown. A filled list replaces the automatic rule that uses the device paths. Up to 12.')
     }

@@ -14,6 +14,7 @@ test('resolveSettings fills defaults when options are missing', () => {
     demoMode: false,
     voltageDropLimitCritical: 3,
     voltageDropLimitNormal: 10,
+    coldTemperatureC: -10,
     dashboardInputs: [],
     dashboardOutputs: []
   })
@@ -204,4 +205,10 @@ test('showFloorplan follows demo mode and ignores a stale option', () => {
   assert.equal(resolveSettings({ showFloorplan: true }, true).showFloorplan, false)
   assert.equal(resolveSettings({}, true).demoMode, true)
   assert.equal(resolveSettings({}, 'yes').demoMode, false)
+})
+
+test('resolveSettings keeps a cold temperature in range and falls back otherwise', () => {
+  assert.equal(resolveSettings({ coldTemperatureC: -20 }).coldTemperatureC, -20)
+  assert.equal(resolveSettings({ coldTemperatureC: 0 }).coldTemperatureC, 0)
+  for (const bad of [-41, 26, '5', null, NaN]) assert.equal(resolveSettings({ coldTemperatureC: bad }).coldTemperatureC, -10)
 })
